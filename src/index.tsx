@@ -48,10 +48,12 @@ async function requireAuth(c: any, next: any) {
   await next()
 }
 
-// Réservé aux piscinistes (pro)
+// Réservé aux comptes humains (member) — exclut les clients (lecture seule).
+// Historiquement nommé requirePro ; depuis la fusion des rôles, tout member peut
+// gérer ses propres clients/piscines, donc on autorise 'member' (et 'pro' par compat).
 async function requirePro(c: any, next: any) {
   const user = c.get('user')
-  if (!user || user.role !== 'pro') return c.json({ error: 'Réservé aux piscinistes' }, 403)
+  if (!user || user.role === 'client') return c.json({ error: 'Réservé aux professionnels' }, 403)
   await next()
 }
 
@@ -64,11 +66,20 @@ async function requirePro(c: any, next: any) {
 // - client : aucun (le client passe par des routes dédiées)
 async function visibleProIds(c: any, user: SessionUser): Promise<number[]> {
   const ids = new Set<number>()
-  if (user.role === 'pro') ids.add(user.uid)
-  // Pros qui emploient cet utilisateur comme intervenant
+  // Depuis la fusion des rôles : tout member est propriétaire de ses propres données.
+  if (user.role !== 'client') ids.add(user.uid)
+  // + les pros qui emploient cet utilisateur comme intervenant
   const { results } = await c.env.DB.prepare('SELECT pro_id FROM pro_workers WHERE worker_id = ?').bind(user.uid).all()
   for (const r of results as any[]) ids.add(r.pro_id)
   return [...ids]
+}
+
+// Renvoie la clause "ce que je peux VOIR en détail" pour les entretiens/passages :
+// - tout ce qui m'appartient (p.owner_id = moi)
+// - + tout ce qui m'est assigné chez les autres (m.assigned_to = moi)
+// Cela remplace l'ancien filtre basé sur role==='worker'.
+function ownerOrAssignedClause(user: SessionUser): { sql: string; binds: number[] } {
+  return { sql: '(p.owner_id = ? OR m.assigned_to = ?)', binds: [user.uid, user.uid] }
 }
 
 function inClause(ids: number[]): string {
@@ -380,7 +391,10 @@ app.get('/api/pools/:id', requireAuth, async (c) => {
     WHERE p.id = ? AND p.owner_id IN (${inClause(proIds)})
   `).bind(c.req.param('id'), ...proIds).first()
   if (!pool) return c.json({ error: 'Piscine introuvable' }, 404)
-  return c.json(pool)
+  const { results: seasons } = await c.env.DB.prepare(
+    'SELECT * FROM pool_seasons WHERE pool_id = ? ORDER BY sort_order, start_md'
+  ).bind(c.req.param('id')).all()
+  return c.json({ ...pool, seasons })
 })
 
 async function geocodeIfNeeded(address: string | null, lat: any, lng: any) {
@@ -482,6 +496,48 @@ app.post('/api/geocode', requireAuth, async (c) => {
 })
 
 // ============================================================
+// CYCLES SAISONNIERS PAR PISCINE
+// ============================================================
+// Lister les saisons d'une piscine (dans le périmètre visible)
+app.get('/api/pools/:id/seasons', requireAuth, async (c) => {
+  const user = c.get('user')
+  const poolId = Number(c.req.param('id'))
+  if (!(await poolInScope(c, poolId, user))) return c.json({ error: 'Piscine non autorisée' }, 403)
+  const { results } = await c.env.DB.prepare(
+    'SELECT * FROM pool_seasons WHERE pool_id = ? ORDER BY sort_order, start_md'
+  ).bind(poolId).all()
+  return c.json(results)
+})
+
+// Remplacer l'ensemble des saisons d'une piscine (éditeur "tout en un")
+app.put('/api/pools/:id/seasons', requireAuth, requirePro, async (c) => {
+  const user = c.get('user')
+  const poolId = Number(c.req.param('id'))
+  if (!(await poolInScope(c, poolId, user))) return c.json({ error: 'Piscine non autorisée' }, 403)
+  const body = await c.req.json()
+  const seasons: any[] = Array.isArray(body.seasons) ? body.seasons : []
+  // Validation simple du format MM-DD
+  const okMd = (s: any) => typeof s === 'string' && /^\d{2}-\d{2}$/.test(s)
+  for (const s of seasons) {
+    if (!okMd(s.start_md) || !okMd(s.end_md)) return c.json({ error: 'Dates de saison invalides (format MM-DD attendu)' }, 400)
+  }
+  await c.env.DB.prepare('DELETE FROM pool_seasons WHERE pool_id = ?').bind(poolId).run()
+  let order = 0
+  for (const s of seasons) {
+    await c.env.DB.prepare(`
+      INSERT INTO pool_seasons (pool_id, label, start_md, end_md, interval_days, weekday, sort_order, active)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+    `).bind(
+      poolId, s.label || null, s.start_md, s.end_md,
+      Math.max(1, parseInt(s.interval_days) || 7),
+      (s.weekday === '' || s.weekday == null) ? null : parseInt(s.weekday),
+      order++
+    ).run()
+  }
+  return c.json({ ok: true, count: seasons.length })
+})
+
+// ============================================================
 // MAINTENANCES (agenda)
 // ============================================================
 app.get('/api/maintenances', requireAuth, async (c) => {
@@ -499,13 +555,25 @@ app.get('/api/maintenances', requireAuth, async (c) => {
     WHERE m.active = 1 AND p.owner_id IN (${inClause(proIds)})
   `
   const binds: any[] = [...proIds]
-  // Un intervenant pur (non pro) ne voit que ce qui lui est assigné
-  if (user.role === 'worker') {
-    query += ' AND m.assigned_to = ?'
-    binds.push(user.uid)
-  }
+  // Je vois mes propres entretiens (owner) + ceux qui me sont assignés chez les autres.
+  const oa = ownerOrAssignedClause(user)
+  query += ` AND ${oa.sql}`
+  binds.push(...oa.binds)
   query += ' ORDER BY m.weekday, m.time'
   const { results } = await c.env.DB.prepare(query).bind(...binds).all()
+  // Joindre les saisons des piscines concernées (pour calcul des occurrences côté front)
+  const poolIds = [...new Set((results as any[]).map(r => r.pool_id))]
+  let seasons: any[] = []
+  if (poolIds.length) {
+    const { results: sres } = await c.env.DB.prepare(
+      `SELECT * FROM pool_seasons WHERE active = 1 AND pool_id IN (${poolIds.map(() => '?').join(',')}) ORDER BY sort_order, start_md`
+    ).bind(...poolIds).all()
+    seasons = sres as any[]
+  }
+  // Attacher à chaque entretien les saisons de sa piscine
+  for (const m of results as any[]) {
+    m.seasons = seasons.filter(s => s.pool_id === m.pool_id)
+  }
   return c.json(results)
 })
 
@@ -513,7 +581,7 @@ app.post('/api/maintenances', requireAuth, requirePro, async (c) => {
   const user = c.get('user')
   const b = await c.req.json()
   if (!b.pool_id) return c.json({ error: 'Piscine requise' }, 400)
-  if (!(await poolOwnedByPro(c, Number(b.pool_id), user.uid))) return c.json({ error: 'Piscine non autorisée' }, 403)
+  if (!(await poolInScope(c, Number(b.pool_id), user))) return c.json({ error: 'Piscine non autorisée' }, 403)
   const kind = b.kind === 'oneshot' ? 'oneshot' : 'recurring'
   const r = await c.env.DB.prepare(`
     INSERT INTO maintenances (pool_id, assigned_to, kind, weekday, interval_weeks, start_date, end_date, oneshot_date, time, duration_min, notes)
@@ -534,7 +602,7 @@ app.put('/api/maintenances/:id', requireAuth, requirePro, async (c) => {
   const user = c.get('user')
   const id = c.req.param('id')
   const b = await c.req.json()
-  if (!(await poolOwnedByPro(c, Number(b.pool_id), user.uid))) return c.json({ error: 'Piscine non autorisée' }, 403)
+  if (!(await poolInScope(c, Number(b.pool_id), user))) return c.json({ error: 'Piscine non autorisée' }, 403)
   const kind = b.kind === 'oneshot' ? 'oneshot' : 'recurring'
   await c.env.DB.prepare(`
     UPDATE maintenances SET pool_id=?, assigned_to=?, kind=?, weekday=?, interval_weeks=?, start_date=?, end_date=?, oneshot_date=?, time=?, duration_min=?, notes=?, updated_at=CURRENT_TIMESTAMP
@@ -554,7 +622,7 @@ app.put('/api/maintenances/:id', requireAuth, requirePro, async (c) => {
 app.delete('/api/maintenances/:id', requireAuth, requirePro, async (c) => {
   const user = c.get('user')
   const poolId = await poolIdOfMaintenance(c, c.req.param('id'))
-  if (poolId == null || !(await poolOwnedByPro(c, poolId, user.uid))) return c.json({ error: 'Action non autorisée' }, 403)
+  if (poolId == null || !(await poolInScope(c, poolId, user))) return c.json({ error: 'Action non autorisée' }, 403)
   await c.env.DB.prepare('DELETE FROM maintenances WHERE id = ?').bind(c.req.param('id')).run()
   return c.json({ ok: true })
 })
@@ -605,7 +673,7 @@ app.get('/api/logs', requireAuth, async (c) => {
            LEFT JOIN users u ON u.id = l.done_by
            WHERE p.owner_id IN (${inClause(proIds)})`
   const binds: any[] = [...proIds]
-  if (user.role === 'worker') { q += ' AND m.assigned_to = ?'; binds.push(user.uid) }
+  { const oa = ownerOrAssignedClause(user); q += ` AND ${oa.sql}`; binds.push(...oa.binds) }
   if (from) { q += ' AND l.done_date >= ?'; binds.push(from) }
   if (to) { q += ' AND l.done_date <= ?'; binds.push(to) }
   q += ' ORDER BY l.done_date DESC'
@@ -619,12 +687,7 @@ app.get('/api/dashboard', requireAuth, async (c) => {
   const today = new Date().toISOString().slice(0, 10)
   const poolsCount = await c.env.DB.prepare(`SELECT COUNT(*) as n FROM pools WHERE owner_id IN (${inClause(proIds)})`).bind(...proIds).first<any>()
   const clientsCount = await c.env.DB.prepare(`SELECT COUNT(*) as n FROM clients WHERE owner_id IN (${inClause(proIds)})`).bind(...proIds).first<any>()
-  let maintCount
-  if (user.role === 'worker') {
-    maintCount = await c.env.DB.prepare(`SELECT COUNT(*) as n FROM maintenances m JOIN pools p ON p.id=m.pool_id WHERE m.active=1 AND m.assigned_to=? AND p.owner_id IN (${inClause(proIds)})`).bind(user.uid, ...proIds).first<any>()
-  } else {
-    maintCount = await c.env.DB.prepare(`SELECT COUNT(*) as n FROM maintenances m JOIN pools p ON p.id=m.pool_id WHERE m.active=1 AND p.owner_id IN (${inClause(proIds)})`).bind(...proIds).first<any>()
-  }
+  const maintCount = await c.env.DB.prepare(`SELECT COUNT(*) as n FROM maintenances m JOIN pools p ON p.id=m.pool_id WHERE m.active=1 AND p.owner_id IN (${inClause(proIds)}) AND (p.owner_id = ? OR m.assigned_to = ?)`).bind(...proIds, user.uid, user.uid).first<any>()
   const doneToday = await c.env.DB.prepare(`
     SELECT COUNT(*) as n FROM maintenance_logs l JOIN maintenances m ON m.id=l.maintenance_id JOIN pools p ON p.id=m.pool_id
     WHERE l.done_date = ? AND p.owner_id IN (${inClause(proIds)})
@@ -757,7 +820,8 @@ app.get('/api/alerts', requireAuth, async (c) => {
     LEFT JOIN maintenances m ON m.pool_id = p.id AND m.active = 1
     WHERE p.owner_id IN (${inClause(proIds)})`
   const binds: any[] = [...proIds]
-  if (user.role === 'worker') { poolQuery += ' AND m.assigned_to = ?'; binds.push(user.uid) }
+  // Mes piscines (owner) + celles où j'ai un entretien assigné.
+  poolQuery += ' AND (p.owner_id = ? OR m.assigned_to = ?)'; binds.push(user.uid, user.uid)
   const { results: pools } = await c.env.DB.prepare(poolQuery).bind(...binds).all()
 
   const today = new Date()
@@ -852,7 +916,8 @@ app.get('/api/stats', requireAuth, async (c) => {
   if (user.role === 'client') return c.json({ error: 'Non autorisé' }, 403)
   const proIds = await visibleProIds(c, user)
   if (!proIds.length) return c.json({ months: [], by_user: [], top_pools: [], totals: {} })
-  const workerFilter = user.role === 'worker' ? ' AND m.assigned_to = ' + Number(user.uid) : ''
+  // Mes stats = ce qui m'appartient (owner) + ce qui m'est assigné chez les autres.
+  const workerFilter = ' AND (p.owner_id = ' + Number(user.uid) + ' OR m.assigned_to = ' + Number(user.uid) + ')'
 
   // Passages par mois (12 derniers mois)
   const { results: months } = await c.env.DB.prepare(`

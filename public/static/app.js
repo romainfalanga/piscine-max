@@ -50,10 +50,14 @@ function toast(msg, type = 'success') {
   setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateX(30px)'; t.style.transition = 'all .3s'; setTimeout(() => t.remove(), 300) }, 3000)
 }
 
-function isPro() { return state.user && state.user.role === 'pro' }
-function isWorker() { return state.user && state.user.role === 'worker' }
+// Depuis la fusion des rôles : 'member' = compte humain (ex pisciniste + ex intervenant
+// fusionnés : tout member peut avoir ses clients/piscines ET être intervenant chez d'autres).
+// 'client' = espace lecture seule. isPro() = "n'est pas un client".
+function isPro() { return state.user && state.user.role !== 'client' }
+function isMember() { return state.user && state.user.role !== 'client' }
+function isWorker() { return state.user && state.user.role !== 'client' } // compat héritée
 function isClient() { return state.user && state.user.role === 'client' }
-// Compat : "admin" historique = pisciniste
+// Compat : "admin" historique = compte pro
 function isAdmin() { return isPro() }
 
 // Ouvre l'app de navigation GPS (Google/Apple Maps selon l'appareil)
@@ -229,17 +233,13 @@ function renderShell() {
     { id: 'home', icon: 'fa-house', label: 'Accueil' },
     { id: 'agenda', icon: 'fa-calendar-days', label: 'Agenda' },
   ]
-  if (isPro()) {
-    navItems.push({ id: 'clients', icon: 'fa-users', label: 'Clients' })
-    navItems.push({ id: 'pools', icon: 'fa-water', label: 'Piscines' })
-    navItems.push({ id: 'tour', icon: 'fa-route', label: 'Tournée' })
-    navItems.push({ id: 'stats', icon: 'fa-chart-line', label: 'Stats' })
-    navItems.push({ id: 'team', icon: 'fa-user-group', label: 'Équipe' })
-  } else {
-    navItems.push({ id: 'pools', icon: 'fa-water', label: 'Mes piscines' })
-    navItems.push({ id: 'tour', icon: 'fa-route', label: 'Tournée' })
-    navItems.push({ id: 'team', icon: 'fa-user-group', label: 'Mes pros' })
-  }
+  // Tout member a accès à l'ensemble : il peut gérer ses propres clients/piscines
+  // ET intervenir pour d'autres (la séparation des données reste assurée par le périmètre).
+  navItems.push({ id: 'clients', icon: 'fa-users', label: 'Clients' })
+  navItems.push({ id: 'pools', icon: 'fa-water', label: 'Piscines' })
+  navItems.push({ id: 'tour', icon: 'fa-route', label: 'Tournée' })
+  navItems.push({ id: 'stats', icon: 'fa-chart-line', label: 'Stats' })
+  navItems.push({ id: 'team', icon: 'fa-user-group', label: 'Équipe' })
 
   el('app').innerHTML = `
     <div class="min-h-screen flex flex-col">
@@ -256,7 +256,7 @@ function renderShell() {
             <span class="hidden sm:flex items-center gap-2 text-sm">
               <span class="w-2.5 h-2.5 rounded-full" style="background:${state.user.color || '#0891b2'}"></span>
               <b>${esc(state.user.name)}</b>
-              <span class="text-xs px-2 py-0.5 rounded-full ${isPro() ? 'bg-cyan-100 text-cyan-700' : 'bg-emerald-100 text-emerald-700'}">${isPro() ? 'Pisciniste' : 'Intervenant'}</span>
+              <span class="text-xs px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-700">Pro</span>
             </span>
             <button onclick="openPasswordForm()" class="text-slate-400 hover:text-cyan-600 px-2 py-1" title="Changer mon mot de passe"><i class="fas fa-key"></i></button>
             <button onclick="logout()" class="text-slate-400 hover:text-red-500 px-2 py-1" title="Déconnexion"><i class="fas fa-right-from-bracket"></i></button>

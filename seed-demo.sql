@@ -5,18 +5,19 @@
 DELETE FROM photos;
 DELETE FROM maintenance_logs;
 DELETE FROM maintenances;
+DELETE FROM pool_seasons;
 DELETE FROM pools;
 DELETE FROM clients;
 DELETE FROM pro_workers;
 DELETE FROM users;
-DELETE FROM sqlite_sequence WHERE name IN ('users','clients','pools','maintenances','maintenance_logs','pro_workers','photos');
+DELETE FROM sqlite_sequence WHERE name IN ('users','clients','pools','maintenances','maintenance_logs','pro_workers','photos','pool_seasons');
 
-INSERT INTO users (id, email, password_hash, name, role, color, company, phone, created_by) VALUES (1, 'franck@piscine-max.fr', 'pbkdf2$100000$9d2e4b44fdb3bbe4b7a6753cdc7ffd60$6e49b3699f4b3fe2b27aedb80cf43c3727d17022d4fb3ffc4e724e2d25d70143', 'Franck', 'pro', '#0891b2', 'Piscine Max', '06 12 34 56 78', NULL);
-INSERT INTO users (id, email, password_hash, name, role, color, company, phone, created_by) VALUES (2, 'romain@piscine-max.fr', 'pbkdf2$100000$eafd204d9d756cf37a65c446882ec4cd$dd078eddc4c8405239b1a5265c6825c21400b64f1d0249a3e1bb9a8fe809ceaa', 'Romain', 'worker', '#16a34a', NULL, '06 98 76 54 32', 1);
-INSERT INTO users (id, email, password_hash, name, role, color, company, phone, created_by) VALUES (3, 'sophie@aquazur.fr', 'pbkdf2$100000$e9bb3fa85cd359a7c909f6c557beff2a$14eb69b8288ea1063e4c673265af789e20ed632bddcb765c44225fd07e8a9bf7', 'Sophie Marin', 'pro', '#8b5cf6', 'AquaZur', '06 11 22 33 44', NULL);
-INSERT INTO users (id, email, password_hash, name, role, color, company, phone, created_by) VALUES (4, 'leo@aquazur.fr', 'pbkdf2$100000$8400383a3d09806833244eeb0822fc34$29e5c5c9b4c21179688e97b2c5e6cd45b3342829f0c2828d872baaef498e4e65', 'Léo', 'worker', '#f59e0b', NULL, '06 55 66 77 88', 3);
-INSERT INTO users (id, email, password_hash, name, role, color, company, phone, created_by) VALUES (5, 'client1@piscine-max.fr', 'pbkdf2$100000$11fc973989a7eae0212bfb13ef3944df$de361b317e41e42ab44e5a86b90f0aaaa5024c62aacc27099cb5b6846e2f7d95', 'Famille Dubois', 'client', '#64748b', NULL, NULL, 1);
-INSERT INTO users (id, email, password_hash, name, role, color, company, phone, created_by) VALUES (6, 'client2@piscine-max.fr', 'pbkdf2$100000$022db5e14f0ef01faa93bfa150b2d4ef$ba0c31c254eac9fb1fd34d6087c2dd6d6c0b1dde70a56c84ceaf558c730f8b81', 'M. Lefevre', 'client', '#64748b', NULL, NULL, 1);
+INSERT INTO users (id, email, password_hash, name, role, color, company, phone, created_by) VALUES (1, 'franck@piscine-max.fr', 'pbkdf2$100000$5fb04c5f2696fa612fad30a04c13301d$2062d1857347094f8910bb547bfebc8d5ff7544a45170e1dff865d5f8359e71a', 'Franck', 'member', '#0891b2', 'Piscine Max', '06 12 34 56 78', NULL);
+INSERT INTO users (id, email, password_hash, name, role, color, company, phone, created_by) VALUES (2, 'romain@piscine-max.fr', 'pbkdf2$100000$9552e08ddb12070ce034260c362f5ed7$64283810c7495d49fda08c42b4bf42986b65f8563bb8b49a8f0362da92534bae', 'Romain', 'member', '#16a34a', NULL, '06 98 76 54 32', 1);
+INSERT INTO users (id, email, password_hash, name, role, color, company, phone, created_by) VALUES (3, 'sophie@aquazur.fr', 'pbkdf2$100000$7ae07887b70494992b1b8b7c3696d52c$7a147173389c3ebcb950dc8c9cf90c875224c4794892a5025e2c4ebd90eac2b4', 'Sophie Marin', 'member', '#8b5cf6', 'AquaZur', '06 11 22 33 44', NULL);
+INSERT INTO users (id, email, password_hash, name, role, color, company, phone, created_by) VALUES (4, 'leo@aquazur.fr', 'pbkdf2$100000$db07b7254426d70999f1d31abebd59ec$a8c5a1a67cf353742fdaa599abbc89a98ea9d5c45798c5083b4989eff948e69c', 'Léo', 'member', '#f59e0b', NULL, '06 55 66 77 88', 3);
+INSERT INTO users (id, email, password_hash, name, role, color, company, phone, created_by) VALUES (5, 'client1@piscine-max.fr', 'pbkdf2$100000$a62c8f534c7b93e894a685a137ef59f4$f5eb71e1e61e0f2234c2dc15e7327b501c6e861548cad19bfcb13a2b76c7fea5', 'Famille Dubois', 'client', '#64748b', NULL, NULL, 1);
+INSERT INTO users (id, email, password_hash, name, role, color, company, phone, created_by) VALUES (6, 'client2@piscine-max.fr', 'pbkdf2$100000$64b0b8eb4f30f7a5038a9673595aa8b9$db3271a213356c2d5aba8b305df737a20669200f14d8aa961fc113d17c55186f', 'M. Lefevre', 'client', '#64748b', NULL, NULL, 1);
 
 INSERT INTO pro_workers (pro_id, worker_id) VALUES (1, 2);  -- Romain bosse pour Franck
 INSERT INTO pro_workers (pro_id, worker_id) VALUES (3, 4);  -- Léo bosse pour Sophie
@@ -45,6 +46,13 @@ INSERT INTO maintenances (id, pool_id, assigned_to, kind, weekday, interval_week
 INSERT INTO maintenances (id, pool_id, assigned_to, kind, oneshot_date, time, duration_min, notes) VALUES (6, 1, 1, 'oneshot', '2026-07-02', '14:00', 60, 'Hivernage');
 INSERT INTO maintenances (id, pool_id, assigned_to, kind, weekday, interval_weeks, start_date, time, duration_min, notes) VALUES (7, 6, 4, 'recurring', 1, 1, '2025-01-01', '09:00', 30, '');
 INSERT INTO maintenances (id, pool_id, assigned_to, kind, weekday, interval_weeks, start_date, time, duration_min, notes) VALUES (8, 7, 4, 'recurring', 4, 1, '2025-01-01', '08:00', 90, '');
+
+INSERT INTO pool_seasons (pool_id, label, start_md, end_md, interval_days, weekday, sort_order, active) VALUES (1, 'Haute saison', '06-01', '09-15', 3, NULL, 0, 1);
+INSERT INTO pool_seasons (pool_id, label, start_md, end_md, interval_days, weekday, sort_order, active) VALUES (1, 'Mi-saison', '04-01', '05-31', 7, NULL, 1, 1);
+INSERT INTO pool_seasons (pool_id, label, start_md, end_md, interval_days, weekday, sort_order, active) VALUES (1, 'Automne', '09-16', '10-31', 7, NULL, 2, 1);
+INSERT INTO pool_seasons (pool_id, label, start_md, end_md, interval_days, weekday, sort_order, active) VALUES (1, 'Hivernage', '11-01', '03-31', 30, NULL, 3, 1);
+INSERT INTO pool_seasons (pool_id, label, start_md, end_md, interval_days, weekday, sort_order, active) VALUES (5, 'Pleine saison resto', '05-15', '09-30', 2, NULL, 0, 1);
+INSERT INTO pool_seasons (pool_id, label, start_md, end_md, interval_days, weekday, sort_order, active) VALUES (5, 'Hors saison', '10-01', '05-14', 14, NULL, 1, 1);
 
 INSERT INTO maintenance_logs (id, maintenance_id, done_by, done_date, status, ph, chlorine, salt, water_temp, stabilizer, tac, products_added, notes, duration_min) VALUES (1, 1, 2, '2026-05-02', 'done', 7.6, 0.4, 4.2, 27, 35, 110, 'pH- 1L, chlore choc 500g', 'pH un peu haut, corrigé', 45);
 INSERT INTO maintenance_logs (id, maintenance_id, done_by, done_date, status, ph, chlorine, salt, water_temp, stabilizer, tac, products_added, notes, duration_min) VALUES (2, 1, 2, '2026-05-09', 'done', 7.5, 0.6, 4.1, 27, 35, 105, 'pH- 0.5L', 'RAS', 45);

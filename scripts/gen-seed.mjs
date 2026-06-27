@@ -29,21 +29,22 @@ const main = async () => {
   lines.push('DELETE FROM photos;')
   lines.push('DELETE FROM maintenance_logs;')
   lines.push('DELETE FROM maintenances;')
+  lines.push('DELETE FROM pool_seasons;')
   lines.push('DELETE FROM pools;')
   lines.push('DELETE FROM clients;')
   lines.push('DELETE FROM pro_workers;')
   lines.push('DELETE FROM users;')
-  lines.push("DELETE FROM sqlite_sequence WHERE name IN ('users','clients','pools','maintenances','maintenance_logs','pro_workers','photos');")
+  lines.push("DELETE FROM sqlite_sequence WHERE name IN ('users','clients','pools','maintenances','maintenance_logs','pro_workers','photos','pool_seasons');")
   lines.push('')
 
   // ----- UTILISATEURS -----
   // 1 = Franck (pro, le tien), 2 = Romain (worker), 3 = 2e pisciniste démo (Sophie),
   // 4 = intervenant de Sophie, 5+ = comptes clients
   const users = [
-    { id: 1, email: 'franck@piscine-max.fr', name: 'Franck', role: 'pro', color: '#0891b2', company: 'Piscine Max', phone: '06 12 34 56 78', created_by: null },
-    { id: 2, email: 'romain@piscine-max.fr', name: 'Romain', role: 'worker', color: '#16a34a', company: null, phone: '06 98 76 54 32', created_by: 1 },
-    { id: 3, email: 'sophie@aquazur.fr', name: 'Sophie Marin', role: 'pro', color: '#8b5cf6', company: 'AquaZur', phone: '06 11 22 33 44', created_by: null },
-    { id: 4, email: 'leo@aquazur.fr', name: 'Léo', role: 'worker', color: '#f59e0b', company: null, phone: '06 55 66 77 88', created_by: 3 },
+    { id: 1, email: 'franck@piscine-max.fr', name: 'Franck', role: 'member', color: '#0891b2', company: 'Piscine Max', phone: '06 12 34 56 78', created_by: null },
+    { id: 2, email: 'romain@piscine-max.fr', name: 'Romain', role: 'member', color: '#16a34a', company: null, phone: '06 98 76 54 32', created_by: 1 },
+    { id: 3, email: 'sophie@aquazur.fr', name: 'Sophie Marin', role: 'member', color: '#8b5cf6', company: 'AquaZur', phone: '06 11 22 33 44', created_by: null },
+    { id: 4, email: 'leo@aquazur.fr', name: 'Léo', role: 'member', color: '#f59e0b', company: null, phone: '06 55 66 77 88', created_by: 3 },
     { id: 5, email: 'client1@piscine-max.fr', name: 'Famille Dubois', role: 'client', color: '#64748b', company: null, phone: null, created_by: 1 },
     { id: 6, email: 'client2@piscine-max.fr', name: 'M. Lefevre', role: 'client', color: '#64748b', company: null, phone: null, created_by: 1 },
   ]
@@ -117,6 +118,22 @@ const main = async () => {
     } else {
       lines.push(`INSERT INTO maintenances (id, pool_id, assigned_to, kind, oneshot_date, time, duration_min, notes) VALUES (${m.id}, ${m.pool}, ${m.assigned}, 'oneshot', '${oneshotDate}', '${m.time}', ${m.dur}, '${m.notes.replace(/'/g, "''")}');`)
     }
+  }
+  lines.push('')
+
+  // ----- CYCLES SAISONNIERS (démo sur 2 piscines) -----
+  // Piscine 1 : cadence forte l'été, faible l'hiver
+  const seasons = [
+    { pool: 1, label: 'Haute saison', start: '06-01', end: '09-15', interval: 3, weekday: null, order: 0 },
+    { pool: 1, label: 'Mi-saison', start: '04-01', end: '05-31', interval: 7, weekday: null, order: 1 },
+    { pool: 1, label: 'Automne', start: '09-16', end: '10-31', interval: 7, weekday: null, order: 2 },
+    { pool: 1, label: 'Hivernage', start: '11-01', end: '03-31', interval: 30, weekday: null, order: 3 },
+    // Piscine 5 (resto, gros volume) : été très soutenu
+    { pool: 5, label: 'Pleine saison resto', start: '05-15', end: '09-30', interval: 2, weekday: null, order: 0 },
+    { pool: 5, label: 'Hors saison', start: '10-01', end: '05-14', interval: 14, weekday: null, order: 1 },
+  ]
+  for (const s of seasons) {
+    lines.push(`INSERT INTO pool_seasons (pool_id, label, start_md, end_md, interval_days, weekday, sort_order, active) VALUES (${s.pool}, '${s.label.replace(/'/g, "''")}', '${s.start}', '${s.end}', ${s.interval}, ${s.weekday ?? 'NULL'}, ${s.order}, 1);`)
   }
   lines.push('')
 

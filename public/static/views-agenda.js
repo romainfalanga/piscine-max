@@ -3,7 +3,40 @@
 // ============================================================
 let agendaMap = null
 
-// Calcule les occurrences d'entretiens pour une date donnée
+// "MM-DD" -> numéro de jour dans l'année (1..366, approx sur base 31j/mois pour la comparaison)
+function mdToNum(md) {
+  if (!md || !/^\d{2}-\d{2}$/.test(md)) return null
+  const [mm, dd] = md.split('-').map(Number)
+  return mm * 100 + dd
+}
+
+// La date tombe-t-elle dans la plage saisonnière [start_md, end_md] (gère le passage d'année) ?
+function dateInSeason(date, season) {
+  const cur = (date.getMonth() + 1) * 100 + date.getDate()
+  const s = mdToNum(season.start_md), e = mdToNum(season.end_md)
+  if (s == null || e == null) return false
+  if (s <= e) return cur >= s && cur <= e          // ex. 06-01 -> 09-30 (même année)
+  return cur >= s || cur <= e                       // ex. 11-01 -> 03-31 (boucle sur l'année)
+}
+
+// Pour une piscine donnée et une date, renvoie la saison active (la première qui matche), ou null
+function activeSeasonFor(maintenance, date) {
+  const seasons = maintenance.seasons || []
+  for (const s of seasons) { if (s.active !== 0 && dateInSeason(date, s)) return s }
+  return null
+}
+
+// Ancre de calcul d'intervalle : début de saison cette année (ou l'an passé si on a "bouclé"), sinon start_date de l'entretien.
+function seasonAnchor(season, date) {
+  const [mm, dd] = season.start_md.split('-').map(Number)
+  let anchor = new Date(date.getFullYear(), mm - 1, dd)
+  anchor.setHours(0, 0, 0, 0)
+  // Si l'ancre est dans le futur (saison qui boucle l'année), on prend l'année précédente
+  if (anchor > date) anchor = new Date(date.getFullYear() - 1, mm - 1, dd)
+  return anchor
+}
+
+// Calcule les occurrences d'entretiens pour une date donnée (avec cycles saisonniers)
 function occurrencesForDate(date) {
   const wd = jsWeekday(date)
   const iso = isoDate(date)
@@ -12,20 +45,36 @@ function occurrencesForDate(date) {
     if (state.agendaUser !== 'all' && String(m.assigned_to) !== String(state.agendaUser)) continue
     if (m.kind === 'oneshot') {
       if (m.oneshot_date === iso) items.push(m)
-    } else {
-      if (m.weekday !== wd) continue
-      // Respect de l'intervalle de semaines
-      if (m.interval_weeks && m.interval_weeks > 1 && m.start_date) {
-        const start = startOfWeek(new Date(m.start_date))
-        const cur = startOfWeek(date)
-        const weeks = Math.round((cur - start) / (7 * 86400000))
-        if (weeks < 0 || weeks % m.interval_weeks !== 0) continue
-      }
-      items.push(m)
+      continue
     }
+    // --- Cycle saisonnier (prioritaire si la piscine a des saisons définies) ---
+    const season = activeSeasonFor(m, date)
+    if ((m.seasons || []).length) {
+      if (!season) continue // hors de toute saison = pas de passage prévu
+      // Contrainte de jour optionnelle
+      if (season.weekday && Number(season.weekday) !== wd) continue
+      // Cadence "tous les X jours" ancrée sur le début de saison
+      const interval = Math.max(1, Number(season.interval_days) || 7)
+      const anchor = seasonAnchor(season, date)
+      const days = Math.round((startOfDay(date) - anchor) / 86400000)
+      if (days < 0 || days % interval !== 0) continue
+      items.push({ ...m, _season: season })
+      continue
+    }
+    // --- Cycle hebdomadaire classique (rétro-compat, pas de saisons) ---
+    if (m.weekday !== wd) continue
+    if (m.interval_weeks && m.interval_weeks > 1 && m.start_date) {
+      const start = startOfWeek(new Date(m.start_date))
+      const cur = startOfWeek(date)
+      const weeks = Math.round((cur - start) / (7 * 86400000))
+      if (weeks < 0 || weeks % m.interval_weeks !== 0) continue
+    }
+    items.push(m)
   }
   return items.sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'))
 }
+
+function startOfDay(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x }
 
 function renderAgenda(c) {
   const userFilter = isAdmin() ? `

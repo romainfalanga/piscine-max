@@ -7,24 +7,25 @@ Plateforme SaaS multi-pisciniste de gestion d'entretien de piscines : un piscini
 - **But** : Une plateforme où **n'importe quel pisciniste** peut s'inscrire, gérer ses clients/piscines, faire ses entretiens lui-même **ou les déléguer** à des intervenants, et donner à ses clients un accès pour suivre l'entretien de leurs piscines (passages, produits ajoutés, notes, photos, routine à respecter).
 - **Stack** : Hono + TypeScript + Cloudflare Pages + D1 (SQLite) + R2 (photos) + TailwindCSS + Leaflet/OpenStreetMap + Chart.js + Open-Meteo (météo)
 
-## 👥 Les 3 rôles
-- **Pisciniste (`pro`)** — accès complet à **ses propres données** (isolées des autres piscinistes). Il peut :
-  - faire ses entretiens lui-même **et/ou** les déléguer à des intervenants ;
-  - voir **« mes intervenants »** (ceux qui bossent pour lui) ;
-  - créer/rattacher des intervenants, réinitialiser leur mot de passe ;
-  - créer des **accès espace client** (mot de passe généré automatiquement).
-- **Intervenant (`worker`)** — ne voit que les entretiens/piscines qui lui sont attribués. Un intervenant peut travailler pour **plusieurs piscinistes** à la fois, et voit **« pour qui je bosse »**. Un compte peut être **uniquement intervenant** (sans être pisciniste).
-- **Client (`client`)** — accès **en lecture seule** à un espace dédié : il voit ses piscines, l'historique complet des passages, les relevés d'eau, les produits ajoutés, les notes, les **photos**, et les **conseils/routine** transmis par son pisciniste.
+## 👥 Les rôles (modèle unifié)
+> ⚡ **Il n'existe qu'UN seul type de compte humain : le `member`.** Tout member peut à la fois **avoir ses propres clients/piscines** ET **être intervenant pour d'autres** — il n'y a aucune différence de nature entre « pisciniste » et « intervenant ». La distinction n'est qu'une **relation** (`pro_workers`), pas un statut figé sur le compte.
 
-> 🔑 Un même compte pisciniste peut être **à la fois auto-entrepreneur (fait ses entretiens)** ET **avoir des intervenants**. La distinction « mes intervenants » / « pour qui je bosse » est affichée explicitement dans l'onglet **Équipe**.
+- **Member (`member`)** — compte humain complet. Il peut :
+  - créer/gérer **ses propres clients et piscines** (données isolées des autres members) ;
+  - faire ses entretiens lui-même **et/ou** les déléguer à des intervenants ;
+  - **être lui-même intervenant** pour d'autres members (il voit alors les piscines qui lui sont assignées chez eux) ;
+  - voir **« mes intervenants »** + **« pour qui je bosse »** dans l'onglet **Équipe** ;
+  - créer des **accès espace client** (mot de passe généré automatiquement).
+- **Client (`client`)** — accès **en lecture seule** à un espace dédié : il voit ses piscines, l'historique complet des passages, les relevés d'eau, les produits ajoutés, les notes, les **photos**, et les **conseils/routine** transmis.
+
+> 🔑 Concrètement : ce que vous voyez en détail = **tout ce qui vous appartient** (vos clients/piscines) **+ tout ce qui vous est assigné** chez les members pour qui vous bossez. L'isolation des données repose sur le **périmètre** (`owner_id` / `pro_workers`), jamais sur le « grade » du compte.
 
 ## 🏢 Multi-tenant (isolation des données)
 Chaque client/piscine appartient à un pisciniste (`owner_id`). Un utilisateur ne voit que les données des piscinistes auxquels il est rattaché (`visibleProIds`) :
-- un **pro** voit ses propres données + celles des pros pour qui il est aussi intervenant ;
-- un **worker** voit les données des pros pour qui il bosse ;
+- un **member** voit ses propres données (`owner_id` = lui) + les données des members pour qui il est intervenant (limitées à ce qui lui est assigné) ;
 - un **client** ne voit que ses propres piscines.
 
-Résultat : deux piscinistes inscrits sur la plateforme ne voient **jamais** les données l'un de l'autre.
+Résultat : deux members inscrits sur la plateforme ne voient **jamais** les données privées l'un de l'autre.
 
 ## ✨ Fonctionnalités
 ### Implémentées ✅
@@ -56,6 +57,10 @@ Résultat : deux piscinistes inscrits sur la plateforme ne voient **jamais** les
 - **🗺️ Mode Tournée** : parcours pas-à-pas de la journée pour l'intervenant mobile (une piscine après l'autre, checklist + GPS + saisie passage), basé sur le parcours optimisé.
 - **🌤️ Météo + conseils saisonniers** : widget météo (Open-Meteo, sans clé API) géolocalisé sur la piscine, avec **conseils d'entretien adaptés** à la température et à la saison.
 
+### 🆕 Dernière itération (cycles saisonniers + fusion des rôles)
+- **🔗 Fusion des rôles pro/intervenant en `member`** : plus aucune différence figée. Tout compte humain peut gérer ses propres clients/piscines ET intervenir pour d'autres. Corrige le fait qu'un « intervenant » ne pouvait pas créer de clients. Le filtrage « je vois ce qui m'appartient + ce qui m'est assigné » remplace l'ancien filtre basé sur le grade.
+- **🗓️ Cycles de passage saisonniers (par piscine)** : chaque piscine définit ses propres **saisons** (périodes de l'année par dates jour+mois répétables) avec **chacune sa fréquence**. Ex. Haute saison 1 juin→15 sept tous les 3 jours, Hivernage 1 nov→31 mars tous les 30 jours. L'agenda calcule automatiquement les passages selon la saison active à chaque date (gère les saisons à cheval sur l'année). Modèle type « été/hiver » fourni en 1 clic. Configuration : fiche piscine → « Cycle de passage saisonnier ».
+
 ### À envisager plus tard 🔜
 - Optimisation du parcours via vrai routage routier (pas seulement à vol d'oiseau)
 - Notifications / rappels (email ou push)
@@ -69,11 +74,11 @@ Résultat : deux piscinistes inscrits sur la plateforme ne voient **jamais** les
 - **GitHub** : https://github.com/romainfalanga/piscine-max (déploiement auto à chaque push sur `main`)
 
 ### Comptes de démonstration (mot de passe : `piscine`)
-| Rôle | Email | Détail |
-|------|-------|--------|
-| Pisciniste #1 | `franck@piscine-max.fr` | Piscine Max — a Romain comme intervenant, plusieurs clients/piscines |
-| Intervenant | `romain@piscine-max.fr` | Bosse **pour Franck ET pour Sophie** (multi-employeurs) |
-| Pisciniste #2 | `sophie@aquazur.fr` | AquaZur — données **isolées** de Franck, a Léo + Romain en intervenants |
+| Compte | Email | Détail |
+|--------|-------|--------|
+| Member #1 | `franck@piscine-max.fr` | Piscine Max — plusieurs clients/piscines, a Romain comme intervenant. Pool 1 a un **cycle saisonnier** (été/hiver) |
+| Member #2 | `romain@piscine-max.fr` | Intervenant **pour Franck ET pour Sophie**, mais peut aussi créer **ses propres** clients/piscines |
+| Member #3 | `sophie@aquazur.fr` | AquaZur — données **isolées** de Franck, a Léo + Romain en intervenants |
 | Client | `client1@piscine-max.fr` | Espace client en lecture seule (historique, relevés, photos, conseils) |
 
 > Astuce démo : connecte-toi avec Franck puis Sophie pour voir l'isolation multi-tenant, puis avec Romain pour voir « pour qui je bosse », et enfin avec le client pour voir l'espace de suivi.
@@ -114,13 +119,17 @@ Résultat : deux piscinistes inscrits sur la plateforme ne voient **jamais** les
 | GET | `/api/alerts` | pro/worker | Centre d'alertes (piscines en alerte eau + passages en retard) |
 | GET | `/api/logs/:id/report` | tous (scoped) | Rapport détaillé d'un passage (imprimable/partageable) |
 | GET | `/api/stats` | pro | Statistiques business (passages, temps, top piscines, mensuel) |
-| GET | `/api/weather?lat=&lng=` | pro/worker | Météo + conseils saisonniers (Open-Meteo) |
+| GET | `/api/weather?lat=&lng=` | member | Météo + conseils saisonniers (Open-Meteo) |
+| GET | `/api/pools/:id/seasons` | member (scoped) | Saisons d'une piscine |
+| PUT | `/api/pools/:id/seasons` | member (scoped) | Remplacer l'ensemble des saisons d'une piscine |
 
 ## 🗄️ Modèle de données (Cloudflare D1 / SQLite + R2)
 - **users** : `pro` / `worker` / `client` + `phone`, `company`, `created_by`, couleur
 - **pro_workers** : table N-N pisciniste ↔ intervenant (un worker peut bosser pour plusieurs pros)
 - **clients** : clients d'un pisciniste (`owner_id`, `client_user_id` = compte client lié)
+- **users** : `member` (compte humain : ex pro + ex worker fusionnés) ou `client` (lecture seule)
 - **pools** : piscines (liées à un client) + GPS + caractéristiques + routine (JSON) + `routine_client` (conseils transmis au client) + `owner_id` + **seuils idéaux étendus** (sel, TAC, stabilisant min/max) + `depth_avg_m` (profondeur moyenne) + `expected_interval_days` (fréquence attendue → alertes de retard)
+- **pool_seasons** : cycles saisonniers par piscine (`start_md`/`end_md` au format MM-DD, `interval_days`, `weekday` optionnel) — définit la fréquence de passage selon la période de l'année
 - **maintenances** : entretiens récurrents/ponctuels, attribués à un user
 - **maintenance_logs** : passages effectués + relevés d'eau + produits
 - **photos** (R2) : métadonnées en D1 (`r2_key`, `pool_id`, `log_id`, `uploaded_by`, `caption`) + fichier binaire sur le bucket R2 `piscine-max-photos` (binding `PHOTOS`)
@@ -136,7 +145,7 @@ Résultat : deux piscinistes inscrits sur la plateforme ne voient **jamais** les
 ## 🚀 Développement local
 ```bash
 npm install
-npm run db:migrate:local   # schéma local (migrations 0001 → 0004)
+npm run db:migrate:local   # schéma local (migrations 0001 → 0005)
 npm run db:seed            # données de démo (ou: wrangler d1 execute piscine-max-production --local --file=./seed-demo.sql)
 npm run build
 pm2 start ecosystem.config.cjs
@@ -150,4 +159,4 @@ pm2 start ecosystem.config.cjs
 - **Bucket R2 prod** : `piscine-max-photos`, binding `PHOTOS`
 - **Migrations prod** : `npx wrangler d1 migrations apply piscine-max-production --remote`
 - **Déploiement direct** (garantit les bindings R2) : `npm run build && npx wrangler pages deploy dist --project-name piscine-max`
-- **Dernière mise à jour** : 2026-06-27 — sécurité multi-tenant durcie + diagnostic eau/dosage + centre d'alertes + rapport de passage + stats business + mode tournée + météo (Open-Meteo)
+- **Dernière mise à jour** : 2026-06-27 — fusion des rôles en `member` (tout compte peut gérer ses clients ET intervenir) + cycles de passage saisonniers par piscine + (itération précédente : sécurité durcie, diagnostic eau, alertes, rapport, stats, tournée, météo)

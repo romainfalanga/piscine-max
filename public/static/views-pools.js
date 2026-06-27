@@ -129,6 +129,15 @@ function renderPoolDetail(c) {
             </label>`).join('')}</div>` : '<p class="text-sm text-slate-400">Aucune routine définie</p>'}
         </div>
 
+        <!-- Cycle de passage saisonnier -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-bold text-slate-700"><i class="fas fa-calendar-week mr-2 text-cyan-500"></i>Cycle de passage saisonnier</h3>
+            ${isAdmin() ? `<button onclick="openSeasonsEditor(${p.id})" class="text-cyan-600 text-sm font-semibold"><i class="fas fa-sliders mr-1"></i>Configurer</button>` : ''}
+          </div>
+          ${seasonsSummaryHtml(p.seasons)}
+        </div>
+
         ${p.routine_client ? `<div class="bg-amber-50 border border-amber-200 rounded-2xl p-5"><h3 class="font-bold text-amber-800 mb-2"><i class="fas fa-lightbulb mr-2"></i>Conseils transmis au client</h3><p class="text-sm text-amber-900 whitespace-pre-line">${esc(p.routine_client)}</p></div>` : ''}
 
         ${p.notes ? `<div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5"><h3 class="font-bold text-slate-700 mb-2"><i class="fas fa-note-sticky mr-2 text-cyan-500"></i>Notes</h3><p class="text-sm text-slate-600 whitespace-pre-line">${esc(p.notes)}</p></div>` : ''}
@@ -354,3 +363,160 @@ async function deletePool(id) {
   catch { toast('Erreur', 'error') }
 }
 window.deletePool = deletePool
+
+// ============================================================
+// CYCLES SAISONNIERS (configuration par piscine)
+// ============================================================
+const WEEKDAY_LABELS = { '': 'Tous les jours', '1': 'Lundi', '2': 'Mardi', '3': 'Mercredi', '4': 'Jeudi', '5': 'Vendredi', '6': 'Samedi', '7': 'Dimanche' }
+function mdLabel(md) {
+  if (!md || !/^\d{2}-\d{2}$/.test(md)) return md || '—'
+  const months = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.']
+  const [mm, dd] = md.split('-').map(Number)
+  return `${dd} ${months[mm - 1] || '?'}`
+}
+function intervalLabel(d) {
+  d = Number(d) || 7
+  if (d === 1) return 'tous les jours'
+  if (d === 7) return '1×/semaine'
+  if (d === 14) return 'toutes les 2 sem.'
+  if (d === 30 || d === 31) return '1×/mois'
+  return `tous les ${d} jours`
+}
+
+// Résumé affiché dans la fiche piscine
+function seasonsSummaryHtml(seasons) {
+  seasons = seasons || []
+  if (!seasons.length) {
+    return `<p class="text-sm text-slate-400">Aucun cycle saisonnier défini. La piscine suit l'entretien hebdomadaire classique de l'agenda. <span class="text-slate-400">Configure des saisons pour adapter la fréquence (ex. été rapproché, hiver espacé).</span></p>`
+  }
+  return `<div class="space-y-2">${seasons.map(s => `
+    <div class="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+      <div>
+        <div class="font-semibold text-sm text-slate-700">${esc(s.label || 'Saison')}</div>
+        <div class="text-xs text-slate-500">${mdLabel(s.start_md)} → ${mdLabel(s.end_md)}</div>
+      </div>
+      <div class="text-right">
+        <div class="text-sm font-bold text-cyan-700">${intervalLabel(s.interval_days)}</div>
+        ${s.weekday ? `<div class="text-[11px] text-slate-400">${WEEKDAY_LABELS[String(s.weekday)] || ''}</div>` : ''}
+      </div>
+    </div>`).join('')}</div>`
+}
+window.seasonsSummaryHtml = seasonsSummaryHtml
+
+// État temporaire de l'éditeur
+let seasonsDraft = []
+let seasonsPoolId = null
+
+function seasonRowHtml(s, i) {
+  const mdInput = (val) => {
+    // input date sans année : on utilise type=date mais on n'utilise que MM-DD ; valeur fictive année 2024
+    return val && /^\d{2}-\d{2}$/.test(val) ? `2024-${val}` : ''
+  }
+  return `
+    <div class="border border-slate-200 rounded-xl p-3 space-y-2 bg-white" data-season-row="${i}">
+      <div class="flex items-center gap-2">
+        <input value="${esc(s.label || '')}" oninput="seasonsDraft[${i}].label=this.value" placeholder="Nom (ex. Haute saison)" class="flex-1 px-3 py-1.5 rounded-lg border border-slate-300 text-sm font-semibold">
+        <button type="button" onclick="removeSeasonRow(${i})" class="text-red-500 hover:text-red-700 px-2"><i class="fas fa-trash"></i></button>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-500 mb-0.5">Du</label>
+          <input type="date" value="${mdInput(s.start_md)}" onchange="seasonsDraft[${i}].start_md=this.value.slice(5)" class="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-sm">
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-500 mb-0.5">Au</label>
+          <input type="date" value="${mdInput(s.end_md)}" onchange="seasonsDraft[${i}].end_md=this.value.slice(5)" class="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-sm">
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-500 mb-0.5">Fréquence</label>
+          <select onchange="seasonsDraft[${i}].interval_days=parseInt(this.value)" class="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-sm">
+            ${[1,2,3,4,7,10,14,21,30,60,90].map(d => `<option value="${d}" ${Number(s.interval_days)===d?'selected':''}>${d===1?'Tous les jours':'Tous les '+d+' jours'}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-500 mb-0.5">Jour préféré</label>
+          <select onchange="seasonsDraft[${i}].weekday=this.value" class="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-sm">
+            ${['','1','2','3','4','5','6','7'].map(w => `<option value="${w}" ${String(s.weekday||'')===w?'selected':''}>${WEEKDAY_LABELS[w]}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <p class="text-[11px] text-slate-400">💡 Une saison peut chevaucher la fin d'année (ex. du 1 nov au 31 mars = hivernage).</p>
+    </div>`
+}
+
+function renderSeasonsDraft() {
+  const box = el('seasons-list')
+  if (!box) return
+  box.innerHTML = seasonsDraft.length
+    ? seasonsDraft.map((s, i) => seasonRowHtml(s, i)).join('')
+    : '<p class="text-sm text-slate-400 text-center py-4">Aucune saison. Ajoute une période ci-dessous.</p>'
+}
+
+function addSeasonRow() {
+  seasonsDraft.push({ label: '', start_md: '06-01', end_md: '09-30', interval_days: 3, weekday: '' })
+  renderSeasonsDraft()
+}
+window.addSeasonRow = addSeasonRow
+
+function removeSeasonRow(i) {
+  seasonsDraft.splice(i, 1)
+  renderSeasonsDraft()
+}
+window.removeSeasonRow = removeSeasonRow
+
+function applyPreset(preset) {
+  if (preset === 'classic') {
+    seasonsDraft = [
+      { label: 'Haute saison', start_md: '06-01', end_md: '09-15', interval_days: 3, weekday: '' },
+      { label: 'Mi-saison', start_md: '04-01', end_md: '05-31', interval_days: 7, weekday: '' },
+      { label: 'Mi-saison automne', start_md: '09-16', end_md: '10-31', interval_days: 7, weekday: '' },
+      { label: 'Hivernage', start_md: '11-01', end_md: '03-31', interval_days: 30, weekday: '' },
+    ]
+  }
+  renderSeasonsDraft()
+}
+window.applyPreset = applyPreset
+
+function openSeasonsEditor(poolId) {
+  seasonsPoolId = poolId
+  const pool = state.currentPool && state.currentPool.id === poolId ? state.currentPool : null
+  seasonsDraft = (pool?.seasons || []).map(s => ({
+    label: s.label || '', start_md: s.start_md, end_md: s.end_md,
+    interval_days: Number(s.interval_days) || 7, weekday: s.weekday != null ? String(s.weekday) : ''
+  }))
+  openModal('Cycle de passage saisonnier', `
+    <div class="space-y-3">
+      <p class="text-sm text-slate-500">Définis des périodes de l'année avec leur propre fréquence de passage. En été on passe souvent, en hiver beaucoup moins. Les dates se répètent chaque année.</p>
+      <div class="flex items-center justify-between">
+        <button type="button" onclick="applyPreset('classic')" class="text-xs font-semibold text-cyan-600 hover:text-cyan-800"><i class="fas fa-wand-magic-sparkles mr-1"></i>Modèle type (été/hiver)</button>
+        <button type="button" onclick="addSeasonRow()" class="text-sm font-semibold bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg"><i class="fas fa-plus mr-1"></i>Ajouter une saison</button>
+      </div>
+      <div id="seasons-list" class="space-y-3 max-h-[50vh] overflow-y-auto"></div>
+      <button type="button" id="seasons-save" onclick="saveSeasons()" class="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2.5 rounded-xl">Enregistrer le cycle</button>
+    </div>`, { size: '2xl' })
+  renderSeasonsDraft()
+}
+window.openSeasonsEditor = openSeasonsEditor
+
+async function saveSeasons() {
+  // Validation : dates renseignées
+  for (const s of seasonsDraft) {
+    if (!/^\d{2}-\d{2}$/.test(s.start_md || '') || !/^\d{2}-\d{2}$/.test(s.end_md || '')) {
+      return toast('Renseigne les dates de début et de fin pour chaque saison', 'error')
+    }
+  }
+  const btn = el('seasons-save'); btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Enregistrement...'
+  try {
+    await API.put(`/pools/${seasonsPoolId}/seasons`, { seasons: seasonsDraft })
+    closeModal()
+    await loadData()          // recharge les maintenances (avec leurs saisons) pour l'agenda
+    if (state.view === 'pool-detail') await viewPool(seasonsPoolId)
+    toast('Cycle saisonnier enregistré')
+  } catch (err) {
+    btn.disabled = false; btn.innerHTML = 'Réessayer'
+    toast(err.response?.data?.error || 'Erreur', 'error')
+  }
+}
+window.saveSeasons = saveSeasons
