@@ -1,0 +1,28 @@
+{
+  "name": "piscine-max",
+  "version": "1.0.0",
+  "description": "Outil de gestion d'entretien de piscines pour pisciniste et exécutants",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:sandbox": "wrangler pages dev dist --d1=piscine-max-production --local --ip 0.0.0.0 --port 3000",
+    "build": "vite build",
+    "preview": "wrangler pages dev dist --d1=piscine-max-production --local --ip 0.0.0.0 --port 3000",
+    "deploy": "npm run build && wrangler pages deploy dist --project-name piscine-max",
+    "cf-typegen": "wrangler types --env-interface CloudflareBindings",
+    "db:migrate:local": "wrangler d1 migrations apply piscine-max-production --local",
+    "db:migrate:prod": "wrangler d1 migrations apply piscine-max-production",
+    "db:seed": "wrangler d1 execute piscine-max-production --local --file=./seed.sql",
+    "db:reset": "rm -rf .wrangler/state/v3/d1 && npm run db:migrate:local && npm run db:seed"
+  },
+  "dependencies": {
+    "hono": "^4.6.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250705.0",
+    "@hono/vite-cloudflare-pages": "^0.4.2",
+    "vite": "^5.4.0",
+    "wrangler": "^4.86.0",
+    "typescript": "^5.5.0"
+  }
+}

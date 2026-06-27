@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Wrangler / Cloudflare local state
+.wrangler/
+.dev.vars
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# PM2
+.pm2/
+pids/
+*.pid
+
+# Env
+.env
+
+# OS
+.DS_Store
+
+# Backups
+*.backup
+*.bak
+*.tar.gz
+*.zip
