@@ -5,7 +5,7 @@ Plateforme SaaS multi-pisciniste de gestion d'entretien de piscines : un piscini
 ## 🎯 Présentation
 - **Nom** : Piscine Max
 - **But** : Une plateforme où **n'importe quel pisciniste** peut s'inscrire, gérer ses clients/piscines, faire ses entretiens lui-même **ou les déléguer** à des intervenants, et donner à ses clients un accès pour suivre l'entretien de leurs piscines (passages, produits ajoutés, notes, photos, routine à respecter).
-- **Stack** : Hono + TypeScript + Cloudflare Pages + D1 (SQLite) + R2 (photos) + TailwindCSS + Leaflet/OpenStreetMap + Chart.js
+- **Stack** : Hono + TypeScript + Cloudflare Pages + D1 (SQLite) + R2 (photos) + TailwindCSS + Leaflet/OpenStreetMap + Chart.js + Open-Meteo (météo)
 
 ## 👥 Les 3 rôles
 - **Pisciniste (`pro`)** — accès complet à **ses propres données** (isolées des autres piscinistes). Il peut :
@@ -47,12 +47,21 @@ Résultat : deux piscinistes inscrits sur la plateforme ne voient **jamais** les
 - **Navigation GPS** : bouton « Y aller » (Google/Apple Maps)
 - **Vue intervenant** dédiée : uniquement ses entretiens/piscines, checklist routine, code d'accès, contact, mini-carte, GPS
 
+### 🆕 Fonctionnalités avancées (dernière itération)
+- **🔒 Durcissement sécurité multi-tenant** : 6 routes corrigées (suppression passages/logs/photos, lecture logs/photos, upload photo) vérifient désormais que la ressource appartient bien au périmètre de l'utilisateur (`poolInScope` / `canAccessPool`). Un pisciniste ne peut **jamais** accéder à une ressource d'un autre (403).
+- **💧 Diagnostic eau intelligent + dosage** (`src/water.ts`) : à partir des relevés et du **volume réel** de la piscine, le moteur évalue chaque paramètre (pH, chlore, sel, TAC, stabilisant), donne un verdict (ok/à surveiller/urgent) **et calcule la dose de produit à ajouter** (ex. « Ajouter environ 3,8 L de pH- » ou « 340 g de chlore »). Diagnostic **en temps réel** pendant la saisie du passage (`liveDiagnose`).
+- **🚨 Centre d'alertes** : sur le tableau de bord, agrège automatiquement les **piscines en alerte eau** (paramètres hors normes) et les **passages en retard** (au-delà de l'intervalle attendu), trié par gravité.
+- **📄 Rapport de passage** : génération d'un rapport détaillé par passage (relevés + diagnostic + dosage + produits + notes), **imprimable (PDF via impression)** et **partageable** (lien). Accessible côté pisciniste **et** côté client (pour ses propres piscines).
+- **📊 Statistiques business** (pisciniste) : nb de passages, temps total, top piscines, évolution mensuelle — graphique Chart.js.
+- **🗺️ Mode Tournée** : parcours pas-à-pas de la journée pour l'intervenant mobile (une piscine après l'autre, checklist + GPS + saisie passage), basé sur le parcours optimisé.
+- **🌤️ Météo + conseils saisonniers** : widget météo (Open-Meteo, sans clé API) géolocalisé sur la piscine, avec **conseils d'entretien adaptés** à la température et à la saison.
+
 ### À envisager plus tard 🔜
 - Optimisation du parcours via vrai routage routier (pas seulement à vol d'oiseau)
 - Notifications / rappels (email ou push)
-- Export PDF des fiches et relevés
 - Gestion de stock de produits
 - Facturation / devis
+- Notifications client par email
 
 ## 🔗 URLs & Accès
 - **Production** : https://piscine-max.pages.dev ✅ EN LIGNE
@@ -101,12 +110,17 @@ Résultat : deux piscinistes inscrits sur la plateforme ne voient **jamais** les
 | DELETE | `/api/photos/:id` | pro | Supprimer une photo |
 | GET | `/api/my/pools` | client | Mes piscines (espace client) |
 | GET | `/api/my/pools/:id/history` | client | Historique + relevés + photos |
+| POST | `/api/diagnose` | pro/worker | Diagnostic eau + dosage (verdict par paramètre + dose à ajouter) |
+| GET | `/api/alerts` | pro/worker | Centre d'alertes (piscines en alerte eau + passages en retard) |
+| GET | `/api/logs/:id/report` | tous (scoped) | Rapport détaillé d'un passage (imprimable/partageable) |
+| GET | `/api/stats` | pro | Statistiques business (passages, temps, top piscines, mensuel) |
+| GET | `/api/weather?lat=&lng=` | pro/worker | Météo + conseils saisonniers (Open-Meteo) |
 
 ## 🗄️ Modèle de données (Cloudflare D1 / SQLite + R2)
 - **users** : `pro` / `worker` / `client` + `phone`, `company`, `created_by`, couleur
 - **pro_workers** : table N-N pisciniste ↔ intervenant (un worker peut bosser pour plusieurs pros)
 - **clients** : clients d'un pisciniste (`owner_id`, `client_user_id` = compte client lié)
-- **pools** : piscines (liées à un client) + GPS + caractéristiques + routine (JSON) + `routine_client` (conseils transmis au client) + `owner_id`
+- **pools** : piscines (liées à un client) + GPS + caractéristiques + routine (JSON) + `routine_client` (conseils transmis au client) + `owner_id` + **seuils idéaux étendus** (sel, TAC, stabilisant min/max) + `depth_avg_m` (profondeur moyenne) + `expected_interval_days` (fréquence attendue → alertes de retard)
 - **maintenances** : entretiens récurrents/ponctuels, attribués à un user
 - **maintenance_logs** : passages effectués + relevés d'eau + produits
 - **photos** (R2) : métadonnées en D1 (`r2_key`, `pool_id`, `log_id`, `uploaded_by`, `caption`) + fichier binaire sur le bucket R2 `piscine-max-photos` (binding `PHOTOS`)
@@ -122,7 +136,7 @@ Résultat : deux piscinistes inscrits sur la plateforme ne voient **jamais** les
 ## 🚀 Développement local
 ```bash
 npm install
-npm run db:migrate:local   # schéma local (migrations 0001 → 0003)
+npm run db:migrate:local   # schéma local (migrations 0001 → 0004)
 npm run db:seed            # données de démo (ou: wrangler d1 execute piscine-max-production --local --file=./seed-demo.sql)
 npm run build
 pm2 start ecosystem.config.cjs
@@ -136,4 +150,4 @@ pm2 start ecosystem.config.cjs
 - **Bucket R2 prod** : `piscine-max-photos`, binding `PHOTOS`
 - **Migrations prod** : `npx wrangler d1 migrations apply piscine-max-production --remote`
 - **Déploiement direct** (garantit les bindings R2) : `npm run build && npx wrangler pages deploy dist --project-name piscine-max`
-- **Dernière mise à jour** : 2026-06-27 — architecture multi-tenant 3 rôles + photos R2 + espace client + équipe
+- **Dernière mise à jour** : 2026-06-27 — sécurité multi-tenant durcie + diagnostic eau/dosage + centre d'alertes + rapport de passage + stats business + mode tournée + météo (Open-Meteo)
