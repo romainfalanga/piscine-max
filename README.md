@@ -35,8 +35,9 @@ Outil de gestion d'entretien de piscines pour pisciniste et intervenants délég
 - Export PDF des fiches piscines
 
 ## 🔗 URLs & Accès
+- **Production** : https://piscine-max.pages.dev ✅ EN LIGNE
 - **Local (dev)** : http://localhost:3000
-- **Production** : à déployer sur Cloudflare Pages (via GitHub `romainfalanga/piscine-max`)
+- **GitHub** : https://github.com/romainfalanga/piscine-max (déploiement auto à chaque push sur `main`)
 
 ### Comptes de démonstration
 | Rôle | Email | Mot de passe |
@@ -85,7 +86,9 @@ pm2 start ecosystem.config.cjs
 ```
 
 ## ☁️ Déploiement
-- **Plateforme** : Cloudflare Pages (relié au repo GitHub)
-- **Statut** : 🟡 Prêt à déployer
-- **Note D1** : créer la base prod avec `npx wrangler d1 create piscine-max-production`, reporter l'`database_id` dans `wrangler.jsonc`, puis `npm run db:migrate:prod`
+- **Plateforme** : Cloudflare Pages (relié au repo GitHub, build auto à chaque push sur `main`)
+- **Statut** : 🟢 EN LIGNE — https://piscine-max.pages.dev
+- **Base D1 prod** : `piscine-max-production` (id `d5b477c2-1899-481d-ab38-21b95ded5e10`), binding `DB` détecté automatiquement par Cloudflare Pages via `wrangler.jsonc`
+- **Mettre à jour le site** : il suffit de `git push origin main` → Cloudflare redéploie tout seul
+- **Migrations prod** : `npx wrangler d1 migrations apply piscine-max-production --remote`
 - **Dernière mise à jour** : 2026-06-27
