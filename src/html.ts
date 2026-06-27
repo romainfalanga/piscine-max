@@ -29,6 +29,7 @@ export function renderApp(): string {
   <script src="/static/views-logs.js"></script>
   <script src="/static/views-team.js"></script>
   <script src="/static/views-client.js"></script>
+  <script src="/static/views-extra.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>`

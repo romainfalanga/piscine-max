@@ -277,12 +277,22 @@ function openPoolForm(pool = null, presetClientId = null) {
         <textarea id="pf-routine-client" rows="3" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm" placeholder="Ce que le client doit faire entre deux passages : maintenir le niveau d'eau, passer le robot 1×/semaine, ne pas baigner après ajout de produit...">${esc(pool?.routine_client || '')}</textarea>
       </div>
       <div class="bg-sky-50 rounded-xl p-3">
-        <div class="text-xs font-bold text-sky-800 mb-2"><i class="fas fa-sliders mr-1"></i>Valeurs idéales <span class="font-normal text-sky-600">(repères pour les relevés)</span></div>
-        <div class="grid grid-cols-4 gap-2">
+        <div class="text-xs font-bold text-sky-800 mb-2"><i class="fas fa-sliders mr-1"></i>Valeurs idéales <span class="font-normal text-sky-600">(repères pour les relevés & le diagnostic)</span></div>
+        <div class="grid grid-cols-4 gap-2 mb-2">
           <div><label class="block text-[11px] font-semibold text-slate-500 mb-0.5">pH min</label><input id="pf-phmin" type="number" step="0.1" value="${pool?.ideal_ph_min ?? 7.0}" class="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-sm text-center"></div>
           <div><label class="block text-[11px] font-semibold text-slate-500 mb-0.5">pH max</label><input id="pf-phmax" type="number" step="0.1" value="${pool?.ideal_ph_max ?? 7.4}" class="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-sm text-center"></div>
           <div><label class="block text-[11px] font-semibold text-slate-500 mb-0.5">Cl min</label><input id="pf-clmin" type="number" step="0.1" value="${pool?.ideal_chlorine_min ?? 1.0}" class="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-sm text-center"></div>
           <div><label class="block text-[11px] font-semibold text-slate-500 mb-0.5">Cl max</label><input id="pf-clmax" type="number" step="0.1" value="${pool?.ideal_chlorine_max ?? 2.0}" class="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-sm text-center"></div>
+          <div><label class="block text-[11px] font-semibold text-slate-500 mb-0.5">Sel min</label><input id="pf-saltmin" type="number" step="0.1" value="${pool?.ideal_salt_min ?? 3.0}" class="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-sm text-center"></div>
+          <div><label class="block text-[11px] font-semibold text-slate-500 mb-0.5">Sel max</label><input id="pf-saltmax" type="number" step="0.1" value="${pool?.ideal_salt_max ?? 5.0}" class="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-sm text-center"></div>
+          <div><label class="block text-[11px] font-semibold text-slate-500 mb-0.5">TAC min</label><input id="pf-tacmin" type="number" step="1" value="${pool?.ideal_tac_min ?? 80}" class="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-sm text-center"></div>
+          <div><label class="block text-[11px] font-semibold text-slate-500 mb-0.5">TAC max</label><input id="pf-tacmax" type="number" step="1" value="${pool?.ideal_tac_max ?? 120}" class="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-sm text-center"></div>
+          <div><label class="block text-[11px] font-semibold text-slate-500 mb-0.5">Stab. min</label><input id="pf-stabmin" type="number" step="1" value="${pool?.ideal_stabilizer_min ?? 30}" class="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-sm text-center"></div>
+          <div><label class="block text-[11px] font-semibold text-slate-500 mb-0.5">Stab. max</label><input id="pf-stabmax" type="number" step="1" value="${pool?.ideal_stabilizer_max ?? 50}" class="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-sm text-center"></div>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div><label class="block text-[11px] font-semibold text-slate-500 mb-0.5"><i class="fas fa-ruler-vertical mr-0.5"></i>Profondeur moy. (m)</label><input id="pf-depth" type="number" step="0.1" value="${pool?.depth_avg_m || ''}" class="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-sm text-center" placeholder="1.5"></div>
+          <div><label class="block text-[11px] font-semibold text-slate-500 mb-0.5"><i class="fas fa-bell mr-0.5"></i>Alerte si pas de passage (jours)</label><input id="pf-interval" type="number" step="1" value="${pool?.expected_interval_days ?? 7}" class="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-sm text-center" placeholder="7"></div>
         </div>
       </div>
       <label class="flex items-center gap-2 cursor-pointer">
@@ -314,6 +324,14 @@ function openPoolForm(pool = null, presetClientId = null) {
       ideal_ph_max: parseFloat(el('pf-phmax').value) || 7.4,
       ideal_chlorine_min: parseFloat(el('pf-clmin').value) || 1.0,
       ideal_chlorine_max: parseFloat(el('pf-clmax').value) || 2.0,
+      ideal_salt_min: parseFloat(el('pf-saltmin').value) || 3.0,
+      ideal_salt_max: parseFloat(el('pf-saltmax').value) || 5.0,
+      ideal_tac_min: parseFloat(el('pf-tacmin').value) || 80,
+      ideal_tac_max: parseFloat(el('pf-tacmax').value) || 120,
+      ideal_stabilizer_min: parseFloat(el('pf-stabmin').value) || 30,
+      ideal_stabilizer_max: parseFloat(el('pf-stabmax').value) || 50,
+      depth_avg_m: el('pf-depth').value ? parseFloat(el('pf-depth').value) : null,
+      expected_interval_days: el('pf-interval').value ? parseInt(el('pf-interval').value) : 7,
       priority: el('pf-priority').checked ? 1 : 0
     }
     // Si l'adresse a changé en édition, on remet lat/lng à null pour re-géocoder

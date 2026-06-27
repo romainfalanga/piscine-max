@@ -53,29 +53,30 @@ function openLogForm(maintenanceId, poolLabel, pool = null, poolId = null) {
         <div class="grid grid-cols-3 gap-2">
           <div>
             <label class="block text-[11px] font-semibold text-slate-500 mb-0.5">pH <span class="text-slate-300">(${phMin}–${phMax})</span></label>
-            <input id="lf-ph" type="number" step="0.1" inputmode="decimal" oninput="checkReading('lf-ph', ${phMin}, ${phMax})" class="w-full px-2 py-2 rounded-lg border border-slate-300 text-sm text-center" placeholder="7.2">
+            <input id="lf-ph" type="number" step="0.1" inputmode="decimal" oninput="checkReading('lf-ph', ${phMin}, ${phMax}); liveDiagnose(${poolId || 'null'})" class="w-full px-2 py-2 rounded-lg border border-slate-300 text-sm text-center" placeholder="7.2">
           </div>
           <div>
             <label class="block text-[11px] font-semibold text-slate-500 mb-0.5">Chlore <span class="text-slate-300">(${clMin}–${clMax})</span></label>
-            <input id="lf-chlorine" type="number" step="0.1" inputmode="decimal" oninput="checkReading('lf-chlorine', ${clMin}, ${clMax})" class="w-full px-2 py-2 rounded-lg border border-slate-300 text-sm text-center" placeholder="1.5">
+            <input id="lf-chlorine" type="number" step="0.1" inputmode="decimal" oninput="checkReading('lf-chlorine', ${clMin}, ${clMax}); liveDiagnose(${poolId || 'null'})" class="w-full px-2 py-2 rounded-lg border border-slate-300 text-sm text-center" placeholder="1.5">
           </div>
           <div>
             <label class="block text-[11px] font-semibold text-slate-500 mb-0.5">Sel (g/L)</label>
-            <input id="lf-salt" type="number" step="0.1" inputmode="decimal" class="w-full px-2 py-2 rounded-lg border border-slate-300 text-sm text-center" placeholder="4.0">
+            <input id="lf-salt" type="number" step="0.1" inputmode="decimal" oninput="liveDiagnose(${poolId || 'null'})" class="w-full px-2 py-2 rounded-lg border border-slate-300 text-sm text-center" placeholder="4.0">
           </div>
           <div>
             <label class="block text-[11px] font-semibold text-slate-500 mb-0.5">Temp. (°C)</label>
-            <input id="lf-temp" type="number" step="0.5" inputmode="decimal" class="w-full px-2 py-2 rounded-lg border border-slate-300 text-sm text-center" placeholder="26">
+            <input id="lf-temp" type="number" step="0.5" inputmode="decimal" oninput="liveDiagnose(${poolId || 'null'})" class="w-full px-2 py-2 rounded-lg border border-slate-300 text-sm text-center" placeholder="26">
           </div>
           <div>
             <label class="block text-[11px] font-semibold text-slate-500 mb-0.5">Stabilisant</label>
-            <input id="lf-stab" type="number" step="1" inputmode="decimal" class="w-full px-2 py-2 rounded-lg border border-slate-300 text-sm text-center" placeholder="30">
+            <input id="lf-stab" type="number" step="1" inputmode="decimal" oninput="liveDiagnose(${poolId || 'null'})" class="w-full px-2 py-2 rounded-lg border border-slate-300 text-sm text-center" placeholder="30">
           </div>
           <div>
             <label class="block text-[11px] font-semibold text-slate-500 mb-0.5">TAC</label>
-            <input id="lf-tac" type="number" step="1" inputmode="decimal" class="w-full px-2 py-2 rounded-lg border border-slate-300 text-sm text-center" placeholder="100">
+            <input id="lf-tac" type="number" step="1" inputmode="decimal" oninput="liveDiagnose(${poolId || 'null'})" class="w-full px-2 py-2 rounded-lg border border-slate-300 text-sm text-center" placeholder="100">
           </div>
         </div>
+        <div id="live-diag" class="mt-2"></div>
       </div>
 
       <div>
@@ -174,7 +175,10 @@ async function openPoolHistory(poolId, poolLabel, pool = null) {
           ${l.products_added ? `<div class="text-xs text-sky-600 mt-0.5"><i class="fas fa-flask-vial mr-1"></i>${esc(l.products_added)}</div>` : ''}
           ${l.notes ? `<div class="text-xs text-slate-400 mt-0.5 italic">${esc(l.notes)}</div>` : ''}
         </div>
-        ${isAdmin() ? `<button onclick="deleteLog(${l.id}, ${poolId}, '${esc(poolLabel).replace(/'/g,"")}')" class="text-slate-300 hover:text-red-500 text-xs"><i class="fas fa-trash"></i></button>` : ''}
+        <div class="flex flex-col gap-1 shrink-0">
+          <button onclick="openReport(${l.id})" class="text-slate-300 hover:text-cyan-600 text-xs" title="Voir le compte-rendu"><i class="fas fa-file-lines"></i></button>
+          ${isAdmin() ? `<button onclick="deleteLog(${l.id}, ${poolId}, '${esc(poolLabel).replace(/'/g,"")}')" class="text-slate-300 hover:text-red-500 text-xs" title="Supprimer"><i class="fas fa-trash"></i></button>` : ''}
+        </div>
       </div>`
   }).join('') : '<p class="text-sm text-slate-400 text-center py-6">Aucun passage enregistré pour le moment</p>'
 

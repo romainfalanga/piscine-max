@@ -89,7 +89,9 @@ const main = async () => {
   ]
   for (const p of pools) {
     const r = JSON.stringify(p.routine).replace(/'/g, "''")
-    lines.push(`INSERT INTO pools (id, client_id, owner_id, label, address, lat, lng, pool_type, volume_m3, shape, treatment_type, filtration_type, access_code, access_notes, routine, routine_client, ideal_ph_min, ideal_ph_max, ideal_chlorine_min, ideal_chlorine_max, priority) VALUES (${p.id}, ${p.client}, ${p.owner}, '${p.label.replace(/'/g, "''")}', '${p.address.replace(/'/g, "''")}', ${p.lat}, ${p.lng}, '${p.type}', ${p.vol}, '${p.shape}', '${p.treat}', '${p.filt}', '${p.code}', '${p.access.replace(/'/g, "''")}', '${r}', '${p.routine_client.replace(/'/g, "''")}', ${p.phmin}, ${p.phmax}, ${p.clmin}, ${p.clmax}, ${p.prio});`)
+    const depth = p.depth ?? 1.5
+    const interval = p.interval ?? 7
+    lines.push(`INSERT INTO pools (id, client_id, owner_id, label, address, lat, lng, pool_type, volume_m3, shape, treatment_type, filtration_type, access_code, access_notes, routine, routine_client, ideal_ph_min, ideal_ph_max, ideal_chlorine_min, ideal_chlorine_max, priority, ideal_salt_min, ideal_salt_max, ideal_tac_min, ideal_tac_max, ideal_stabilizer_min, ideal_stabilizer_max, depth_avg_m, expected_interval_days) VALUES (${p.id}, ${p.client}, ${p.owner}, '${p.label.replace(/'/g, "''")}', '${p.address.replace(/'/g, "''")}', ${p.lat}, ${p.lng}, '${p.type}', ${p.vol}, '${p.shape}', '${p.treat}', '${p.filt}', '${p.code}', '${p.access.replace(/'/g, "''")}', '${r}', '${p.routine_client.replace(/'/g, "''")}', ${p.phmin}, ${p.phmax}, ${p.clmin}, ${p.clmax}, ${p.prio}, 3.0, 5.0, 80, 120, 30, 50, ${depth}, ${interval});`)
   }
   lines.push('')
 
@@ -136,7 +138,8 @@ const main = async () => {
     [28, 7.2, 1.6, 3.9, 25, '', 'Filtre nettoyé', 30, 98],
     [21, 7.1, 1.8, 4.0, 24, '', 'RAS', 28, 95],
     [14, 7.2, 1.7, 4.0, 23, '', 'RAS', 30, 100],
-    [7, 7.2, 1.5, 4.1, 22, '', 'Eau cristalline', 30, 100],
+    // Dernier passage récent avec eau dégradée → illustre une ALERTE eau dans le centre d'alertes
+    [3, 7.9, 0.4, 4.0, 29, '', 'Forte chaleur, chlore consommé — à resurveiller', 30, 100],
   ]
   for (const [d, ph, cl, salt, temp, prod, note, stab, tac] of series1) mkLog(1, 2, d, ph, cl, salt, temp, prod, note, stab, tac)
   // Piscine 3 (maint 3) — Romain

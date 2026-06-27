@@ -232,9 +232,12 @@ function renderShell() {
   if (isPro()) {
     navItems.push({ id: 'clients', icon: 'fa-users', label: 'Clients' })
     navItems.push({ id: 'pools', icon: 'fa-water', label: 'Piscines' })
+    navItems.push({ id: 'tour', icon: 'fa-route', label: 'Tournée' })
+    navItems.push({ id: 'stats', icon: 'fa-chart-line', label: 'Stats' })
     navItems.push({ id: 'team', icon: 'fa-user-group', label: 'Équipe' })
   } else {
     navItems.push({ id: 'pools', icon: 'fa-water', label: 'Mes piscines' })
+    navItems.push({ id: 'tour', icon: 'fa-route', label: 'Tournée' })
     navItems.push({ id: 'team', icon: 'fa-user-group', label: 'Mes pros' })
   }
 
@@ -301,6 +304,8 @@ function renderView() {
   else if (state.view === 'pools') renderPools(c)
   else if (state.view === 'pool-detail') renderPoolDetail(c)
   else if (state.view === 'team') renderTeam(c)
+  else if (state.view === 'stats') renderStats(c)
+  else if (state.view === 'tour') renderTour(c)
 }
 
 // ============================================================
@@ -320,6 +325,7 @@ async function loadData() {
   state.users = res[2].data
   if (isPro()) state.clients = res[3].data
   await loadLogs()
+  await loadAlerts()
 }
 
 // Charge les logs sur une fenêtre de +/- 5 semaines autour de la date courante
@@ -381,6 +387,12 @@ function renderHome(c) {
       ${stat('fa-calendar-check', state.maintenances.length, 'Entretiens planifiés', '#f59e0b')}
     </div>
 
+    <!-- Centre d'alertes -->
+    ${alertsCardHtml()}
+
+    <!-- Météo (1ère piscine géolocalisée) -->
+    <div id="home-weather"></div>
+
     <!-- Aujourd'hui -->
     <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 mb-5">
       <div class="flex items-center justify-between mb-3">
@@ -407,6 +419,15 @@ function renderHome(c) {
           </div>`).join('')}
       </div>
     </div>` : ''}`
+
+  // Météo de la 1ère piscine géolocalisée (asynchrone, non bloquant)
+  const geoPool = (state.pools || []).find(p => p.lat && p.lng)
+  if (geoPool && typeof weatherWidgetHtml === 'function') {
+    weatherWidgetHtml(geoPool.lat, geoPool.lng).then(html => {
+      const box = el('home-weather')
+      if (box && html) box.innerHTML = `<div class="mb-5">${html}</div>`
+    })
+  }
 }
 
 function homeItem(m, done) {
