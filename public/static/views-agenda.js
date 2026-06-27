@@ -86,13 +86,20 @@ function goToday() { state.selectedDate = new Date(); renderAgenda(el('main-cont
 window.setScope = setScope; window.setMode = setMode; window.shiftDate = shiftDate; window.goToday = goToday
 
 // ---------- Carte d'un entretien ----------
-function maintCard(m, index) {
+// dateIso : la date de l'occurrence (pour savoir si "fait")
+function maintCard(m, index, dateIso) {
   const color = m.assigned_color || '#94a3b8'
+  const di = dateIso || isoDate(state.selectedDate)
+  const doneSet = builtDoneSet()
+  const log = doneSet.get(occKey(m.id, di))
+  const done = !!log
+  const skipped = log && log.status === 'skipped'
+  const label = esc(m.pool_label).replace(/'/g, '')
   return `
-    <div class="bg-white rounded-xl border border-slate-100 shadow-sm p-3 hover:shadow-md transition cursor-pointer" onclick="viewPool(${m.pool_id})">
+    <div class="bg-white rounded-xl border ${done ? (skipped ? 'border-amber-200 bg-amber-50/40' : 'border-emerald-200 bg-emerald-50/40') : 'border-slate-100'} shadow-sm p-3 hover:shadow-md transition">
       <div class="flex items-start gap-3">
         ${index != null ? `<div class="route-marker shrink-0" style="background:${color}">${index}</div>` : `<div class="w-1 self-stretch rounded" style="background:${color}"></div>`}
-        <div class="flex-1 min-w-0">
+        <div class="flex-1 min-w-0 cursor-pointer" onclick="viewPool(${m.pool_id})">
           <div class="flex items-center justify-between gap-2">
             <span class="font-bold text-slate-800 truncate">${esc(m.pool_label)}</span>
             ${m.time ? `<span class="text-xs font-semibold text-slate-500 whitespace-nowrap"><i class="far fa-clock mr-1"></i>${esc(m.time)}</span>` : ''}
@@ -100,13 +107,20 @@ function maintCard(m, index) {
           <div class="text-xs text-slate-400">${esc(m.client_name)}</div>
           ${m.pool_address ? `<div class="text-xs text-slate-400 truncate mt-0.5"><i class="fas fa-location-dot mr-1"></i>${esc(m.pool_address)}</div>` : ''}
           <div class="flex flex-wrap items-center gap-1.5 mt-2">
+            ${done ? (skipped ? '<span class="text-[11px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full"><i class="fas fa-forward mr-1"></i>Reporté</span>' : '<span class="text-[11px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full"><i class="fas fa-check mr-1"></i>Fait</span>') : ''}
             ${m.assigned_name ? `<span class="text-[11px] px-2 py-0.5 rounded-full text-white" style="background:${color}"><i class="fas fa-user mr-1"></i>${esc(m.assigned_name)}</span>` : '<span class="text-[11px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-400">Non assigné</span>'}
             ${m.treatment_type ? `<span class="text-[11px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">${esc(m.treatment_type)}</span>` : ''}
             ${m.access_code ? `<span class="text-[11px] bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full"><i class="fas fa-key mr-1"></i>${esc(m.access_code)}</span>` : ''}
             ${m.kind === 'oneshot' ? '<span class="text-[11px] bg-purple-50 text-purple-600 px-2 py-0.5 rounded-full">Ponctuel</span>' : ''}
           </div>
         </div>
-        ${isAdmin() ? `<button onclick="event.stopPropagation(); openMaintenanceForm(${m.id})" class="text-slate-300 hover:text-slate-500 px-1"><i class="fas fa-ellipsis-vertical"></i></button>` : ''}
+        <div class="flex flex-col gap-1.5 shrink-0">
+          ${m.lat && m.lng ? `<button onclick="event.stopPropagation(); openGPS(${m.lat}, ${m.lng})" class="w-8 h-8 rounded-lg bg-sky-50 text-sky-600 hover:bg-sky-100" title="Y aller (GPS)"><i class="fas fa-diamond-turn-right"></i></button>` : ''}
+          ${done
+            ? `<button onclick="event.stopPropagation(); openPoolHistory(${m.pool_id}, '${label}')" class="w-8 h-8 rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200" title="Historique"><i class="fas fa-clock-rotate-left"></i></button>`
+            : `<button onclick="event.stopPropagation(); openLogForm(${m.id}, '${label}')" class="w-8 h-8 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700" title="Marquer fait"><i class="fas fa-check"></i></button>`}
+          ${isAdmin() ? `<button onclick="event.stopPropagation(); openMaintenanceForm(${m.id})" class="w-8 h-8 rounded-lg text-slate-300 hover:text-slate-500 hover:bg-slate-100" title="Modifier"><i class="fas fa-ellipsis-vertical"></i></button>` : ''}
+        </div>
       </div>
     </div>`
 }
@@ -116,10 +130,11 @@ function renderAgendaCalendar() {
   const body = el('agenda-body')
   if (state.agendaScope === 'day') {
     const items = occurrencesForDate(state.selectedDate)
+    const di = isoDate(state.selectedDate)
     body.innerHTML = `
       ${isAdmin() ? `<button onclick="openMaintenanceForm()" class="w-full mb-3 border-2 border-dashed border-slate-300 text-slate-400 hover:border-cyan-400 hover:text-cyan-500 rounded-xl py-3 text-sm font-semibold"><i class="fas fa-plus mr-1"></i>Ajouter un entretien</button>` : ''}
       <div class="space-y-2 fade-in">
-        ${items.length ? items.map(m => maintCard(m)).join('') : '<div class="text-center py-16 text-slate-400"><i class="fas fa-mug-hot text-4xl mb-3"></i><p>Aucun entretien prévu ce jour</p></div>'}
+        ${items.length ? items.map(m => maintCard(m, null, di)).join('') : '<div class="text-center py-16 text-slate-400"><i class="fas fa-mug-hot text-4xl mb-3"></i><p>Aucun entretien prévu ce jour</p></div>'}
       </div>`
   } else {
     const start = startOfWeek(state.selectedDate)
@@ -128,7 +143,9 @@ function renderAgendaCalendar() {
     for (let i = 0; i < 7; i++) {
       const d = new Date(start); d.setDate(d.getDate() + i)
       const items = occurrencesForDate(d)
-      const isToday = isoDate(d) === todayIso
+      const dIso = isoDate(d)
+      const isToday = dIso === todayIso
+      const dSet = builtDoneSet()
       cols += `
         <div class="day-column bg-white rounded-xl border ${isToday ? 'border-cyan-300 today-col' : 'border-slate-100'} p-2 shadow-sm">
           <div class="text-center mb-2 pb-2 border-b border-slate-100">
@@ -136,11 +153,15 @@ function renderAgendaCalendar() {
             <div class="text-lg font-bold ${isToday ? 'text-cyan-700' : 'text-slate-700'}">${d.getDate()}</div>
           </div>
           <div class="space-y-1.5">
-            ${items.length ? items.map(m => `
-              <div onclick="viewPool(${m.pool_id})" class="cursor-pointer rounded-lg px-2 py-1.5 text-xs" style="background:${(m.assigned_color || '#94a3b8')}18; border-left:3px solid ${m.assigned_color || '#94a3b8'}">
-                <div class="font-semibold text-slate-700 truncate">${m.time ? esc(m.time) + ' · ' : ''}${esc(m.pool_label)}</div>
+            ${items.length ? items.map(m => {
+              const log = dSet.get(occKey(m.id, dIso))
+              const done = !!log
+              return `
+              <div onclick="viewPool(${m.pool_id})" class="cursor-pointer rounded-lg px-2 py-1.5 text-xs relative ${done ? 'opacity-60' : ''}" style="background:${(m.assigned_color || '#94a3b8')}18; border-left:3px solid ${m.assigned_color || '#94a3b8'}">
+                <div class="font-semibold text-slate-700 truncate">${done ? '<i class="fas fa-check text-emerald-500 mr-0.5"></i>' : ''}${m.time ? esc(m.time) + ' · ' : ''}${esc(m.pool_label)}</div>
                 <div class="text-slate-400 truncate">${esc(m.client_name)}</div>
-              </div>`).join('') : '<div class="text-center text-[10px] text-slate-300 py-2">—</div>'}
+              </div>`
+            }).join('') : '<div class="text-center text-[10px] text-slate-300 py-2">—</div>'}
           </div>
         </div>`
     }
@@ -163,22 +184,70 @@ function collectMapItems() {
   return items.filter(m => m.lat && m.lng)
 }
 
+// Distance approximative (haversine) en km
+function haversine(a, b) {
+  const R = 6371, toRad = (x) => x * Math.PI / 180
+  const dLat = toRad(b.lat - a.lat), dLng = toRad(b.lng - a.lng)
+  const lat1 = toRad(a.lat), lat2 = toRad(b.lat)
+  const h = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLng/2)**2
+  return 2 * R * Math.asin(Math.sqrt(h))
+}
+
+// Optimise l'ordre par "plus proche voisin" à partir du premier point
+function optimizeRoute(items) {
+  if (items.length <= 2) return items.slice()
+  const remaining = items.slice()
+  const route = [remaining.shift()]
+  while (remaining.length) {
+    const last = route[route.length - 1]
+    let bestIdx = 0, bestDist = Infinity
+    remaining.forEach((it, i) => {
+      const d = haversine(last, it)
+      if (d < bestDist) { bestDist = d; bestIdx = i }
+    })
+    route.push(remaining.splice(bestIdx, 1)[0])
+  }
+  return route
+}
+
+// Distance totale d'un parcours
+function routeDistance(items) {
+  let total = 0
+  for (let i = 1; i < items.length; i++) total += haversine(items[i-1], items[i])
+  return total
+}
+
 function renderAgendaMap() {
   const body = el('agenda-body')
-  const items = collectMapItems()
+  let items = collectMapItems()
+  if (state.routeOptimized) items = optimizeRoute(items)
+  const dist = items.length > 1 ? routeDistance(items) : 0
+
   body.innerHTML = `
     <div class="grid lg:grid-cols-3 gap-4 fade-in">
-      <div class="lg:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm p-1.5">
+      <div class="lg:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm p-1.5 relative">
         <div id="map" class="h-[420px] sm:h-[560px] rounded-xl"></div>
       </div>
       <div class="space-y-2 lg:max-h-[560px] lg:overflow-y-auto pr-1">
-        <div class="text-sm font-semibold text-slate-500 px-1 mb-1">${items.length} étape${items.length > 1 ? 's' : ''} · parcours</div>
-        ${items.length ? items.map((m, i) => maintCard(m, i + 1)).join('') : '<div class="text-center py-12 text-slate-400"><i class="fas fa-map-pin text-3xl mb-2"></i><p class="text-sm">Aucune piscine géolocalisée sur cette période</p></div>'}
+        <div class="flex items-center justify-between px-1 mb-1">
+          <span class="text-sm font-semibold text-slate-500">${items.length} étape${items.length > 1 ? 's' : ''}${dist ? ` · ~${dist.toFixed(1)} km` : ''}</span>
+        </div>
+        ${items.length > 1 ? `
+          <button onclick="toggleOptimize()" class="w-full mb-1 ${state.routeOptimized ? 'bg-cyan-600 text-white' : 'bg-white text-cyan-700 border border-cyan-200'} font-semibold py-2 rounded-xl text-sm shadow-sm transition">
+            <i class="fas fa-wand-magic-sparkles mr-1"></i>${state.routeOptimized ? 'Parcours optimisé ✓' : 'Optimiser le parcours'}
+          </button>` : ''}
+        ${items.length ? items.map((m, i) => maintCard(m, i + 1, isoDate(m._date))).join('') : '<div class="text-center py-12 text-slate-400"><i class="fas fa-map-pin text-3xl mb-2"></i><p class="text-sm">Aucune piscine géolocalisée sur cette période</p></div>'}
       </div>
     </div>`
 
   setTimeout(() => initMap(items), 100)
 }
+
+function toggleOptimize() {
+  state.routeOptimized = !state.routeOptimized
+  renderAgendaMap()
+}
+window.toggleOptimize = toggleOptimize
 
 function initMap(items) {
   if (agendaMap) { agendaMap.remove(); agendaMap = null }
@@ -201,12 +270,15 @@ function initMap(items) {
     })
     const marker = L.marker([m.lat, m.lng], { icon }).addTo(agendaMap)
     marker.bindPopup(`
-      <div style="min-width:160px">
+      <div style="min-width:170px">
         <b>${esc(m.pool_label)}</b><br>
         <span style="color:#64748b;font-size:12px">${esc(m.client_name)}</span><br>
         ${m.time ? `<span style="font-size:12px">🕐 ${esc(m.time)}</span><br>` : ''}
         ${m.access_code ? `<span style="font-size:12px">🔑 ${esc(m.access_code)}</span><br>` : ''}
-        <a href="#" onclick="viewPool(${m.pool_id});return false;" style="color:#0891b2;font-size:12px;font-weight:600">Voir la fiche →</a>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <a href="#" onclick="viewPool(${m.pool_id});return false;" style="color:#0891b2;font-size:12px;font-weight:600">Fiche →</a>
+          <a href="#" onclick="openGPS(${m.lat},${m.lng});return false;" style="color:#0369a1;font-size:12px;font-weight:600">🧭 Y aller</a>
+        </div>
       </div>`)
     latlngs.push([m.lat, m.lng])
   })

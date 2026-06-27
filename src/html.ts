@@ -11,6 +11,7 @@ export function renderApp(): string {
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <link href="/static/style.css" rel="stylesheet">
   <script>
     tailwind.config = {
@@ -25,6 +26,7 @@ export function renderApp(): string {
   <script src="/static/views-clients.js"></script>
   <script src="/static/views-pools.js"></script>
   <script src="/static/views-agenda.js"></script>
+  <script src="/static/views-logs.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>`

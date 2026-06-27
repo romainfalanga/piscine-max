@@ -8,20 +8,35 @@ const FILTRATIONS = ['sable', 'cartouche', 'diatomées', 'verre', 'zéolite']
 
 function renderPools(c) {
   c.innerHTML = `
-    <div class="flex items-center justify-between mb-5">
+    <div class="flex items-center justify-between mb-4">
       <h2 class="text-2xl font-extrabold text-slate-800"><i class="fas fa-water text-cyan-600 mr-2"></i>${isAdmin() ? 'Piscines' : 'Mes piscines'}</h2>
       ${isAdmin() ? `<button onclick="openPoolForm()" class="bg-cyan-600 hover:bg-cyan-700 text-white font-semibold px-4 py-2 rounded-xl shadow flex items-center gap-2"><i class="fas fa-plus"></i><span class="hidden sm:inline">Nouvelle piscine</span></button>` : ''}
     </div>
+    <div class="relative mb-4">
+      <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+      <input id="pool-search" oninput="filterPools(this.value)" placeholder="Rechercher une piscine, un client, une adresse..." class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-cyan-500 outline-none text-sm">
+    </div>
     <div id="pools-list" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"></div>`
 
+  renderPoolsList('')
+}
+
+function renderPoolsList(query) {
   // Pour un worker : ne montrer que les piscines qui lui sont assignées via maintenances
   let pools = state.pools
   if (!isAdmin()) {
     const myPoolIds = new Set(state.maintenances.map(m => m.pool_id))
     pools = pools.filter(p => myPoolIds.has(p.id))
   }
+  if (query) {
+    const q = query.toLowerCase()
+    pools = pools.filter(p => [p.label, p.client_name, p.address, p.treatment_type].some(v => (v || '').toLowerCase().includes(q)))
+  }
+  // Prioritaires en premier
+  pools = [...pools].sort((a, b) => (b.priority || 0) - (a.priority || 0))
 
   const list = el('pools-list')
+  if (!list) return
   if (!pools.length) {
     list.innerHTML = `<div class="col-span-full text-center py-16 text-slate-400"><i class="fas fa-water text-4xl mb-3"></i><p>${isAdmin() ? 'Aucune piscine. Crée ta première piscine !' : 'Aucune piscine attribuée pour le moment.'}</p></div>`
     return
@@ -30,7 +45,7 @@ function renderPools(c) {
     <div class="pool-card bg-white rounded-2xl shadow-sm border border-slate-100 p-4 cursor-pointer" onclick="viewPool(${p.id})">
       <div class="flex items-start justify-between mb-2">
         <div>
-          <div class="font-bold text-slate-800">${esc(p.label)}</div>
+          <div class="font-bold text-slate-800">${p.priority ? '<i class="fas fa-star text-amber-400 mr-1 text-xs"></i>' : ''}${esc(p.label)}</div>
           <div class="text-xs text-slate-400">${esc(p.client_name)}</div>
         </div>
         <span class="w-9 h-9 bg-cyan-100 text-cyan-600 rounded-lg flex items-center justify-center"><i class="fas fa-water"></i></span>
@@ -43,6 +58,9 @@ function renderPools(c) {
       ${p.address ? `<p class="text-xs text-slate-400 mt-2 truncate"><i class="fas fa-location-dot mr-1"></i>${esc(p.address)}</p>` : ''}
     </div>`).join('')
 }
+
+function filterPools(query) { renderPoolsList(query) }
+window.filterPools = filterPools
 
 async function viewPool(id) {
   const { data } = await API.get(`/pools/${id}`)
@@ -124,12 +142,17 @@ function renderPoolDetail(c) {
             ${p.client_email ? `<div class="truncate"><span class="text-slate-400">Email :</span> ${esc(p.client_email)}</div>` : ''}
           </div>
         </div>
-        ${p.lat && p.lng ? `<div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-2"><div id="pool-mini-map" class="h-48 rounded-xl"></div></div>` : ''}
-        ${isAdmin() ? `
-        <div class="space-y-2">
-          <button onclick='openPoolForm(${JSON.stringify(p).replace(/'/g, "&#39;")})' class="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-xl"><i class="fas fa-pen mr-1"></i>Modifier la piscine</button>
-          <button onclick="openMaintenanceForm(null, ${p.id})" class="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-semibold py-2.5 rounded-xl"><i class="fas fa-calendar-plus mr-1"></i>Planifier un entretien</button>
+        ${p.lat && p.lng ? `<div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-2">
+          <div id="pool-mini-map" class="h-48 rounded-xl"></div>
+          <button onclick="openGPS(${p.lat}, ${p.lng})" class="w-full mt-2 bg-sky-600 hover:bg-sky-700 text-white font-semibold py-2.5 rounded-xl"><i class="fas fa-diamond-turn-right mr-1"></i>Y aller (GPS)</button>
         </div>` : ''}
+        <div class="space-y-2">
+          <button onclick="openMaintenancePicker(${p.id}, '${esc(p.label).replace(/'/g,'')}')" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-xl"><i class="fas fa-clipboard-check mr-1"></i>Enregistrer un passage</button>
+          <button onclick="openPoolHistory(${p.id}, '${esc(p.label).replace(/'/g,'')}', ${JSON.stringify({ideal_ph_min:p.ideal_ph_min,ideal_ph_max:p.ideal_ph_max}).replace(/'/g,'&#39;')})" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-xl"><i class="fas fa-clock-rotate-left mr-1"></i>Historique & relevés</button>
+          ${isAdmin() ? `
+          <button onclick='openPoolForm(${JSON.stringify(p).replace(/'/g, "&#39;")})' class="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-xl"><i class="fas fa-pen mr-1"></i>Modifier la piscine</button>
+          <button onclick="openMaintenanceForm(null, ${p.id})" class="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-semibold py-2.5 rounded-xl"><i class="fas fa-calendar-plus mr-1"></i>Planifier un entretien</button>` : ''}
+        </div>
       </div>
     </div>`
 
@@ -183,6 +206,19 @@ function openPoolForm(pool = null, presetClientId = null) {
         <label class="block text-sm font-semibold text-slate-600 mb-1">Routine d'entretien <span class="text-xs text-slate-400 font-normal">(une étape par ligne)</span></label>
         <textarea id="pf-routine" rows="5" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm font-mono" placeholder="Vérifier le niveau d'eau&#10;Nettoyer les skimmers&#10;Tester pH et chlore">${esc(routine.join('\n'))}</textarea>
       </div>
+      <div class="bg-sky-50 rounded-xl p-3">
+        <div class="text-xs font-bold text-sky-800 mb-2"><i class="fas fa-sliders mr-1"></i>Valeurs idéales <span class="font-normal text-sky-600">(repères pour les relevés)</span></div>
+        <div class="grid grid-cols-4 gap-2">
+          <div><label class="block text-[11px] font-semibold text-slate-500 mb-0.5">pH min</label><input id="pf-phmin" type="number" step="0.1" value="${pool?.ideal_ph_min ?? 7.0}" class="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-sm text-center"></div>
+          <div><label class="block text-[11px] font-semibold text-slate-500 mb-0.5">pH max</label><input id="pf-phmax" type="number" step="0.1" value="${pool?.ideal_ph_max ?? 7.4}" class="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-sm text-center"></div>
+          <div><label class="block text-[11px] font-semibold text-slate-500 mb-0.5">Cl min</label><input id="pf-clmin" type="number" step="0.1" value="${pool?.ideal_chlorine_min ?? 1.0}" class="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-sm text-center"></div>
+          <div><label class="block text-[11px] font-semibold text-slate-500 mb-0.5">Cl max</label><input id="pf-clmax" type="number" step="0.1" value="${pool?.ideal_chlorine_max ?? 2.0}" class="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-sm text-center"></div>
+        </div>
+      </div>
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input type="checkbox" id="pf-priority" ${pool?.priority ? 'checked' : ''} class="w-5 h-5 rounded accent-amber-500">
+        <span class="text-sm font-semibold text-slate-600"><i class="fas fa-star text-amber-400 mr-1"></i>Piscine prioritaire</span>
+      </label>
       <div>
         <label class="block text-sm font-semibold text-slate-600 mb-1">Notes générales</label>
         <textarea id="pf-notes" rows="2" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm">${esc(pool?.notes || '')}</textarea>
@@ -203,7 +239,12 @@ function openPoolForm(pool = null, presetClientId = null) {
       shape: el('pf-shape').value, treatment_type: el('pf-treatment').value,
       filtration_type: el('pf-filtration').value, access_code: el('pf-code').value,
       access_notes: el('pf-access-notes').value,
-      routine: JSON.stringify(routineArr), notes: el('pf-notes').value
+      routine: JSON.stringify(routineArr), notes: el('pf-notes').value,
+      ideal_ph_min: parseFloat(el('pf-phmin').value) || 7.0,
+      ideal_ph_max: parseFloat(el('pf-phmax').value) || 7.4,
+      ideal_chlorine_min: parseFloat(el('pf-clmin').value) || 1.0,
+      ideal_chlorine_max: parseFloat(el('pf-clmax').value) || 2.0,
+      priority: el('pf-priority').checked ? 1 : 0
     }
     // Si l'adresse a changé en édition, on remet lat/lng à null pour re-géocoder
     if (isEdit && pool.address === payload.address) { payload.lat = pool.lat; payload.lng = pool.lng }
