@@ -154,7 +154,7 @@ let historyChart = null
 
 async function openPoolHistory(poolId, poolLabel, pool = null) {
   let logs = []
-  try { const { data } = await API.get(`/pools/${poolId}/history`); logs = data } catch {}
+  try { const { data } = await API.get(`/pools/${poolId}/history`); logs = data } catch (e) { console.warn('history:', e) }
 
   const rows = logs.length ? logs.map(l => {
     const vals = []
@@ -202,18 +202,55 @@ function drawHistoryChart(logs, pool) {
   // Ordre chronologique
   const chrono = [...logs].reverse()
   const labels = chrono.map(l => new Date(l.done_date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }))
+  const n = chrono.length
+  const p = pool || {}
+
+  const datasets = []
+  // Datasets de mesure (axe principal y) — seuls ceux avec des données s'affichent
+  const measures = [
+    { key: 'ph', label: 'pH', color: '#0891b2', min: p.ideal_ph_min, max: p.ideal_ph_max },
+    { key: 'chlorine', label: 'Chlore (mg/L)', color: '#16a34a', min: p.ideal_chlorine_min, max: p.ideal_chlorine_max },
+    { key: 'tac', label: 'TAC (mg/L)', color: '#8b5cf6', min: p.ideal_tac_min, max: p.ideal_tac_max, hidden: true },
+    { key: 'stabilizer', label: 'Stabilisant (mg/L)', color: '#f59e0b', min: p.ideal_stabilizer_min, max: p.ideal_stabilizer_max, hidden: true },
+    { key: 'salt', label: 'Sel (g/L)', color: '#e11d48', min: p.ideal_salt_min, max: p.ideal_salt_max, hidden: true }
+  ]
+  for (const meas of measures) {
+    if (!chrono.some(l => l[meas.key] != null)) continue
+    datasets.push({
+      label: meas.label, data: chrono.map(l => l[meas.key]),
+      borderColor: meas.color, backgroundColor: meas.color + '20',
+      tension: 0.3, spanGaps: true, yAxisID: 'y', hidden: !!meas.hidden, pointRadius: 2
+    })
+    // N3 : bandes de zone idéale (min/max) en fond, pour pH et chlore (affichés par défaut)
+    if (!meas.hidden && meas.min != null && meas.max != null && n > 0) {
+      datasets.push({
+        label: meas.label + ' min idéal', data: Array(n).fill(meas.min),
+        borderColor: meas.color + '55', borderDash: [4, 4], borderWidth: 1,
+        pointRadius: 0, fill: false, yAxisID: 'y'
+      })
+      datasets.push({
+        label: meas.label + ' max idéal', data: Array(n).fill(meas.max),
+        borderColor: meas.color + '55', borderDash: [4, 4], borderWidth: 1,
+        pointRadius: 0, fill: '-1', backgroundColor: meas.color + '0f', yAxisID: 'y'
+      })
+    }
+  }
+
   historyChart = new Chart(ctx, {
     type: 'line',
-    data: {
-      labels,
-      datasets: [
-        { label: 'pH', data: chrono.map(l => l.ph), borderColor: '#0891b2', backgroundColor: '#0891b220', tension: 0.3, spanGaps: true, yAxisID: 'y' },
-        { label: 'Chlore (mg/L)', data: chrono.map(l => l.chlorine), borderColor: '#16a34a', backgroundColor: '#16a34a20', tension: 0.3, spanGaps: true, yAxisID: 'y' }
-      ]
-    },
+    data: { labels, datasets },
     options: {
       responsive: true, maintainAspectRatio: true,
-      plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: {
+            boxWidth: 12, font: { size: 11 },
+            // On masque les entrées "min/max idéal" de la légende pour ne pas la surcharger
+            filter: (item) => !/idéal/.test(item.text)
+          }
+        }
+      },
       scales: { y: { beginAtZero: false, ticks: { font: { size: 10 } } }, x: { ticks: { font: { size: 10 }, maxRotation: 0 } } }
     }
   })

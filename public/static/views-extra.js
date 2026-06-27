@@ -73,7 +73,7 @@ window.liveDiagnose = liveDiagnose
 // ============================================================
 async function loadAlerts() {
   try { const { data } = await API.get('/alerts'); state.alerts = data; return data }
-  catch { state.alerts = { alerts: [], counts: { alert: 0, warn: 0 } }; return state.alerts }
+  catch (e) { console.warn('loadAlerts:', e); state.alerts = { alerts: [], counts: { alert: 0, warn: 0 } }; return state.alerts }
 }
 window.loadAlerts = loadAlerts
 

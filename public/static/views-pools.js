@@ -98,6 +98,7 @@ function renderPoolDetail(c) {
             <i class="fas fa-water text-4xl text-cyan-200/60"></i>
           </div>
           ${p.address ? `<a href="https://www.openstreetmap.org/?mlat=${p.lat}&mlon=${p.lng}#map=17/${p.lat}/${p.lng}" target="_blank" class="inline-flex items-center gap-1.5 mt-3 text-sm bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg"><i class="fas fa-location-dot"></i>${esc(p.address)}</a>` : ''}
+          ${p.winterized ? '<div class="mt-3 inline-flex items-center gap-1.5 text-sm bg-blue-900/40 border border-white/30 px-3 py-1.5 rounded-lg"><i class="fas fa-snowflake"></i>Piscine hivernée — passages suspendus</div>' : ''}
         </div>
 
         <!-- Accès & logistique (mis en avant pour la délégation) -->
@@ -136,6 +137,7 @@ function renderPoolDetail(c) {
             ${isAdmin() ? `<button onclick="openSeasonsEditor(${p.id})" class="text-cyan-600 text-sm font-semibold"><i class="fas fa-sliders mr-1"></i>Configurer</button>` : ''}
           </div>
           ${seasonsSummaryHtml(p.seasons)}
+          ${poolSeasonStatusHtml(p.seasons)}
         </div>
 
         ${p.routine_client ? `<div class="bg-amber-50 border border-amber-200 rounded-2xl p-5"><h3 class="font-bold text-amber-800 mb-2"><i class="fas fa-lightbulb mr-2"></i>Conseils transmis au client</h3><p class="text-sm text-amber-900 whitespace-pre-line">${esc(p.routine_client)}</p></div>` : ''}
@@ -171,7 +173,8 @@ function renderPoolDetail(c) {
           <button onclick="openPoolHistory(${p.id}, '${esc(p.label).replace(/'/g,'')}', ${JSON.stringify({ideal_ph_min:p.ideal_ph_min,ideal_ph_max:p.ideal_ph_max}).replace(/'/g,'&#39;')})" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-xl"><i class="fas fa-clock-rotate-left mr-1"></i>Historique & relevés</button>
           ${isAdmin() ? `
           <button onclick='openPoolForm(${JSON.stringify(p).replace(/'/g, "&#39;")})' class="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-xl"><i class="fas fa-pen mr-1"></i>Modifier la piscine</button>
-          <button onclick="openMaintenanceForm(null, ${p.id})" class="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-semibold py-2.5 rounded-xl"><i class="fas fa-calendar-plus mr-1"></i>Planifier un entretien</button>` : ''}
+          <button onclick="openMaintenanceForm(null, ${p.id})" class="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-semibold py-2.5 rounded-xl"><i class="fas fa-calendar-plus mr-1"></i>Planifier un entretien</button>
+          <button onclick="toggleWinterize(${p.id}, ${p.winterized ? 1 : 0})" class="w-full ${p.winterized ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'} font-semibold py-2.5 rounded-xl"><i class="fas fa-snowflake mr-1"></i>${p.winterized ? 'Sortir d’hivernage' : 'Mettre en hivernage'}</button>` : ''}
         </div>
       </div>
     </div>`
@@ -185,6 +188,47 @@ function renderPoolDetail(c) {
   }
   loadPoolPhotos(p.id)
 }
+
+// C8 : basculer l'hivernage d'une piscine
+async function toggleWinterize(poolId, current) {
+  const goingOn = !current
+  if (goingOn && !confirm('Mettre cette piscine en hivernage ? Les passages seront suspendus et les alertes de retard désactivées.')) return
+  try {
+    const { data } = await API.post(`/pools/${poolId}/winterize`, { on: goingOn })
+    if (state.currentPool && state.currentPool.id == poolId) state.currentPool.winterized = data.winterized
+    const pInList = state.pools.find(x => x.id == poolId); if (pInList) pInList.winterized = data.winterized
+    renderView()
+    toast(data.winterized ? 'Piscine hivernée ❄️' : 'Piscine réactivée ☀️')
+  } catch (e) { console.warn(e); toast('Erreur', 'error') }
+}
+window.toggleWinterize = toggleWinterize
+
+// N1 : saison active aujourd'hui + prochaine échéance (autonome, ne dépend pas de views-agenda)
+function poolSeasonStatusHtml(seasons) {
+  if (!seasons || !seasons.length) return ''
+  const today = new Date()
+  const curMd = (today.getMonth() + 1) * 100 + today.getDate()
+  const inSeason = (s) => {
+    const toNum = (md) => { const [m, d] = String(md).split('-').map(Number); return m * 100 + d }
+    const a = toNum(s.start_md), b = toNum(s.end_md)
+    return a <= b ? (curMd >= a && curMd <= b) : (curMd >= a || curMd <= b)
+  }
+  const active = seasons.find(s => s.active !== 0 && inSeason(s))
+  if (!active) return '<div class="mt-2 text-sm text-slate-500"><i class="fas fa-circle-pause mr-1 text-slate-400"></i>Hors saison aujourd\'hui — aucun passage planifié.</div>'
+  // Prochaine échéance : ancrée sur le début de saison, tous les interval_days
+  const [mm, dd] = String(active.start_md).split('-').map(Number)
+  let anchor = new Date(today.getFullYear(), mm - 1, dd); anchor.setHours(0,0,0,0)
+  if (anchor > today) anchor = new Date(today.getFullYear() - 1, mm - 1, dd)
+  const interval = Math.max(1, Number(active.interval_days) || 7)
+  const t0 = new Date(today); t0.setHours(0,0,0,0)
+  const elapsed = Math.round((t0 - anchor) / 86400000)
+  const next = new Date(anchor.getTime() + (Math.ceil(elapsed / interval) * interval) * 86400000)
+  const label = active.label || `${active.start_md}→${active.end_md}`
+  return `<div class="mt-2 text-sm text-cyan-800 bg-cyan-50 border border-cyan-200 rounded-lg px-3 py-2">
+    <i class="fas fa-leaf mr-1"></i>Saison active : <strong>${esc(label)}</strong> · tous les ${interval}j ·
+    prochain passage prévu : <strong>${next.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}</strong></div>`
+}
+window.poolSeasonStatusHtml = poolSeasonStatusHtml
 
 async function loadPoolPhotos(poolId) {
   const box = el('pool-photos')

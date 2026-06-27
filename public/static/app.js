@@ -382,8 +382,8 @@ function renderHome(c) {
 
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
       ${stat('fa-list-check', `${doneCount}/${todayItems.length}`, "Aujourd'hui", '#0891b2')}
-      ${stat('fa-water', state.pools.length, isAdmin() ? 'Piscines' : 'Mes piscines', '#16a34a')}
-      ${isAdmin() ? stat('fa-users', state.clients.length, 'Clients', '#8b5cf6') : stat('fa-route', todayItems.length, 'Arrêts du jour', '#8b5cf6')}
+      ${stat('fa-water', state.pools.length, 'Piscines', '#16a34a')}
+      ${stat('fa-users', state.clients.length, 'Clients', '#8b5cf6')}
       ${stat('fa-calendar-check', state.maintenances.length, 'Entretiens planifiés', '#f59e0b')}
     </div>
 

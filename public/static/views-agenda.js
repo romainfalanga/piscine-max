@@ -346,14 +346,19 @@ function openMaintenanceForm(id = null, presetPoolId = null) {
   const m = id ? state.maintenances.find(x => x.id === id) : null
   const isEdit = !!m
   const poolOptions = state.pools.map(p => `<option value="${p.id}" ${(m?.pool_id || presetPoolId) == p.id ? 'selected' : ''}>${esc(p.client_name)} — ${esc(p.label)}</option>`).join('')
-  const userOptions = ['<option value="">Non assigné</option>', ...state.users.map(u => `<option value="${u.id}" ${m?.assigned_to == u.id ? 'selected' : ''}>${esc(u.name)} (${u.role === 'admin' ? 'Pisciniste' : 'Intervenant'})</option>`)].join('')
+  const userOptions = ['<option value="">Non assigné</option>', ...state.users.map(u => `<option value="${u.id}" ${m?.assigned_to == u.id ? 'selected' : ''}>${esc(u.name)}${u.id === state.user?.id ? ' (moi)' : ''}</option>`)].join('')
   const kind = m?.kind || 'recurring'
+  // B2 : si la piscine sélectionnée a des saisons définies, la fréquence est pilotée
+  // par les saisons → on masque jour/fréquence pour ne pas induire en erreur.
+  const selectedPoolId = m?.pool_id || presetPoolId || (state.pools[0] && state.pools[0].id)
+  const selectedPool = state.pools.find(p => p.id == selectedPoolId)
+  const poolHasSeasons = !!(selectedPool && selectedPool.seasons && selectedPool.seasons.length)
 
   openModal(isEdit ? 'Modifier l\'entretien' : 'Nouvel entretien', `
     <form id="maint-form" class="space-y-4">
       <div>
         <label class="block text-sm font-semibold text-slate-600 mb-1">Piscine *</label>
-        <select id="mf-pool" required class="w-full px-4 py-2.5 rounded-xl border border-slate-300 outline-none focus:ring-2 focus:ring-cyan-500">${poolOptions}</select>
+        <select id="mf-pool" required onchange="refreshMaintSeasonsNote()" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 outline-none focus:ring-2 focus:ring-cyan-500">${poolOptions}</select>
       </div>
       <div>
         <label class="block text-sm font-semibold text-slate-600 mb-1">Type</label>
@@ -364,26 +369,33 @@ function openMaintenanceForm(id = null, presetPoolId = null) {
       </div>
 
       <div id="mf-recurring" class="${kind === 'oneshot' ? 'hidden' : ''} space-y-3">
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block text-sm font-semibold text-slate-600 mb-1">Jour de la semaine</label>
-            <select id="mf-weekday" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm">
-              ${[1,2,3,4,5,6,7].map(w => `<option value="${w}" ${m?.weekday == w ? 'selected' : ''}>${WEEKDAYS[w]}</option>`).join('')}
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm font-semibold text-slate-600 mb-1">Fréquence</label>
-            <select id="mf-interval" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm">
-              <option value="1" ${(m?.interval_weeks||1)==1?'selected':''}>Toutes les semaines</option>
-              <option value="2" ${m?.interval_weeks==2?'selected':''}>Toutes les 2 semaines</option>
-              <option value="3" ${m?.interval_weeks==3?'selected':''}>Toutes les 3 semaines</option>
-              <option value="4" ${m?.interval_weeks==4?'selected':''}>Toutes les 4 semaines</option>
-            </select>
-          </div>
+        <div id="mf-seasons-note" class="${poolHasSeasons ? '' : 'hidden'} bg-cyan-50 border border-cyan-200 rounded-xl p-3 text-sm text-cyan-800">
+          <i class="fas fa-snowflake mr-1"></i>
+          La fréquence de passage de cette piscine est <strong>pilotée par ses saisons</strong>.
+          Les réglages jour/fréquence ci-dessous sont ignorés. Pour les modifier, ouvre l'éditeur de saisons depuis la fiche piscine.
         </div>
-        <div>
-          <label class="block text-sm font-semibold text-slate-600 mb-1">À partir du</label>
-          <input id="mf-start" type="date" value="${m?.start_date || isoDate(new Date())}" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm">
+        <div id="mf-cadence" class="${poolHasSeasons ? 'opacity-40 pointer-events-none' : ''} space-y-3">
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-sm font-semibold text-slate-600 mb-1">Jour de la semaine</label>
+              <select id="mf-weekday" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm">
+                ${[1,2,3,4,5,6,7].map(w => `<option value="${w}" ${m?.weekday == w ? 'selected' : ''}>${WEEKDAYS[w]}</option>`).join('')}
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-slate-600 mb-1">Fréquence</label>
+              <select id="mf-interval" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm">
+                <option value="1" ${(m?.interval_weeks||1)==1?'selected':''}>Toutes les semaines</option>
+                <option value="2" ${m?.interval_weeks==2?'selected':''}>Toutes les 2 semaines</option>
+                <option value="3" ${m?.interval_weeks==3?'selected':''}>Toutes les 3 semaines</option>
+                <option value="4" ${m?.interval_weeks==4?'selected':''}>Toutes les 4 semaines</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-slate-600 mb-1">À partir du</label>
+            <input id="mf-start" type="date" value="${m?.start_date || isoDate(new Date())}" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm">
+          </div>
         </div>
       </div>
 
@@ -444,6 +456,17 @@ function toggleKind() {
   el('mf-oneshot').classList.toggle('hidden', k !== 'oneshot')
 }
 window.toggleKind = toggleKind
+
+// B2 : met à jour la note "fréquence pilotée par les saisons" quand on change de piscine.
+function refreshMaintSeasonsNote() {
+  const sel = el('mf-pool'); if (!sel) return
+  const pool = state.pools.find(p => p.id == sel.value)
+  const hasSeasons = !!(pool && pool.seasons && pool.seasons.length)
+  const note = el('mf-seasons-note'); const cadence = el('mf-cadence')
+  if (note) note.classList.toggle('hidden', !hasSeasons)
+  if (cadence) cadence.classList.toggle('opacity-40', hasSeasons), cadence.classList.toggle('pointer-events-none', hasSeasons)
+}
+window.refreshMaintSeasonsNote = refreshMaintSeasonsNote
 
 async function deleteMaintenance(id) {
   if (!confirm('Supprimer cet entretien ?')) return

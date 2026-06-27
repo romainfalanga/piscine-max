@@ -6,6 +6,7 @@ import { verifyPassword, createSession, verifySession, hashPassword } from './au
 import { geocodeAddress } from './geocode'
 import { renderApp } from './html'
 import { diagnoseWater } from './water'
+import { effectiveIntervalForDate, effectiveSeasonLabel, findSeasonOverlap, type Season } from './seasons'
 
 type Bindings = {
   DB: D1Database
@@ -56,6 +57,9 @@ async function requirePro(c: any, next: any) {
   if (!user || user.role === 'client') return c.json({ error: 'Réservé aux professionnels' }, 403)
   await next()
 }
+// Nom canonique depuis la fusion des rôles : un "member" est un humain non-client.
+// requirePro est conservé comme alias pour ne pas toucher toutes les routes existantes.
+const requireMember = requirePro
 
 // ============================================================
 // Helpers de périmètre (multi-tenant)
@@ -139,7 +143,7 @@ app.post('/api/login', async (c) => {
   return c.json({ id: user.id, name: user.name, role: user.role, email: user.email, color: user.color })
 })
 
-// Inscription publique d'un PISCINISTE (pro)
+// Inscription publique d'un membre (humain : gère ses clients/piscines + peut être intervenant)
 app.post('/api/signup', async (c) => {
   const { name, email, password, company, phone } = await c.req.json()
   if (!name || !email || !password) return c.json({ error: 'Nom, email et mot de passe requis' }, 400)
@@ -151,11 +155,11 @@ app.post('/api/signup', async (c) => {
   const colors = ['#0891b2', '#16a34a', '#8b5cf6', '#f59e0b', '#e11d48', '#0ea5e9']
   const color = colors[Math.floor(Math.random() * colors.length)]
   const r = await c.env.DB.prepare('INSERT INTO users (email, password_hash, name, role, color, company, phone) VALUES (?, ?, ?, ?, ?, ?, ?)')
-    .bind(mail, hash, name, 'pro', color, company || null, phone || null).run()
+    .bind(mail, hash, name, 'member', color, company || null, phone || null).run()
   const uid = r.meta.last_row_id as number
-  const token = await createSession({ uid, role: 'pro', name, exp: Date.now() + SESSION_TTL }, getSecret(c))
+  const token = await createSession({ uid, role: 'member', name, exp: Date.now() + SESSION_TTL }, getSecret(c))
   setCookie(c, COOKIE_NAME, token, { httpOnly: true, secure: true, sameSite: 'Lax', maxAge: SESSION_TTL / 1000, path: '/' })
-  return c.json({ id: uid, name, role: 'pro', email: mail, color })
+  return c.json({ id: uid, name, role: 'member', email: mail, color })
 })
 
 app.post('/api/logout', async (c) => {
@@ -247,7 +251,7 @@ app.post('/api/team/workers', requireAuth, requirePro, async (c) => {
   generatedPassword = password && password.length >= 4 ? password : genPassword()
   const hash = await hashPassword(generatedPassword)
   const r = await c.env.DB.prepare('INSERT INTO users (email, password_hash, name, role, color, created_by) VALUES (?, ?, ?, ?, ?, ?)')
-    .bind(mail, hash, name, 'worker', '#16a34a', user.uid).run()
+    .bind(mail, hash, name, 'member', '#16a34a', user.uid).run()
   const wid = r.meta.last_row_id as number
   await c.env.DB.prepare('INSERT OR IGNORE INTO pro_workers (pro_id, worker_id) VALUES (?, ?)').bind(user.uid, wid).run()
   return c.json({ id: wid, name, email: mail, attached: false, generated_password: generatedPassword })
@@ -521,6 +525,9 @@ app.put('/api/pools/:id/seasons', requireAuth, requirePro, async (c) => {
   for (const s of seasons) {
     if (!okMd(s.start_md) || !okMd(s.end_md)) return c.json({ error: 'Dates de saison invalides (format MM-DD attendu)' }, 400)
   }
+  // B5 : refuser les chevauchements de périodes (sinon planification non déterministe).
+  const overlap = findSeasonOverlap(seasons as Season[])
+  if (overlap) return c.json({ error: overlap }, 400)
   await c.env.DB.prepare('DELETE FROM pool_seasons WHERE pool_id = ?').bind(poolId).run()
   let order = 0
   for (const s of seasons) {
@@ -535,6 +542,20 @@ app.put('/api/pools/:id/seasons', requireAuth, requirePro, async (c) => {
     ).run()
   }
   return c.json({ ok: true, count: seasons.length })
+})
+
+// C8 : basculer l'état d'hivernage d'une piscine (toggle)
+app.post('/api/pools/:id/winterize', requireAuth, requireMember, async (c) => {
+  const user = c.get('user')
+  const poolId = Number(c.req.param('id'))
+  if (!(await poolInScope(c, poolId, user))) return c.json({ error: 'Piscine non autorisée' }, 403)
+  const body = await c.req.json().catch(() => ({}))
+  // Si "on" est fourni explicitement on l'applique, sinon on inverse l'état courant.
+  const cur = await c.env.DB.prepare('SELECT winterized FROM pools WHERE id = ?').bind(poolId).first<any>()
+  const next = body.on != null ? (body.on ? 1 : 0) : (cur?.winterized ? 0 : 1)
+  await c.env.DB.prepare('UPDATE pools SET winterized = ?, winterized_at = ? WHERE id = ?')
+    .bind(next, next ? new Date().toISOString() : null, poolId).run()
+  return c.json({ ok: true, winterized: next })
 })
 
 // ============================================================
@@ -810,9 +831,10 @@ app.get('/api/alerts', requireAuth, async (c) => {
   const proIds = await visibleProIds(c, user)
   if (!proIds.length) return c.json({ alerts: [], counts: { alert: 0, warn: 0 } })
 
-  // Toutes les piscines du périmètre (filtrées par assignation si worker)
+  // Toutes les piscines du périmètre (filtrées par assignation).
+  // winterized inclus : une piscine hivernée n'émet pas d'alerte de retard.
   let poolQuery = `
-    SELECT DISTINCT p.id, p.label, p.volume_m3, p.expected_interval_days, cl.name as client_name,
+    SELECT DISTINCT p.id, p.label, p.volume_m3, p.expected_interval_days, p.winterized, cl.name as client_name,
       p.ideal_ph_min, p.ideal_ph_max, p.ideal_chlorine_min, p.ideal_chlorine_max,
       p.ideal_salt_min, p.ideal_salt_max, p.ideal_tac_min, p.ideal_tac_max,
       p.ideal_stabilizer_min, p.ideal_stabilizer_max
@@ -826,15 +848,37 @@ app.get('/api/alerts', requireAuth, async (c) => {
 
   const today = new Date()
   const alerts: any[] = []
+  const poolList = pools as any[]
+  if (!poolList.length) return c.json({ alerts: [], counts: { alert: 0, warn: 0 } })
 
-  for (const p of pools as any[]) {
-    // Dernier passage (relevé) de la piscine
-    const last = await c.env.DB.prepare(`
-      SELECT l.done_date, l.ph, l.chlorine, l.salt, l.tac, l.stabilizer
-      FROM maintenance_logs l JOIN maintenances m ON m.id = l.maintenance_id
-      WHERE m.pool_id = ? AND l.status = 'done'
-      ORDER BY l.done_date DESC, l.created_at DESC LIMIT 1
-    `).bind(p.id).first<any>()
+  const poolIds = poolList.map(p => p.id)
+
+  // A2 : UNE seule requête pour le dernier relevé "done" de chaque piscine (plus de N+1).
+  // On récupère la ligne la plus récente par pool via une sous-requête MAX(done_date).
+  const lastByPool = new Map<number, any>()
+  const { results: lasts } = await c.env.DB.prepare(`
+    SELECT m.pool_id, l.done_date, l.ph, l.chlorine, l.salt, l.tac, l.stabilizer
+    FROM maintenance_logs l
+    JOIN maintenances m ON m.id = l.maintenance_id
+    WHERE m.pool_id IN (${inClause(poolIds)}) AND l.status = 'done'
+    ORDER BY l.done_date DESC, l.created_at DESC
+  `).bind(...poolIds).all()
+  for (const row of lasts as any[]) {
+    if (!lastByPool.has(row.pool_id)) lastByPool.set(row.pool_id, row) // 1er = le plus récent
+  }
+
+  // B4 : UNE seule requête pour les saisons de toutes les piscines du périmètre.
+  const seasonsByPool = new Map<number, Season[]>()
+  const { results: seasonRows } = await c.env.DB.prepare(
+    `SELECT * FROM pool_seasons WHERE pool_id IN (${inClause(poolIds)}) ORDER BY sort_order, start_md`
+  ).bind(...poolIds).all()
+  for (const s of seasonRows as any[]) {
+    if (!seasonsByPool.has(s.pool_id)) seasonsByPool.set(s.pool_id, [])
+    seasonsByPool.get(s.pool_id)!.push(s as Season)
+  }
+
+  for (const p of poolList) {
+    const last = lastByPool.get(p.id) || null
 
     // 1) Diagnostic du dernier relevé
     if (last) {
@@ -850,19 +894,24 @@ app.get('/api/alerts', requireAuth, async (c) => {
       }
     }
 
-    // 2) Retard de passage
-    const interval = p.expected_interval_days
-    if (interval && interval > 0) {
-      const days = last ? Math.floor((today.getTime() - new Date(last.done_date).getTime()) / 86400000) : 999
-      if (days > interval) {
-        const overdue = last ? days - interval : null
-        const level = (last ? days : interval + 1) > interval * 2 ? 'alert' : 'warn'
-        alerts.push({
-          type: 'overdue', level, pool_id: p.id, pool_label: p.label, client_name: p.client_name,
-          title: last ? `Pas de passage depuis ${days} jours` : 'Aucun passage enregistré',
-          detail: last ? `Fréquence attendue : ${interval}j${overdue ? ` · ${overdue}j de retard` : ''}` : `Fréquence attendue : ${interval}j`,
-          date: last ? last.done_date : null
-        })
+    // 2) Retard de passage — saison-aware + piscines hivernées exclues (B4)
+    if (!p.winterized) {
+      const seasons = seasonsByPool.get(p.id) || []
+      const interval = effectiveIntervalForDate(seasons, today, p.expected_interval_days)
+      // interval null = hors saison ou pas de suivi → pas d'alerte de retard
+      if (interval && interval > 0) {
+        const days = last ? Math.floor((today.getTime() - new Date(last.done_date).getTime()) / 86400000) : 999
+        if (days > interval) {
+          const overdue = last ? days - interval : null
+          const level = (last ? days : interval + 1) > interval * 2 ? 'alert' : 'warn'
+          const seasonName = seasons.length ? (effectiveSeasonLabel(seasons, today)) : null
+          alerts.push({
+            type: 'overdue', level, pool_id: p.id, pool_label: p.label, client_name: p.client_name,
+            title: last ? `Pas de passage depuis ${days} jours` : 'Aucun passage enregistré',
+            detail: `Fréquence attendue : ${interval}j${seasonName ? ` (${seasonName})` : ''}${overdue ? ` · ${overdue}j de retard` : ''}`,
+            date: last ? last.done_date : null
+          })
+        }
       }
     }
   }
