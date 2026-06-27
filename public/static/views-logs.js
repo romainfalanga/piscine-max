@@ -5,18 +5,17 @@
 // ---- Sélecteur d'entretien pour une piscine (avant le formulaire de passage) ----
 function openMaintenancePicker(poolId, poolLabel) {
   const maints = state.maintenances.filter(m => m.pool_id === poolId)
+  const pool = (state.pools || []).find(p => p.id === poolId) || null
   if (maints.length === 0) {
-    // Pas d'entretien planifié : on permet quand même un passage "libre" via un entretien fictif ?
-    // On demande à l'admin de planifier d'abord.
     toast("Aucun entretien planifié pour cette piscine. Planifie-le d'abord.", 'info')
     return
   }
-  if (maints.length === 1) { openLogForm(maints[0].id, poolLabel); return }
+  if (maints.length === 1) { openLogForm(maints[0].id, poolLabel, pool, poolId); return }
   // Plusieurs entretiens : laisser choisir
   openModal('Quel entretien ?', `
     <div class="space-y-2">
       ${maints.map(m => `
-        <button onclick="closeModal(); openLogForm(${m.id}, '${esc(poolLabel).replace(/'/g,'')}')" class="w-full text-left bg-slate-50 hover:bg-slate-100 rounded-xl p-3 flex items-center justify-between">
+        <button onclick="closeModal(); openLogForm(${m.id}, '${esc(poolLabel).replace(/'/g,'')}', null, ${poolId})" class="w-full text-left bg-slate-50 hover:bg-slate-100 rounded-xl p-3 flex items-center justify-between">
           <span class="text-sm font-semibold">${m.kind === 'recurring' ? WEEKDAYS[m.weekday] + (m.interval_weeks > 1 ? ` (1/${m.interval_weeks} sem.)` : '') : 'Ponctuel ' + (m.oneshot_date||'')}${m.time ? ' · ' + esc(m.time) : ''}</span>
           <i class="fas fa-chevron-right text-slate-300"></i>
         </button>`).join('')}
@@ -25,8 +24,14 @@ function openMaintenancePicker(poolId, poolLabel) {
 window.openMaintenancePicker = openMaintenancePicker
 
 // ---- Formulaire : marquer un passage effectué ----
-function openLogForm(maintenanceId, poolLabel, pool = null) {
+function openLogForm(maintenanceId, poolLabel, pool = null, poolId = null) {
   const today = isoDate(new Date())
+  // Récupère les seuils idéaux depuis la piscine connue (pour les alertes)
+  if (!pool && poolId) pool = (state.pools || []).find(p => p.id === poolId) || null
+  if (!pool) { const m = state.maintenances.find(x => x.id === maintenanceId); if (m) pool = (state.pools || []).find(p => p.id === m.pool_id) || null; if (m) poolId = m.pool_id }
+  const ph = pool || {}
+  const phMin = ph.ideal_ph_min ?? 7.0, phMax = ph.ideal_ph_max ?? 7.4
+  const clMin = ph.ideal_chlorine_min ?? 1.0, clMax = ph.ideal_chlorine_max ?? 2.0
   openModal(`<i class="fas fa-clipboard-check text-emerald-500 mr-2"></i>Passage — ${esc(poolLabel)}`, `
     <form id="log-form" class="space-y-4">
       <div class="grid grid-cols-2 gap-3">
@@ -47,12 +52,12 @@ function openLogForm(maintenanceId, poolLabel, pool = null) {
         <div class="text-sm font-bold text-sky-800 mb-2"><i class="fas fa-flask mr-1"></i>Relevés d'eau <span class="font-normal text-xs text-sky-600">(optionnel)</span></div>
         <div class="grid grid-cols-3 gap-2">
           <div>
-            <label class="block text-[11px] font-semibold text-slate-500 mb-0.5">pH</label>
-            <input id="lf-ph" type="number" step="0.1" inputmode="decimal" class="w-full px-2 py-2 rounded-lg border border-slate-300 text-sm text-center" placeholder="7.2">
+            <label class="block text-[11px] font-semibold text-slate-500 mb-0.5">pH <span class="text-slate-300">(${phMin}–${phMax})</span></label>
+            <input id="lf-ph" type="number" step="0.1" inputmode="decimal" oninput="checkReading('lf-ph', ${phMin}, ${phMax})" class="w-full px-2 py-2 rounded-lg border border-slate-300 text-sm text-center" placeholder="7.2">
           </div>
           <div>
-            <label class="block text-[11px] font-semibold text-slate-500 mb-0.5">Chlore (mg/L)</label>
-            <input id="lf-chlorine" type="number" step="0.1" inputmode="decimal" class="w-full px-2 py-2 rounded-lg border border-slate-300 text-sm text-center" placeholder="1.5">
+            <label class="block text-[11px] font-semibold text-slate-500 mb-0.5">Chlore <span class="text-slate-300">(${clMin}–${clMax})</span></label>
+            <input id="lf-chlorine" type="number" step="0.1" inputmode="decimal" oninput="checkReading('lf-chlorine', ${clMin}, ${clMax})" class="w-full px-2 py-2 rounded-lg border border-slate-300 text-sm text-center" placeholder="1.5">
           </div>
           <div>
             <label class="block text-[11px] font-semibold text-slate-500 mb-0.5">Sel (g/L)</label>
@@ -88,6 +93,11 @@ function openLogForm(maintenanceId, poolLabel, pool = null) {
         </div>
       </div>
 
+      <label class="flex items-center gap-2 cursor-pointer text-sm text-slate-600 ${poolId ? '' : 'hidden'}">
+        <input type="checkbox" id="lf-addphoto" class="w-5 h-5 rounded accent-cyan-600">
+        <span><i class="fas fa-camera text-cyan-500 mr-1"></i>Ajouter une photo après validation</span>
+      </label>
+
       <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl shadow"><i class="fas fa-check mr-1"></i>Valider le passage</button>
     </form>`)
 
@@ -99,17 +109,44 @@ function openLogForm(maintenanceId, poolLabel, pool = null) {
       water_temp: el('lf-temp').value, stabilizer: el('lf-stab').value, tac: el('lf-tac').value,
       products_added: el('lf-products').value, notes: el('lf-notes').value, duration_min: el('lf-duration').value
     }
+    const wantPhoto = el('lf-addphoto') && el('lf-addphoto').checked
     try {
-      await API.post(`/maintenances/${maintenanceId}/log`, payload)
-      closeModal()
-      // Recharger les logs pour mettre à jour les statuts "fait"
+      const { data } = await API.post(`/maintenances/${maintenanceId}/log`, payload)
       await loadLogs()
-      renderView()
+      if (wantPhoto && poolId) {
+        openPhotoUploadForLog(poolId, data.log_id)
+      } else {
+        closeModal(); renderView()
+      }
       toast('Passage enregistré ✅')
     } catch (err) { toast(err.response?.data?.error || 'Erreur', 'error') }
   })
 }
 window.openLogForm = openLogForm
+
+// Colore le champ en rouge/vert selon les seuils idéaux
+function checkReading(id, min, max) {
+  const inp = el(id)
+  if (!inp) return
+  const v = parseFloat(inp.value)
+  inp.classList.remove('border-red-400', 'bg-red-50', 'border-emerald-400', 'bg-emerald-50')
+  if (isNaN(v) || inp.value === '') return
+  if (v < min || v > max) inp.classList.add('border-red-400', 'bg-red-50')
+  else inp.classList.add('border-emerald-400', 'bg-emerald-50')
+}
+window.checkReading = checkReading
+
+// Upload photo lié à un passage qu'on vient de créer (réutilise le flow de pool)
+function openPhotoUploadForLog(poolId, logId) {
+  if (typeof openPhotoUpload === 'function') {
+    openPhotoUpload(poolId, logId)
+    // après fermeture, on rafraîchit la vue courante
+    const prevClose = window.closeModal
+  } else {
+    closeModal(); renderView()
+  }
+}
+window.openPhotoUploadForLog = openPhotoUploadForLog
 
 // ---- Historique + graphique d'une piscine ----
 let historyChart = null

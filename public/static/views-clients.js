@@ -100,6 +100,20 @@ async function openClientDetail(id) {
         <div class="bg-slate-50 rounded-xl p-3"><div class="text-xs text-slate-400 mb-0.5">Email</div><div class="font-semibold truncate">${esc(data.email || '—')}</div></div>
       </div>
       ${data.notes ? `<div class="bg-amber-50 rounded-xl p-3 text-sm"><i class="fas fa-note-sticky text-amber-500 mr-1"></i>${esc(data.notes)}</div>` : ''}
+
+      <!-- Accès espace client -->
+      <div class="bg-slate-50 rounded-xl p-3">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="font-bold text-sm text-slate-700"><i class="fas fa-user-lock text-cyan-500 mr-1"></i>Accès espace client</div>
+            <div class="text-xs text-slate-400 mt-0.5">${data.client_user_id ? 'Actif · ' + esc(data.client_account_email || '') : "Le client peut consulter l'historique de ses piscines"}</div>
+          </div>
+          ${data.client_user_id
+            ? `<button onclick="revokeClientAccess(${data.id})" class="text-xs bg-red-50 text-red-600 px-3 py-1.5 rounded-lg font-semibold hover:bg-red-100">Révoquer</button>`
+            : `<button onclick="createClientAccess(${data.id}, '${esc(data.email || '').replace(/'/g,'')}')" class="text-xs bg-cyan-600 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-cyan-700">Créer l'accès</button>`}
+        </div>
+        ${data.client_user_id ? `<button onclick="resetMemberPassword(${data.client_user_id}, '${esc(data.name).replace(/'/g,'')}')" class="text-xs text-amber-600 mt-2"><i class="fas fa-key mr-1"></i>Réinitialiser son mot de passe</button>` : ''}
+      </div>
       <div>
         <div class="flex items-center justify-between mb-2">
           <h4 class="font-bold text-slate-700">Piscines (${data.pools.length})</h4>
@@ -111,3 +125,34 @@ async function openClientDetail(id) {
     </div>`)
 }
 window.openClientDetail = openClientDetail
+
+function createClientAccess(clientId, defaultEmail) {
+  openModal('Créer un accès client', `
+    <form id="ca-form" class="space-y-4">
+      <div class="bg-cyan-50 rounded-xl p-3 text-sm text-cyan-800">
+        <i class="fas fa-circle-info mr-1"></i> Saisis l'email du client. Un mot de passe sera généré automatiquement : transmets-le lui pour qu'il puisse consulter l'historique de ses piscines.
+      </div>
+      <div>
+        <label class="block text-sm font-semibold text-slate-600 mb-1">Email du client *</label>
+        <input id="ca-email" type="email" required value="${esc(defaultEmail || '')}" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-cyan-500 outline-none" placeholder="client@exemple.fr">
+      </div>
+      <button type="submit" class="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2.5 rounded-xl">Générer l'accès</button>
+    </form>`)
+  el('ca-form').addEventListener('submit', async (e) => {
+    e.preventDefault()
+    try {
+      const { data } = await API.post(`/clients/${clientId}/account`, { email: el('ca-email').value })
+      closeModal()
+      showCredentials('Accès client créé', data.email, data.password, 'Transmettez ces identifiants à votre client pour qu\'il accède à son espace.')
+      await loadData()
+    } catch (err) { toast(err.response?.data?.error || 'Erreur', 'error') }
+  })
+}
+window.createClientAccess = createClientAccess
+
+async function revokeClientAccess(clientId) {
+  if (!confirm("Révoquer l'accès de ce client ? Son compte sera supprimé.")) return
+  try { await API.delete(`/clients/${clientId}/account`); closeModal(); await loadData(); renderView(); toast('Accès révoqué') }
+  catch { toast('Erreur', 'error') }
+}
+window.revokeClientAccess = revokeClientAccess

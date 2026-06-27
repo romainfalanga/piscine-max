@@ -8,11 +8,11 @@ import { renderApp } from './html'
 
 type Bindings = {
   DB: D1Database
+  PHOTOS: R2Bucket
   SESSION_SECRET?: string
 }
 
 // Fallback si le secret n'est pas défini en variable d'environnement Cloudflare.
-// ⚠️ En production, définir SESSION_SECRET via le dashboard (Settings → Environment variables / Secrets).
 const SESSION_SECRET_FALLBACK = 'piscine-max-secret-change-me-in-prod-2026'
 const COOKIE_NAME = 'pm_session'
 const SESSION_TTL = 1000 * 60 * 60 * 24 * 30 // 30 jours
@@ -21,15 +21,22 @@ function getSecret(c: any): string {
   return (c.env && c.env.SESSION_SECRET) ? c.env.SESSION_SECRET : SESSION_SECRET_FALLBACK
 }
 
-const app = new Hono<{ Bindings: Bindings; Variables: { user: { uid: number; role: string; name: string } } }>()
+// Génère un mot de passe lisible (sans caractères ambigus)
+function genPassword(len = 8): string {
+  const chars = 'abcdefghjkmnpqrstuvwxyz23456789ABCDEFGHJKMNPQRSTUVWXYZ'
+  const arr = crypto.getRandomValues(new Uint8Array(len))
+  return [...arr].map((b) => chars[b % chars.length]).join('')
+}
+
+type SessionUser = { uid: number; role: string; name: string }
+
+const app = new Hono<{ Bindings: Bindings; Variables: { user: SessionUser } }>()
 
 app.use('/api/*', cors())
-
-// Servir les fichiers statiques
 app.use('/static/*', serveStatic({ root: './public' }))
 
 // ============================================================
-// Middleware d'authentification
+// Middlewares d'authentification / rôles
 // ============================================================
 async function requireAuth(c: any, next: any) {
   const token = getCookie(c, COOKIE_NAME)
@@ -40,10 +47,37 @@ async function requireAuth(c: any, next: any) {
   await next()
 }
 
-async function requireAdmin(c: any, next: any) {
+// Réservé aux piscinistes (pro)
+async function requirePro(c: any, next: any) {
   const user = c.get('user')
-  if (!user || user.role !== 'admin') return c.json({ error: 'Réservé à l\'administrateur' }, 403)
+  if (!user || user.role !== 'pro') return c.json({ error: 'Réservé aux piscinistes' }, 403)
   await next()
+}
+
+// ============================================================
+// Helpers de périmètre (multi-tenant)
+// ============================================================
+// Renvoie la liste des pro_id dont l'utilisateur courant peut voir les données.
+// - pro    : lui-même + (en tant qu'intervenant) les pros qui l'emploient
+// - worker : les pros qui l'emploient
+// - client : aucun (le client passe par des routes dédiées)
+async function visibleProIds(c: any, user: SessionUser): Promise<number[]> {
+  const ids = new Set<number>()
+  if (user.role === 'pro') ids.add(user.uid)
+  // Pros qui emploient cet utilisateur comme intervenant
+  const { results } = await c.env.DB.prepare('SELECT pro_id FROM pro_workers WHERE worker_id = ?').bind(user.uid).all()
+  for (const r of results as any[]) ids.add(r.pro_id)
+  return [...ids]
+}
+
+function inClause(ids: number[]): string {
+  return ids.length ? ids.map(() => '?').join(',') : 'NULL'
+}
+
+// Vérifie qu'une piscine appartient au périmètre du pro courant
+async function poolOwnedByPro(c: any, poolId: number, proId: number): Promise<boolean> {
+  const row = await c.env.DB.prepare('SELECT owner_id FROM pools WHERE id = ?').bind(poolId).first<any>()
+  return !!row && row.owner_id === proId
 }
 
 // ============================================================
@@ -61,14 +95,27 @@ app.post('/api/login', async (c) => {
     { uid: user.id, role: user.role, name: user.name, exp: Date.now() + SESSION_TTL },
     getSecret(c)
   )
-  setCookie(c, COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'Lax',
-    maxAge: SESSION_TTL / 1000,
-    path: '/'
-  })
+  setCookie(c, COOKIE_NAME, token, { httpOnly: true, secure: true, sameSite: 'Lax', maxAge: SESSION_TTL / 1000, path: '/' })
   return c.json({ id: user.id, name: user.name, role: user.role, email: user.email, color: user.color })
+})
+
+// Inscription publique d'un PISCINISTE (pro)
+app.post('/api/signup', async (c) => {
+  const { name, email, password, company, phone } = await c.req.json()
+  if (!name || !email || !password) return c.json({ error: 'Nom, email et mot de passe requis' }, 400)
+  if (password.length < 4) return c.json({ error: 'Mot de passe trop court (4 caractères min)' }, 400)
+  const mail = email.toLowerCase().trim()
+  const exists = await c.env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(mail).first()
+  if (exists) return c.json({ error: 'Cet email est déjà utilisé' }, 409)
+  const hash = await hashPassword(password)
+  const colors = ['#0891b2', '#16a34a', '#8b5cf6', '#f59e0b', '#e11d48', '#0ea5e9']
+  const color = colors[Math.floor(Math.random() * colors.length)]
+  const r = await c.env.DB.prepare('INSERT INTO users (email, password_hash, name, role, color, company, phone) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .bind(mail, hash, name, 'pro', color, company || null, phone || null).run()
+  const uid = r.meta.last_row_id as number
+  const token = await createSession({ uid, role: 'pro', name, exp: Date.now() + SESSION_TTL }, getSecret(c))
+  setCookie(c, COOKIE_NAME, token, { httpOnly: true, secure: true, sameSite: 'Lax', maxAge: SESSION_TTL / 1000, path: '/' })
+  return c.json({ id: uid, name, role: 'pro', email: mail, color })
 })
 
 app.post('/api/logout', async (c) => {
@@ -78,14 +125,8 @@ app.post('/api/logout', async (c) => {
 
 app.get('/api/me', requireAuth, async (c) => {
   const u = c.get('user')
-  const user = await c.env.DB.prepare('SELECT id, name, email, role, color FROM users WHERE id = ?').bind(u.uid).first()
+  const user = await c.env.DB.prepare('SELECT id, name, email, role, color, company, phone FROM users WHERE id = ?').bind(u.uid).first()
   return c.json(user)
-})
-
-// Liste des utilisateurs (pour l'assignation) - admin only
-app.get('/api/users', requireAuth, async (c) => {
-  const { results } = await c.env.DB.prepare('SELECT id, name, email, role, color FROM users ORDER BY role DESC, name').all()
-  return c.json(results)
 })
 
 // Changer son mot de passe
@@ -97,48 +138,192 @@ app.post('/api/change-password', requireAuth, async (c) => {
   if (!user) return c.json({ error: 'Utilisateur introuvable' }, 404)
   const ok = await verifyPassword(current_password, user.password_hash)
   if (!ok) return c.json({ error: 'Mot de passe actuel incorrect' }, 401)
-  const newHash = await hashPassword(new_password)
-  await c.env.DB.prepare('UPDATE users SET password_hash = ? WHERE id = ?').bind(newHash, u.uid).run()
+  await c.env.DB.prepare('UPDATE users SET password_hash = ? WHERE id = ?').bind(await hashPassword(new_password), u.uid).run()
+  return c.json({ ok: true })
+})
+
+// Mettre à jour son profil (nom, société, téléphone)
+app.put('/api/me', requireAuth, async (c) => {
+  const u = c.get('user')
+  const { name, company, phone } = await c.req.json()
+  await c.env.DB.prepare('UPDATE users SET name=?, company=?, phone=? WHERE id=?')
+    .bind(name || u.name, company || null, phone || null, u.uid).run()
   return c.json({ ok: true })
 })
 
 // ============================================================
-// CLIENTS (admin gère ; worker lecture seule)
+// ÉQUIPE : intervenants (workers) & relations pro<->worker
+// ============================================================
+// Liste des intervenants du pro courant (pour l'assignation des entretiens)
+app.get('/api/users', requireAuth, async (c) => {
+  const user = c.get('user')
+  const proIds = await visibleProIds(c, user)
+  // L'utilisateur lui-même (s'il est pro, il peut s'auto-assigner) + ses intervenants
+  const { results } = await c.env.DB.prepare(`
+    SELECT DISTINCT u.id, u.name, u.email, u.role, u.color
+    FROM users u
+    WHERE u.id = ?
+       OR u.id IN (SELECT worker_id FROM pro_workers WHERE pro_id IN (${inClause(proIds)}))
+    ORDER BY u.role DESC, u.name
+  `).bind(user.uid, ...proIds).all()
+  return c.json(results)
+})
+
+// Mon équipe : mes intervenants + de qui je suis intervenant
+app.get('/api/team', requireAuth, async (c) => {
+  const user = c.get('user')
+  // Mes intervenants (si je suis pro)
+  const myWorkers = await c.env.DB.prepare(`
+    SELECT u.id, u.name, u.email, u.role, u.color, u.phone, pw.created_at
+    FROM pro_workers pw JOIN users u ON u.id = pw.worker_id
+    WHERE pw.pro_id = ? ORDER BY u.name
+  `).bind(user.uid).all()
+  // Les pros pour qui je travaille (en tant qu'intervenant)
+  const myEmployers = await c.env.DB.prepare(`
+    SELECT u.id, u.name, u.email, u.company, u.color, u.phone
+    FROM pro_workers pw JOIN users u ON u.id = pw.pro_id
+    WHERE pw.worker_id = ? ORDER BY u.name
+  `).bind(user.uid).all()
+  return c.json({ workers: myWorkers.results, employers: myEmployers.results })
+})
+
+// Le pro crée un nouvel intervenant (avec mot de passe généré) OU attache un worker existant par email
+app.post('/api/team/workers', requireAuth, requirePro, async (c) => {
+  const user = c.get('user')
+  const { name, email, password } = await c.req.json()
+  if (!email) return c.json({ error: 'Email requis' }, 400)
+  const mail = email.toLowerCase().trim()
+  let worker = await c.env.DB.prepare('SELECT id, name, role FROM users WHERE email = ?').bind(mail).first<any>()
+  let generatedPassword: string | null = null
+
+  if (worker) {
+    // L'utilisateur existe déjà : on l'attache simplement comme intervenant
+    await c.env.DB.prepare('INSERT OR IGNORE INTO pro_workers (pro_id, worker_id) VALUES (?, ?)').bind(user.uid, worker.id).run()
+    return c.json({ id: worker.id, name: worker.name, email: mail, attached: true, generated_password: null })
+  }
+
+  // Création d'un nouveau compte intervenant
+  if (!name) return c.json({ error: 'Nom requis pour créer un nouvel intervenant' }, 400)
+  generatedPassword = password && password.length >= 4 ? password : genPassword()
+  const hash = await hashPassword(generatedPassword)
+  const r = await c.env.DB.prepare('INSERT INTO users (email, password_hash, name, role, color, created_by) VALUES (?, ?, ?, ?, ?, ?)')
+    .bind(mail, hash, name, 'worker', '#16a34a', user.uid).run()
+  const wid = r.meta.last_row_id as number
+  await c.env.DB.prepare('INSERT OR IGNORE INTO pro_workers (pro_id, worker_id) VALUES (?, ?)').bind(user.uid, wid).run()
+  return c.json({ id: wid, name, email: mail, attached: false, generated_password: generatedPassword })
+})
+
+// Détacher un intervenant de mon équipe
+app.delete('/api/team/workers/:id', requireAuth, requirePro, async (c) => {
+  const user = c.get('user')
+  await c.env.DB.prepare('DELETE FROM pro_workers WHERE pro_id = ? AND worker_id = ?').bind(user.uid, c.req.param('id')).run()
+  return c.json({ ok: true })
+})
+
+// Réinitialiser le mot de passe d'un intervenant ou client que j'ai créé
+app.post('/api/team/reset-password/:id', requireAuth, requirePro, async (c) => {
+  const user = c.get('user')
+  const targetId = c.req.param('id')
+  // Sécurité : je ne peux réinitialiser que les comptes que j'ai créés
+  const target = await c.env.DB.prepare('SELECT id, created_by FROM users WHERE id = ?').bind(targetId).first<any>()
+  if (!target || target.created_by !== user.uid) return c.json({ error: 'Action non autorisée' }, 403)
+  const newPwd = genPassword()
+  await c.env.DB.prepare('UPDATE users SET password_hash = ? WHERE id = ?').bind(await hashPassword(newPwd), targetId).run()
+  return c.json({ ok: true, new_password: newPwd })
+})
+
+// ============================================================
+// CLIENTS
 // ============================================================
 app.get('/api/clients', requireAuth, async (c) => {
+  const user = c.get('user')
+  const proIds = await visibleProIds(c, user)
   const { results } = await c.env.DB.prepare(`
-    SELECT c.*, (SELECT COUNT(*) FROM pools WHERE client_id = c.id) as pool_count
-    FROM clients c ORDER BY c.name
-  `).all()
+    SELECT c.*, (SELECT COUNT(*) FROM pools WHERE client_id = c.id) as pool_count,
+           cu.email as client_account_email
+    FROM clients c
+    LEFT JOIN users cu ON cu.id = c.client_user_id
+    WHERE c.owner_id IN (${inClause(proIds)})
+    ORDER BY c.name
+  `).bind(...proIds).all()
   return c.json(results)
 })
 
 app.get('/api/clients/:id', requireAuth, async (c) => {
-  const id = c.req.param('id')
-  const client = await c.env.DB.prepare('SELECT * FROM clients WHERE id = ?').bind(id).first()
+  const user = c.get('user')
+  const proIds = await visibleProIds(c, user)
+  const client = await c.env.DB.prepare(`
+    SELECT c.*, cu.email as client_account_email
+    FROM clients c LEFT JOIN users cu ON cu.id = c.client_user_id
+    WHERE c.id = ? AND c.owner_id IN (${inClause(proIds)})
+  `).bind(c.req.param('id'), ...proIds).first()
   if (!client) return c.json({ error: 'Client introuvable' }, 404)
-  const { results: pools } = await c.env.DB.prepare('SELECT * FROM pools WHERE client_id = ? ORDER BY label').bind(id).all()
+  const { results: pools } = await c.env.DB.prepare('SELECT * FROM pools WHERE client_id = ? ORDER BY label').bind(c.req.param('id')).all()
   return c.json({ ...client, pools })
 })
 
-app.post('/api/clients', requireAuth, requireAdmin, async (c) => {
+app.post('/api/clients', requireAuth, requirePro, async (c) => {
+  const user = c.get('user')
   const { name, phone, email, notes } = await c.req.json()
   if (!name) return c.json({ error: 'Le nom est requis' }, 400)
-  const r = await c.env.DB.prepare('INSERT INTO clients (name, phone, email, notes) VALUES (?, ?, ?, ?)')
-    .bind(name, phone || null, email || null, notes || null).run()
+  const r = await c.env.DB.prepare('INSERT INTO clients (name, phone, email, notes, owner_id) VALUES (?, ?, ?, ?, ?)')
+    .bind(name, phone || null, email || null, notes || null, user.uid).run()
   return c.json({ id: r.meta.last_row_id, name, phone, email, notes })
 })
 
-app.put('/api/clients/:id', requireAuth, requireAdmin, async (c) => {
+app.put('/api/clients/:id', requireAuth, requirePro, async (c) => {
+  const user = c.get('user')
   const id = c.req.param('id')
+  if (!(await clientOwnedByPro(c, id, user.uid))) return c.json({ error: 'Action non autorisée' }, 403)
   const { name, phone, email, notes } = await c.req.json()
   await c.env.DB.prepare('UPDATE clients SET name=?, phone=?, email=?, notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?')
     .bind(name, phone || null, email || null, notes || null, id).run()
   return c.json({ ok: true })
 })
 
-app.delete('/api/clients/:id', requireAuth, requireAdmin, async (c) => {
-  await c.env.DB.prepare('DELETE FROM clients WHERE id = ?').bind(c.req.param('id')).run()
+app.delete('/api/clients/:id', requireAuth, requirePro, async (c) => {
+  const user = c.get('user')
+  const id = c.req.param('id')
+  if (!(await clientOwnedByPro(c, id, user.uid))) return c.json({ error: 'Action non autorisée' }, 403)
+  await c.env.DB.prepare('DELETE FROM clients WHERE id = ?').bind(id).run()
+  return c.json({ ok: true })
+})
+
+async function clientOwnedByPro(c: any, clientId: any, proId: number): Promise<boolean> {
+  const row = await c.env.DB.prepare('SELECT owner_id FROM clients WHERE id = ?').bind(clientId).first<any>()
+  return !!row && row.owner_id === proId
+}
+
+// Créer un compte d'accès pour un client (mot de passe généré)
+app.post('/api/clients/:id/account', requireAuth, requirePro, async (c) => {
+  const user = c.get('user')
+  const id = c.req.param('id')
+  if (!(await clientOwnedByPro(c, id, user.uid))) return c.json({ error: 'Action non autorisée' }, 403)
+  const { email } = await c.req.json()
+  if (!email) return c.json({ error: 'Email du client requis' }, 400)
+  const mail = email.toLowerCase().trim()
+  const client = await c.env.DB.prepare('SELECT name, client_user_id FROM clients WHERE id = ?').bind(id).first<any>()
+  if (client?.client_user_id) return c.json({ error: 'Ce client a déjà un accès' }, 409)
+  const existing = await c.env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(mail).first()
+  if (existing) return c.json({ error: 'Cet email est déjà utilisé par un autre compte' }, 409)
+  const newPwd = genPassword()
+  const r = await c.env.DB.prepare('INSERT INTO users (email, password_hash, name, role, color, created_by) VALUES (?, ?, ?, ?, ?, ?)')
+    .bind(mail, await hashPassword(newPwd), client.name, 'client', '#64748b', user.uid).run()
+  const cuid = r.meta.last_row_id as number
+  await c.env.DB.prepare('UPDATE clients SET client_user_id = ?, email = COALESCE(email, ?) WHERE id = ?').bind(cuid, mail, id).run()
+  return c.json({ ok: true, email: mail, password: newPwd, user_id: cuid })
+})
+
+// Révoquer l'accès d'un client
+app.delete('/api/clients/:id/account', requireAuth, requirePro, async (c) => {
+  const user = c.get('user')
+  const id = c.req.param('id')
+  if (!(await clientOwnedByPro(c, id, user.uid))) return c.json({ error: 'Action non autorisée' }, 403)
+  const client = await c.env.DB.prepare('SELECT client_user_id FROM clients WHERE id = ?').bind(id).first<any>()
+  if (client?.client_user_id) {
+    await c.env.DB.prepare('DELETE FROM users WHERE id = ? AND role = ?').bind(client.client_user_id, 'client').run()
+    await c.env.DB.prepare('UPDATE clients SET client_user_id = NULL WHERE id = ?').bind(id).run()
+  }
   return c.json({ ok: true })
 })
 
@@ -146,19 +331,25 @@ app.delete('/api/clients/:id', requireAuth, requireAdmin, async (c) => {
 // POOLS (piscines)
 // ============================================================
 app.get('/api/pools', requireAuth, async (c) => {
+  const user = c.get('user')
+  const proIds = await visibleProIds(c, user)
   const { results } = await c.env.DB.prepare(`
     SELECT p.*, cl.name as client_name, cl.phone as client_phone
     FROM pools p JOIN clients cl ON cl.id = p.client_id
+    WHERE p.owner_id IN (${inClause(proIds)})
     ORDER BY cl.name, p.label
-  `).all()
+  `).bind(...proIds).all()
   return c.json(results)
 })
 
 app.get('/api/pools/:id', requireAuth, async (c) => {
+  const user = c.get('user')
+  const proIds = await visibleProIds(c, user)
   const pool = await c.env.DB.prepare(`
     SELECT p.*, cl.name as client_name, cl.phone as client_phone, cl.email as client_email
-    FROM pools p JOIN clients cl ON cl.id = p.client_id WHERE p.id = ?
-  `).bind(c.req.param('id')).first()
+    FROM pools p JOIN clients cl ON cl.id = p.client_id
+    WHERE p.id = ? AND p.owner_id IN (${inClause(proIds)})
+  `).bind(c.req.param('id'), ...proIds).first()
   if (!pool) return c.json({ error: 'Piscine introuvable' }, 404)
   return c.json(pool)
 })
@@ -171,20 +362,22 @@ async function geocodeIfNeeded(address: string | null, lat: any, lng: any) {
   return { lat: lat ?? null, lng: lng ?? null }
 }
 
-app.post('/api/pools', requireAuth, requireAdmin, async (c) => {
+app.post('/api/pools', requireAuth, requirePro, async (c) => {
+  const user = c.get('user')
   const body = await c.req.json()
   if (!body.client_id || !body.label) return c.json({ error: 'Client et nom de piscine requis' }, 400)
+  if (!(await clientOwnedByPro(c, body.client_id, user.uid))) return c.json({ error: 'Client non autorisé' }, 403)
   const geo = await geocodeIfNeeded(body.address, body.lat, body.lng)
   const r = await c.env.DB.prepare(`
-    INSERT INTO pools (client_id, label, address, lat, lng, pool_type, volume_m3, shape, treatment_type, filtration_type, access_code, access_notes, routine, photos, notes,
+    INSERT INTO pools (client_id, owner_id, label, address, lat, lng, pool_type, volume_m3, shape, treatment_type, filtration_type, access_code, access_notes, routine, routine_client, photos, notes,
       ideal_ph_min, ideal_ph_max, ideal_chlorine_min, ideal_chlorine_max, priority)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
-    body.client_id, body.label, body.address || null, geo.lat, geo.lng,
+    body.client_id, user.uid, body.label, body.address || null, geo.lat, geo.lng,
     body.pool_type || null, body.volume_m3 || null, body.shape || null,
     body.treatment_type || null, body.filtration_type || null,
     body.access_code || null, body.access_notes || null,
-    body.routine || null, body.photos || null, body.notes || null,
+    body.routine || null, body.routine_client || null, body.photos || null, body.notes || null,
     body.ideal_ph_min ?? 7.0, body.ideal_ph_max ?? 7.4,
     body.ideal_chlorine_min ?? 1.0, body.ideal_chlorine_max ?? 2.0,
     body.priority ? 1 : 0
@@ -192,13 +385,14 @@ app.post('/api/pools', requireAuth, requireAdmin, async (c) => {
   return c.json({ id: r.meta.last_row_id, ...geo })
 })
 
-app.put('/api/pools/:id', requireAuth, requireAdmin, async (c) => {
+app.put('/api/pools/:id', requireAuth, requirePro, async (c) => {
+  const user = c.get('user')
   const id = c.req.param('id')
+  if (!(await poolOwnedByPro(c, Number(id), user.uid))) return c.json({ error: 'Action non autorisée' }, 403)
   const body = await c.req.json()
-  // Re-géocode si l'adresse a changé et qu'on ne fournit pas de coords explicites
   const geo = await geocodeIfNeeded(body.address, body.lat, body.lng)
   await c.env.DB.prepare(`
-    UPDATE pools SET label=?, address=?, lat=?, lng=?, pool_type=?, volume_m3=?, shape=?, treatment_type=?, filtration_type=?, access_code=?, access_notes=?, routine=?, photos=?, notes=?,
+    UPDATE pools SET label=?, address=?, lat=?, lng=?, pool_type=?, volume_m3=?, shape=?, treatment_type=?, filtration_type=?, access_code=?, access_notes=?, routine=?, routine_client=?, photos=?, notes=?,
       ideal_ph_min=?, ideal_ph_max=?, ideal_chlorine_min=?, ideal_chlorine_max=?, priority=?, updated_at=CURRENT_TIMESTAMP
     WHERE id=?
   `).bind(
@@ -206,7 +400,7 @@ app.put('/api/pools/:id', requireAuth, requireAdmin, async (c) => {
     body.pool_type || null, body.volume_m3 || null, body.shape || null,
     body.treatment_type || null, body.filtration_type || null,
     body.access_code || null, body.access_notes || null,
-    body.routine || null, body.photos || null, body.notes || null,
+    body.routine || null, body.routine_client || null, body.photos || null, body.notes || null,
     body.ideal_ph_min ?? 7.0, body.ideal_ph_max ?? 7.4,
     body.ideal_chlorine_min ?? 1.0, body.ideal_chlorine_max ?? 2.0,
     body.priority ? 1 : 0, id
@@ -214,26 +408,31 @@ app.put('/api/pools/:id', requireAuth, requireAdmin, async (c) => {
   return c.json({ ok: true, ...geo })
 })
 
-// Historique des passages d'une piscine (avec relevés) - utile pour le graphique
 app.get('/api/pools/:id/history', requireAuth, async (c) => {
+  const user = c.get('user')
+  const proIds = await visibleProIds(c, user)
+  // Vérif périmètre
+  const pool = await c.env.DB.prepare(`SELECT id FROM pools WHERE id = ? AND owner_id IN (${inClause(proIds)})`).bind(c.req.param('id'), ...proIds).first()
+  if (!pool) return c.json({ error: 'Piscine introuvable' }, 404)
   const { results } = await c.env.DB.prepare(`
     SELECT l.*, u.name as done_by_name, u.color as done_by_color
     FROM maintenance_logs l
     JOIN maintenances m ON m.id = l.maintenance_id
     LEFT JOIN users u ON u.id = l.done_by
     WHERE m.pool_id = ?
-    ORDER BY l.done_date DESC, l.created_at DESC
-    LIMIT 100
+    ORDER BY l.done_date DESC, l.created_at DESC LIMIT 100
   `).bind(c.req.param('id')).all()
   return c.json(results)
 })
 
-app.delete('/api/pools/:id', requireAuth, requireAdmin, async (c) => {
-  await c.env.DB.prepare('DELETE FROM pools WHERE id = ?').bind(c.req.param('id')).run()
+app.delete('/api/pools/:id', requireAuth, requirePro, async (c) => {
+  const user = c.get('user')
+  const id = c.req.param('id')
+  if (!(await poolOwnedByPro(c, Number(id), user.uid))) return c.json({ error: 'Action non autorisée' }, 403)
+  await c.env.DB.prepare('DELETE FROM pools WHERE id = ?').bind(id).run()
   return c.json({ ok: true })
 })
 
-// Re-géocoder manuellement une adresse
 app.post('/api/geocode', requireAuth, async (c) => {
   const { address } = await c.req.json()
   const geo = await geocodeAddress(address)
@@ -246,7 +445,7 @@ app.post('/api/geocode', requireAuth, async (c) => {
 // ============================================================
 app.get('/api/maintenances', requireAuth, async (c) => {
   const user = c.get('user')
-  // Worker ne voit que ses entretiens assignés ; admin voit tout
+  const proIds = await visibleProIds(c, user)
   let query = `
     SELECT m.*, p.label as pool_label, p.address as pool_address, p.lat, p.lng,
            p.access_code, p.access_notes, p.treatment_type, p.routine,
@@ -256,22 +455,24 @@ app.get('/api/maintenances', requireAuth, async (c) => {
     JOIN pools p ON p.id = m.pool_id
     JOIN clients cl ON cl.id = p.client_id
     LEFT JOIN users u ON u.id = m.assigned_to
-    WHERE m.active = 1
+    WHERE m.active = 1 AND p.owner_id IN (${inClause(proIds)})
   `
-  const binds: any[] = []
-  if (user.role !== 'admin') {
+  const binds: any[] = [...proIds]
+  // Un intervenant pur (non pro) ne voit que ce qui lui est assigné
+  if (user.role === 'worker') {
     query += ' AND m.assigned_to = ?'
     binds.push(user.uid)
   }
   query += ' ORDER BY m.weekday, m.time'
-  const stmt = binds.length ? c.env.DB.prepare(query).bind(...binds) : c.env.DB.prepare(query)
-  const { results } = await stmt.all()
+  const { results } = await c.env.DB.prepare(query).bind(...binds).all()
   return c.json(results)
 })
 
-app.post('/api/maintenances', requireAuth, requireAdmin, async (c) => {
+app.post('/api/maintenances', requireAuth, requirePro, async (c) => {
+  const user = c.get('user')
   const b = await c.req.json()
   if (!b.pool_id) return c.json({ error: 'Piscine requise' }, 400)
+  if (!(await poolOwnedByPro(c, Number(b.pool_id), user.uid))) return c.json({ error: 'Piscine non autorisée' }, 403)
   const kind = b.kind === 'oneshot' ? 'oneshot' : 'recurring'
   const r = await c.env.DB.prepare(`
     INSERT INTO maintenances (pool_id, assigned_to, kind, weekday, interval_weeks, start_date, end_date, oneshot_date, time, duration_min, notes)
@@ -288,9 +489,11 @@ app.post('/api/maintenances', requireAuth, requireAdmin, async (c) => {
   return c.json({ id: r.meta.last_row_id })
 })
 
-app.put('/api/maintenances/:id', requireAuth, requireAdmin, async (c) => {
+app.put('/api/maintenances/:id', requireAuth, requirePro, async (c) => {
+  const user = c.get('user')
   const id = c.req.param('id')
   const b = await c.req.json()
+  if (!(await poolOwnedByPro(c, Number(b.pool_id), user.uid))) return c.json({ error: 'Piscine non autorisée' }, 403)
   const kind = b.kind === 'oneshot' ? 'oneshot' : 'recurring'
   await c.env.DB.prepare(`
     UPDATE maintenances SET pool_id=?, assigned_to=?, kind=?, weekday=?, interval_weeks=?, start_date=?, end_date=?, oneshot_date=?, time=?, duration_min=?, notes=?, updated_at=CURRENT_TIMESTAMP
@@ -307,7 +510,7 @@ app.put('/api/maintenances/:id', requireAuth, requireAdmin, async (c) => {
   return c.json({ ok: true })
 })
 
-app.delete('/api/maintenances/:id', requireAuth, requireAdmin, async (c) => {
+app.delete('/api/maintenances/:id', requireAuth, requirePro, async (c) => {
   await c.env.DB.prepare('DELETE FROM maintenances WHERE id = ?').bind(c.req.param('id')).run()
   return c.json({ ok: true })
 })
@@ -316,10 +519,11 @@ app.delete('/api/maintenances/:id', requireAuth, requireAdmin, async (c) => {
 app.post('/api/maintenances/:id/log', requireAuth, async (c) => {
   const id = c.req.param('id')
   const user = c.get('user')
+  if (user.role === 'client') return c.json({ error: 'Action non autorisée' }, 403)
   const b = await c.req.json()
   const done_date = b.done_date || new Date().toISOString().slice(0, 10)
   const num = (v: any) => (v === '' || v == null || isNaN(parseFloat(v))) ? null : parseFloat(v)
-  await c.env.DB.prepare(`
+  const r = await c.env.DB.prepare(`
     INSERT INTO maintenance_logs (maintenance_id, done_by, done_date, status, notes, ph, chlorine, salt, water_temp, stabilizer, tac, products_added, duration_min)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
@@ -327,53 +531,55 @@ app.post('/api/maintenances/:id/log', requireAuth, async (c) => {
     num(b.ph), num(b.chlorine), num(b.salt), num(b.water_temp), num(b.stabilizer), num(b.tac),
     b.products_added || null, b.duration_min ? parseInt(b.duration_min) : null
   ).run()
-  return c.json({ ok: true })
+  return c.json({ ok: true, log_id: r.meta.last_row_id })
 })
 
-// Supprimer un log (corriger une erreur de saisie)
 app.delete('/api/logs/:id', requireAuth, async (c) => {
+  const user = c.get('user')
+  if (user.role === 'client') return c.json({ error: 'Action non autorisée' }, 403)
   await c.env.DB.prepare('DELETE FROM maintenance_logs WHERE id = ?').bind(c.req.param('id')).run()
   return c.json({ ok: true })
 })
 
-// Logs sur une plage de dates (pour afficher l'état "fait" sur l'agenda)
 app.get('/api/logs', requireAuth, async (c) => {
+  const user = c.get('user')
+  const proIds = await visibleProIds(c, user)
   const from = c.req.query('from')
   const to = c.req.query('to')
   let q = `SELECT l.id, l.maintenance_id, l.done_date, l.status, l.done_by, u.name as done_by_name
-           FROM maintenance_logs l LEFT JOIN users u ON u.id = l.done_by WHERE 1=1`
-  const binds: any[] = []
+           FROM maintenance_logs l
+           JOIN maintenances m ON m.id = l.maintenance_id
+           JOIN pools p ON p.id = m.pool_id
+           LEFT JOIN users u ON u.id = l.done_by
+           WHERE p.owner_id IN (${inClause(proIds)})`
+  const binds: any[] = [...proIds]
+  if (user.role === 'worker') { q += ' AND m.assigned_to = ?'; binds.push(user.uid) }
   if (from) { q += ' AND l.done_date >= ?'; binds.push(from) }
   if (to) { q += ' AND l.done_date <= ?'; binds.push(to) }
   q += ' ORDER BY l.done_date DESC'
-  const stmt = binds.length ? c.env.DB.prepare(q).bind(...binds) : c.env.DB.prepare(q)
-  const { results } = await stmt.all()
+  const { results } = await c.env.DB.prepare(q).bind(...binds).all()
   return c.json(results)
 })
 
-// Dashboard : stats du jour et de la semaine
 app.get('/api/dashboard', requireAuth, async (c) => {
   const user = c.get('user')
+  const proIds = await visibleProIds(c, user)
   const today = new Date().toISOString().slice(0, 10)
-  // Compteurs basiques (les occurrences réelles sont calculées côté front, mais on remonte les totaux utiles)
-  const poolsCount = await c.env.DB.prepare('SELECT COUNT(*) as n FROM pools').first<any>()
-  const clientsCount = await c.env.DB.prepare('SELECT COUNT(*) as n FROM clients').first<any>()
+  const poolsCount = await c.env.DB.prepare(`SELECT COUNT(*) as n FROM pools WHERE owner_id IN (${inClause(proIds)})`).bind(...proIds).first<any>()
+  const clientsCount = await c.env.DB.prepare(`SELECT COUNT(*) as n FROM clients WHERE owner_id IN (${inClause(proIds)})`).bind(...proIds).first<any>()
   let maintCount
-  if (user.role === 'admin') {
-    maintCount = await c.env.DB.prepare('SELECT COUNT(*) as n FROM maintenances WHERE active=1').first<any>()
+  if (user.role === 'worker') {
+    maintCount = await c.env.DB.prepare(`SELECT COUNT(*) as n FROM maintenances m JOIN pools p ON p.id=m.pool_id WHERE m.active=1 AND m.assigned_to=? AND p.owner_id IN (${inClause(proIds)})`).bind(user.uid, ...proIds).first<any>()
   } else {
-    maintCount = await c.env.DB.prepare('SELECT COUNT(*) as n FROM maintenances WHERE active=1 AND assigned_to=?').bind(user.uid).first<any>()
+    maintCount = await c.env.DB.prepare(`SELECT COUNT(*) as n FROM maintenances m JOIN pools p ON p.id=m.pool_id WHERE m.active=1 AND p.owner_id IN (${inClause(proIds)})`).bind(...proIds).first<any>()
   }
-  const doneToday = await c.env.DB.prepare('SELECT COUNT(*) as n FROM maintenance_logs WHERE done_date = ?').bind(today).first<any>()
-  return c.json({
-    pools: poolsCount?.n || 0,
-    clients: clientsCount?.n || 0,
-    maintenances: maintCount?.n || 0,
-    done_today: doneToday?.n || 0
-  })
+  const doneToday = await c.env.DB.prepare(`
+    SELECT COUNT(*) as n FROM maintenance_logs l JOIN maintenances m ON m.id=l.maintenance_id JOIN pools p ON p.id=m.pool_id
+    WHERE l.done_date = ? AND p.owner_id IN (${inClause(proIds)})
+  `).bind(today, ...proIds).first<any>()
+  return c.json({ pools: poolsCount?.n || 0, clients: clientsCount?.n || 0, maintenances: maintCount?.n || 0, done_today: doneToday?.n || 0 })
 })
 
-// Historique des passages
 app.get('/api/maintenances/:id/logs', requireAuth, async (c) => {
   const { results } = await c.env.DB.prepare(`
     SELECT l.*, u.name as done_by_name FROM maintenance_logs l
@@ -383,15 +589,123 @@ app.get('/api/maintenances/:id/logs', requireAuth, async (c) => {
   return c.json(results)
 })
 
-// Favicon (emoji goutte d'eau en SVG inline pour éviter le 404/500)
+// ============================================================
+// PHOTOS (R2)
+// ============================================================
+// Upload d'une photo (multipart) liée à une piscine et/ou un passage
+app.post('/api/photos', requireAuth, async (c) => {
+  const user = c.get('user')
+  if (user.role === 'client') return c.json({ error: 'Action non autorisée' }, 403)
+  const form = await c.req.formData()
+  const file = form.get('file') as File | null
+  const poolId = form.get('pool_id') ? Number(form.get('pool_id')) : null
+  const logId = form.get('log_id') ? Number(form.get('log_id')) : null
+  const caption = (form.get('caption') as string) || null
+  if (!file) return c.json({ error: 'Fichier manquant' }, 400)
+  if (file.size > 5 * 1024 * 1024) return c.json({ error: 'Photo trop lourde (max 5 Mo)' }, 400)
+
+  const ext = (file.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg')
+  const key = `photos/${user.uid}/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`
+  await c.env.PHOTOS.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } })
+  const r = await c.env.DB.prepare('INSERT INTO photos (r2_key, pool_id, log_id, uploaded_by, caption, content_type) VALUES (?, ?, ?, ?, ?, ?)')
+    .bind(key, poolId, logId, user.uid, caption, file.type).run()
+  return c.json({ id: r.meta.last_row_id, key, url: `/api/photos/${r.meta.last_row_id}` })
+})
+
+// Servir une photo depuis R2 (vérifie le périmètre)
+app.get('/api/photos/:id', requireAuth, async (c) => {
+  const user = c.get('user')
+  const meta = await c.env.DB.prepare('SELECT * FROM photos WHERE id = ?').bind(c.req.param('id')).first<any>()
+  if (!meta) return c.notFound()
+  // Vérif d'accès : pro/worker via owner_id de la piscine, client via client_user_id
+  if (meta.pool_id) {
+    const pool = await c.env.DB.prepare('SELECT owner_id, client_id FROM pools WHERE id = ?').bind(meta.pool_id).first<any>()
+    if (pool) {
+      const proIds = await visibleProIds(c, user)
+      const allowed = proIds.includes(pool.owner_id)
+      let clientAllowed = false
+      if (user.role === 'client') {
+        const cl = await c.env.DB.prepare('SELECT client_user_id FROM clients WHERE id = ?').bind(pool.client_id).first<any>()
+        clientAllowed = !!cl && cl.client_user_id === user.uid
+      }
+      if (!allowed && !clientAllowed) return c.json({ error: 'Non autorisé' }, 403)
+    }
+  }
+  const obj = await c.env.PHOTOS.get(meta.r2_key)
+  if (!obj) return c.notFound()
+  return new Response(obj.body, { headers: { 'Content-Type': meta.content_type || 'image/jpeg', 'Cache-Control': 'private, max-age=3600' } })
+})
+
+// Lister les photos d'une piscine
+app.get('/api/pools/:id/photos', requireAuth, async (c) => {
+  const { results } = await c.env.DB.prepare(`
+    SELECT id, caption, log_id, created_at FROM photos WHERE pool_id = ? ORDER BY created_at DESC
+  `).bind(c.req.param('id')).all()
+  return c.json((results as any[]).map(p => ({ ...p, url: `/api/photos/${p.id}` })))
+})
+
+app.delete('/api/photos/:id', requireAuth, async (c) => {
+  const user = c.get('user')
+  if (user.role === 'client') return c.json({ error: 'Action non autorisée' }, 403)
+  const meta = await c.env.DB.prepare('SELECT r2_key FROM photos WHERE id = ?').bind(c.req.param('id')).first<any>()
+  if (meta) {
+    await c.env.PHOTOS.delete(meta.r2_key)
+    await c.env.DB.prepare('DELETE FROM photos WHERE id = ?').bind(c.req.param('id')).run()
+  }
+  return c.json({ ok: true })
+})
+
+// ============================================================
+// ESPACE CLIENT (lecture seule)
+// ============================================================
+// Les piscines du client connecté
+app.get('/api/my/pools', requireAuth, async (c) => {
+  const user = c.get('user')
+  if (user.role !== 'client') return c.json({ error: 'Réservé aux clients' }, 403)
+  const { results } = await c.env.DB.prepare(`
+    SELECT p.id, p.label, p.address, p.pool_type, p.volume_m3, p.shape, p.treatment_type,
+           p.routine_client, p.ideal_ph_min, p.ideal_ph_max, p.ideal_chlorine_min, p.ideal_chlorine_max,
+           cl.name as client_name, owner.name as pro_name, owner.company as pro_company, owner.phone as pro_phone
+    FROM clients cl
+    JOIN pools p ON p.client_id = cl.id
+    LEFT JOIN users owner ON owner.id = cl.owner_id
+    WHERE cl.client_user_id = ?
+    ORDER BY p.label
+  `).bind(user.uid).all()
+  return c.json(results)
+})
+
+// Historique d'une piscine pour le client (vérifie qu'elle lui appartient)
+app.get('/api/my/pools/:id/history', requireAuth, async (c) => {
+  const user = c.get('user')
+  if (user.role !== 'client') return c.json({ error: 'Réservé aux clients' }, 403)
+  const poolId = c.req.param('id')
+  const owns = await c.env.DB.prepare(`
+    SELECT p.id FROM pools p JOIN clients cl ON cl.id = p.client_id
+    WHERE p.id = ? AND cl.client_user_id = ?
+  `).bind(poolId, user.uid).first()
+  if (!owns) return c.json({ error: 'Piscine introuvable' }, 404)
+  const { results } = await c.env.DB.prepare(`
+    SELECT l.id, l.done_date, l.status, l.notes, l.ph, l.chlorine, l.salt, l.water_temp, l.stabilizer, l.tac, l.products_added, l.duration_min,
+           u.name as done_by_name
+    FROM maintenance_logs l
+    JOIN maintenances m ON m.id = l.maintenance_id
+    LEFT JOIN users u ON u.id = l.done_by
+    WHERE m.pool_id = ? ORDER BY l.done_date DESC, l.created_at DESC LIMIT 100
+  `).bind(poolId).all()
+  // Photos par log
+  const { results: photos } = await c.env.DB.prepare(`
+    SELECT id, log_id, caption FROM photos WHERE pool_id = ? ORDER BY created_at DESC
+  `).bind(poolId).all()
+  return c.json({ logs: results, photos: (photos as any[]).map(p => ({ ...p, url: `/api/photos/${p.id}` })) })
+})
+
+// Favicon
 app.get('/favicon.ico', (c) => {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">💧</text></svg>`
   return c.body(svg, 200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' })
 })
 
-// ============================================================
-// PAGE HTML PRINCIPALE
-// ============================================================
 app.get('/', (c) => c.html(renderApp()))
 app.get('/app', (c) => c.html(renderApp()))
 

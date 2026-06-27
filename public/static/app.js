@@ -50,7 +50,11 @@ function toast(msg, type = 'success') {
   setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateX(30px)'; t.style.transition = 'all .3s'; setTimeout(() => t.remove(), 300) }, 3000)
 }
 
-function isAdmin() { return state.user && state.user.role === 'admin' }
+function isPro() { return state.user && state.user.role === 'pro' }
+function isWorker() { return state.user && state.user.role === 'worker' }
+function isClient() { return state.user && state.user.role === 'client' }
+// Compat : "admin" historique = pisciniste
+function isAdmin() { return isPro() }
 
 // Ouvre l'app de navigation GPS (Google/Apple Maps selon l'appareil)
 function openGPS(lat, lng, label) {
@@ -104,7 +108,8 @@ async function checkAuth() {
   } catch { return false }
 }
 
-function renderLogin() {
+function renderLogin(mode = 'login') {
+  const isSignup = mode === 'signup'
   el('app').innerHTML = `
     <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-cyan-600 to-sky-800 p-4">
       <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 fade-in">
@@ -113,45 +118,98 @@ function renderLogin() {
             <i class="fas fa-water text-white text-4xl"></i>
           </div>
           <h1 class="text-3xl font-extrabold text-slate-800">Piscine Max</h1>
-          <p class="text-slate-500 mt-1">Gestion d'entretien de piscines</p>
+          <p class="text-slate-500 mt-1">${isSignup ? 'Créez votre compte pisciniste' : "Gestion d'entretien de piscines"}</p>
         </div>
+
+        ${isSignup ? `
+        <form id="signup-form" class="space-y-3">
+          <div>
+            <label class="block text-sm font-semibold text-slate-600 mb-1">Votre nom *</label>
+            <input id="su-name" required class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-cyan-500 outline-none" placeholder="Franck Martin">
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-slate-600 mb-1">Nom de votre société</label>
+            <input id="su-company" class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-cyan-500 outline-none" placeholder="AquaService Var">
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-sm font-semibold text-slate-600 mb-1">Email *</label>
+              <input type="email" id="su-email" required class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-cyan-500 outline-none">
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-slate-600 mb-1">Téléphone</label>
+              <input id="su-phone" class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-cyan-500 outline-none">
+            </div>
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-slate-600 mb-1">Mot de passe *</label>
+            <input type="password" id="su-password" required class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-cyan-500 outline-none" placeholder="••••••••">
+          </div>
+          <button type="submit" class="w-full bg-gradient-to-r from-cyan-600 to-sky-600 hover:from-cyan-700 hover:to-sky-700 text-white font-bold py-3 rounded-xl shadow-lg transition">
+            <i class="fas fa-user-plus mr-2"></i>Créer mon compte
+          </button>
+          <p id="login-error" class="text-red-600 text-sm text-center hidden"></p>
+        </form>
+        <div class="mt-6 pt-5 border-t border-slate-100 text-sm text-slate-500 text-center">
+          Déjà un compte ? <button onclick="renderLogin('login')" class="text-cyan-600 font-semibold">Se connecter</button>
+        </div>
+        ` : `
         <form id="login-form" class="space-y-4">
           <div>
             <label class="block text-sm font-semibold text-slate-600 mb-1">Email</label>
-            <input type="email" id="login-email" required class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none" placeholder="franck@piscine-max.fr">
+            <input type="email" id="login-email" autocomplete="username" required class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none" placeholder="vous@exemple.fr">
           </div>
           <div>
             <label class="block text-sm font-semibold text-slate-600 mb-1">Mot de passe</label>
-            <input type="password" id="login-password" required class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none" placeholder="••••••••">
+            <input type="password" id="login-password" autocomplete="current-password" required class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none" placeholder="••••••••">
           </div>
           <button type="submit" class="w-full bg-gradient-to-r from-cyan-600 to-sky-600 hover:from-cyan-700 hover:to-sky-700 text-white font-bold py-3 rounded-xl shadow-lg transition">
             <i class="fas fa-right-to-bracket mr-2"></i>Se connecter
           </button>
           <p id="login-error" class="text-red-600 text-sm text-center hidden"></p>
         </form>
-        <div class="mt-6 pt-5 border-t border-slate-100 text-xs text-slate-400 text-center">
-          Comptes de démo · mot de passe : <b>piscine</b><br>
-          franck@piscine-max.fr · romain@piscine-max.fr
+        <div class="mt-6 pt-5 border-t border-slate-100 text-sm text-slate-500 text-center">
+          Vous êtes pisciniste ? <button onclick="renderLogin('signup')" class="text-cyan-600 font-semibold">Créer un compte</button>
         </div>
+        <div class="mt-3 text-xs text-slate-400 text-center">
+          Démo · mdp <b>piscine</b> · franck@piscine-max.fr (pisciniste)<br>romain@piscine-max.fr (intervenant) · client1@piscine-max.fr (client)
+        </div>
+        `}
       </div>
     </div>`
 
-  el('login-form').addEventListener('submit', async (e) => {
-    e.preventDefault()
-    const email = el('login-email').value
-    const password = el('login-password').value
-    const errEl = el('login-error')
-    errEl.classList.add('hidden')
-    try {
-      const { data } = await API.post('/login', { email, password })
-      state.user = data
-      await boot()
-    } catch (err) {
-      errEl.textContent = err.response?.data?.error || 'Erreur de connexion'
-      errEl.classList.remove('hidden')
-    }
-  })
+  if (isSignup) {
+    el('signup-form').addEventListener('submit', async (e) => {
+      e.preventDefault()
+      const errEl = el('login-error'); errEl.classList.add('hidden')
+      try {
+        const { data } = await API.post('/signup', {
+          name: el('su-name').value, company: el('su-company').value,
+          email: el('su-email').value, phone: el('su-phone').value, password: el('su-password').value
+        })
+        state.user = data
+        await boot()
+      } catch (err) {
+        errEl.textContent = err.response?.data?.error || 'Erreur lors de la création'
+        errEl.classList.remove('hidden')
+      }
+    })
+  } else {
+    el('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault()
+      const errEl = el('login-error'); errEl.classList.add('hidden')
+      try {
+        const { data } = await API.post('/login', { email: el('login-email').value, password: el('login-password').value })
+        state.user = data
+        await boot()
+      } catch (err) {
+        errEl.textContent = err.response?.data?.error || 'Erreur de connexion'
+        errEl.classList.remove('hidden')
+      }
+    })
+  }
 }
+window.renderLogin = renderLogin
 
 async function logout() {
   await API.post('/logout')
@@ -164,15 +222,20 @@ window.logout = logout
 // LAYOUT PRINCIPAL
 // ============================================================
 function renderShell() {
+  // Le client a sa propre interface (espace lecture)
+  if (isClient()) return renderClientShell()
+
   const navItems = [
     { id: 'home', icon: 'fa-house', label: 'Accueil' },
     { id: 'agenda', icon: 'fa-calendar-days', label: 'Agenda' },
   ]
-  if (isAdmin()) {
+  if (isPro()) {
     navItems.push({ id: 'clients', icon: 'fa-users', label: 'Clients' })
     navItems.push({ id: 'pools', icon: 'fa-water', label: 'Piscines' })
+    navItems.push({ id: 'team', icon: 'fa-user-group', label: 'Équipe' })
   } else {
     navItems.push({ id: 'pools', icon: 'fa-water', label: 'Mes piscines' })
+    navItems.push({ id: 'team', icon: 'fa-user-group', label: 'Mes pros' })
   }
 
   el('app').innerHTML = `
@@ -190,7 +253,7 @@ function renderShell() {
             <span class="hidden sm:flex items-center gap-2 text-sm">
               <span class="w-2.5 h-2.5 rounded-full" style="background:${state.user.color || '#0891b2'}"></span>
               <b>${esc(state.user.name)}</b>
-              <span class="text-xs px-2 py-0.5 rounded-full ${isAdmin() ? 'bg-cyan-100 text-cyan-700' : 'bg-emerald-100 text-emerald-700'}">${isAdmin() ? 'Pisciniste' : 'Intervenant'}</span>
+              <span class="text-xs px-2 py-0.5 rounded-full ${isPro() ? 'bg-cyan-100 text-cyan-700' : 'bg-emerald-100 text-emerald-700'}">${isPro() ? 'Pisciniste' : 'Intervenant'}</span>
             </span>
             <button onclick="openPasswordForm()" class="text-slate-400 hover:text-cyan-600 px-2 py-1" title="Changer mon mot de passe"><i class="fas fa-key"></i></button>
             <button onclick="logout()" class="text-slate-400 hover:text-red-500 px-2 py-1" title="Déconnexion"><i class="fas fa-right-from-bracket"></i></button>
@@ -231,24 +294,31 @@ window.navigate = navigate
 function renderView() {
   const c = el('main-content')
   if (!c) return
+  if (isClient()) { renderClientView(c); return }
   if (state.view === 'home') renderHome(c)
   else if (state.view === 'agenda') renderAgenda(c)
   else if (state.view === 'clients') renderClients(c)
   else if (state.view === 'pools') renderPools(c)
   else if (state.view === 'pool-detail') renderPoolDetail(c)
+  else if (state.view === 'team') renderTeam(c)
 }
 
 // ============================================================
 // BOOT
 // ============================================================
 async function loadData() {
+  if (isClient()) {
+    const { data } = await API.get('/my/pools')
+    state.pools = data
+    return
+  }
   const reqs = [API.get('/maintenances'), API.get('/pools'), API.get('/users')]
-  if (isAdmin()) reqs.push(API.get('/clients'))
+  if (isPro()) reqs.push(API.get('/clients'))
   const res = await Promise.all(reqs)
   state.maintenances = res[0].data
   state.pools = res[1].data
   state.users = res[2].data
-  if (isAdmin()) state.clients = res[3].data
+  if (isPro()) state.clients = res[3].data
   await loadLogs()
 }
 
@@ -265,7 +335,7 @@ async function loadLogs() {
 window.loadLogs = loadLogs
 
 async function boot() {
-  state.view = 'home'
+  state.view = isClient() ? 'client-home' : 'home'
   renderShell()
   el('main-content').innerHTML = '<div class="text-center py-20 text-slate-400"><i class="fas fa-spinner fa-spin text-3xl"></i><p class="mt-3">Chargement...</p></div>'
   try {

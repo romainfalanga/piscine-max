@@ -129,7 +129,18 @@ function renderPoolDetail(c) {
             </label>`).join('')}</div>` : '<p class="text-sm text-slate-400">Aucune routine définie</p>'}
         </div>
 
+        ${p.routine_client ? `<div class="bg-amber-50 border border-amber-200 rounded-2xl p-5"><h3 class="font-bold text-amber-800 mb-2"><i class="fas fa-lightbulb mr-2"></i>Conseils transmis au client</h3><p class="text-sm text-amber-900 whitespace-pre-line">${esc(p.routine_client)}</p></div>` : ''}
+
         ${p.notes ? `<div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5"><h3 class="font-bold text-slate-700 mb-2"><i class="fas fa-note-sticky mr-2 text-cyan-500"></i>Notes</h3><p class="text-sm text-slate-600 whitespace-pre-line">${esc(p.notes)}</p></div>` : ''}
+
+        <!-- Photos -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-bold text-slate-700"><i class="fas fa-camera mr-2 text-cyan-500"></i>Photos</h3>
+            <button onclick="openPhotoUpload(${p.id})" class="text-cyan-600 text-sm font-semibold"><i class="fas fa-plus mr-1"></i>Ajouter</button>
+          </div>
+          <div id="pool-photos" class="grid grid-cols-3 sm:grid-cols-4 gap-2"><div class="col-span-full text-center text-sm text-slate-400 py-3"><i class="fas fa-spinner fa-spin"></i></div></div>
+        </div>
       </div>
 
       <!-- Colonne droite -->
@@ -163,7 +174,62 @@ function renderPoolDetail(c) {
       L.marker([p.lat, p.lng]).addTo(m)
     }, 100)
   }
+  loadPoolPhotos(p.id)
 }
+
+async function loadPoolPhotos(poolId) {
+  const box = el('pool-photos')
+  if (!box) return
+  try {
+    const { data } = await API.get(`/pools/${poolId}/photos`)
+    if (!data.length) { box.innerHTML = '<div class="col-span-full text-center text-sm text-slate-400 py-3">Aucune photo</div>'; return }
+    box.innerHTML = data.map(ph => `
+      <div class="relative group aspect-square">
+        <img src="${ph.url}" class="w-full h-full object-cover rounded-lg cursor-pointer" onclick="openPhotoLightbox('${ph.url}')">
+        <button onclick="deletePhoto(${ph.id}, ${poolId})" class="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 transition text-xs"><i class="fas fa-times"></i></button>
+      </div>`).join('')
+  } catch { box.innerHTML = '<div class="col-span-full text-center text-sm text-slate-400 py-3">Erreur de chargement</div>' }
+}
+window.loadPoolPhotos = loadPoolPhotos
+
+function openPhotoUpload(poolId, logId = null) {
+  openModal('Ajouter une photo', `
+    <form id="photo-form" class="space-y-4">
+      <div>
+        <label class="block text-sm font-semibold text-slate-600 mb-1">Photo (max 5 Mo)</label>
+        <input id="ph-file" type="file" accept="image/*" required class="w-full text-sm border border-slate-300 rounded-xl p-2">
+      </div>
+      <div>
+        <label class="block text-sm font-semibold text-slate-600 mb-1">Légende (optionnel)</label>
+        <input id="ph-caption" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm" placeholder="Eau cristalline après traitement">
+      </div>
+      <button type="submit" id="ph-submit" class="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2.5 rounded-xl">Envoyer</button>
+    </form>`)
+
+  el('photo-form').addEventListener('submit', async (e) => {
+    e.preventDefault()
+    const file = el('ph-file').files[0]
+    if (!file) return
+    const btn = el('ph-submit'); btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Envoi...'
+    const fd = new FormData()
+    fd.append('file', file); fd.append('pool_id', poolId)
+    if (logId) fd.append('log_id', logId)
+    if (el('ph-caption').value) fd.append('caption', el('ph-caption').value)
+    try {
+      await API.post('/photos', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      closeModal(); toast('Photo ajoutée')
+      if (state.view === 'pool-detail') loadPoolPhotos(poolId)
+    } catch (err) { btn.disabled = false; btn.innerHTML = 'Réessayer'; toast(err.response?.data?.error || 'Erreur', 'error') }
+  })
+}
+window.openPhotoUpload = openPhotoUpload
+
+async function deletePhoto(id, poolId) {
+  if (!confirm('Supprimer cette photo ?')) return
+  try { await API.delete(`/photos/${id}`); loadPoolPhotos(poolId); toast('Photo supprimée') }
+  catch { toast('Erreur', 'error') }
+}
+window.deletePhoto = deletePhoto
 
 // ---------- Formulaire piscine ----------
 function selectOptions(options, selected) {
@@ -206,6 +272,10 @@ function openPoolForm(pool = null, presetClientId = null) {
         <label class="block text-sm font-semibold text-slate-600 mb-1">Routine d'entretien <span class="text-xs text-slate-400 font-normal">(une étape par ligne)</span></label>
         <textarea id="pf-routine" rows="5" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm font-mono" placeholder="Vérifier le niveau d'eau&#10;Nettoyer les skimmers&#10;Tester pH et chlore">${esc(routine.join('\n'))}</textarea>
       </div>
+      <div>
+        <label class="block text-sm font-semibold text-slate-600 mb-1"><i class="fas fa-lightbulb text-amber-400 mr-1"></i>Conseils pour le client <span class="text-xs text-slate-400 font-normal">(visible dans son espace)</span></label>
+        <textarea id="pf-routine-client" rows="3" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm" placeholder="Ce que le client doit faire entre deux passages : maintenir le niveau d'eau, passer le robot 1×/semaine, ne pas baigner après ajout de produit...">${esc(pool?.routine_client || '')}</textarea>
+      </div>
       <div class="bg-sky-50 rounded-xl p-3">
         <div class="text-xs font-bold text-sky-800 mb-2"><i class="fas fa-sliders mr-1"></i>Valeurs idéales <span class="font-normal text-sky-600">(repères pour les relevés)</span></div>
         <div class="grid grid-cols-4 gap-2">
@@ -239,7 +309,7 @@ function openPoolForm(pool = null, presetClientId = null) {
       shape: el('pf-shape').value, treatment_type: el('pf-treatment').value,
       filtration_type: el('pf-filtration').value, access_code: el('pf-code').value,
       access_notes: el('pf-access-notes').value,
-      routine: JSON.stringify(routineArr), notes: el('pf-notes').value,
+      routine: JSON.stringify(routineArr), routine_client: el('pf-routine-client').value, notes: el('pf-notes').value,
       ideal_ph_min: parseFloat(el('pf-phmin').value) || 7.0,
       ideal_ph_max: parseFloat(el('pf-phmax').value) || 7.4,
       ideal_chlorine_min: parseFloat(el('pf-clmin').value) || 1.0,

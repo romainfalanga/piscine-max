@@ -10,5 +10,11 @@
       "database_name": "piscine-max-production",
       "database_id": "d5b477c2-1899-481d-ab38-21b95ded5e10"
     }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "PHOTOS",
+      "bucket_name": "piscine-max-photos"
+    }
   ]
 }
