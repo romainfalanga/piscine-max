@@ -34,7 +34,7 @@ function renderClientHome(c) {
   const pro = pools[0]
   c.innerHTML = `
     <div class="mb-5">
-      <h2 class="text-2xl font-extrabold text-slate-800">Bonjour ${esc(state.user.name)} 👋</h2>
+      <h2 class="text-xl sm:text-2xl font-extrabold text-slate-800">Bonjour ${esc(state.user.name)} 👋</h2>
       <p class="text-slate-400">Suivez l'entretien de ${pools.length > 1 ? 'vos piscines' : 'votre piscine'}</p>
     </div>
 
@@ -99,7 +99,7 @@ function renderClientPool(c, pool) {
     <button onclick="backToClientHome()" class="text-cyan-600 font-semibold mb-4 flex items-center gap-1"><i class="fas fa-arrow-left"></i>Mes piscines</button>
 
     <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 mb-4">
-      <h2 class="text-2xl font-extrabold text-slate-800">${esc(pool.label)}</h2>
+      <h2 class="text-xl sm:text-2xl font-extrabold text-slate-800">${esc(pool.label)}</h2>
       <div class="text-sm text-slate-400 mt-1">${pool.volume_m3 ? pool.volume_m3 + ' m³ · ' : ''}${esc(pool.pool_type || '')} ${esc(pool.shape || '')} · ${esc(pool.treatment_type || '')}</div>
       ${last ? `
         <div class="mt-4 flex items-center gap-2 text-sm bg-emerald-50 text-emerald-700 rounded-xl px-3 py-2">

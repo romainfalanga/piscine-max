@@ -75,7 +75,7 @@ function parseRoutine(r) { try { return JSON.parse(r || '[]') } catch { return [
 
 function renderPoolDetail(c) {
   const p = state.currentPool
-  if (!p) { state.view = 'pools'; return renderView() }
+  if (!p) { state.view = 'clients'; return renderView() }
   const routine = parseRoutine(p.routine)
   const infoRow = (label, val, icon) => val ? `
     <div class="flex items-center gap-3 py-2.5 border-b border-slate-100 last:border-0">
@@ -84,18 +84,20 @@ function renderPoolDetail(c) {
       <span class="text-sm font-semibold text-slate-700">${esc(val)}</span>
     </div>` : ''
 
+  // Retour : vers la fiche client si on connaît le client de la piscine, sinon liste clients
+  const backToClient = p.client_id ? `viewClient(${p.client_id})` : `navigate('clients')`
   c.innerHTML = `
-    <button onclick="navigate('pools')" class="text-slate-400 hover:text-slate-600 mb-3 text-sm"><i class="fas fa-arrow-left mr-1"></i>Retour</button>
+    <button onclick="${backToClient}" class="text-slate-400 hover:text-slate-600 mb-3 text-sm"><i class="fas fa-arrow-left mr-1"></i>Retour ${p.client_name ? 'à ' + esc(p.client_name) : ''}</button>
     <div class="grid lg:grid-cols-3 gap-5">
       <div class="lg:col-span-2 space-y-5">
         <!-- En-tête -->
-        <div class="bg-gradient-to-br from-cyan-600 to-sky-700 rounded-2xl p-6 text-white shadow-lg">
-          <div class="flex items-center justify-between">
-            <div>
-              <div class="text-cyan-100 text-sm">${esc(p.client_name)}</div>
-              <h2 class="text-2xl font-extrabold">${esc(p.label)}</h2>
+        <div class="bg-gradient-to-br from-cyan-600 to-sky-700 rounded-2xl p-5 sm:p-6 text-white shadow-lg">
+          <div class="flex items-center justify-between gap-3">
+            <div class="min-w-0">
+              <div class="text-cyan-100 text-sm truncate">${esc(p.client_name)}</div>
+              <h2 class="text-xl sm:text-2xl font-extrabold truncate">${esc(p.label)}</h2>
             </div>
-            <i class="fas fa-water text-4xl text-cyan-200/60"></i>
+            <i class="fas fa-water text-3xl sm:text-4xl text-cyan-200/60 shrink-0"></i>
           </div>
           ${p.address ? `<a href="https://www.openstreetmap.org/?mlat=${p.lat}&mlon=${p.lng}#map=17/${p.lat}/${p.lng}" target="_blank" class="inline-flex items-center gap-1.5 mt-3 text-sm bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg"><i class="fas fa-location-dot"></i>${esc(p.address)}</a>` : ''}
           ${p.winterized ? '<div class="mt-3 inline-flex items-center gap-1.5 text-sm bg-blue-900/40 border border-white/30 px-3 py-1.5 rounded-lg"><i class="fas fa-snowflake"></i>Piscine hivernée — passages suspendus</div>' : ''}
@@ -403,7 +405,7 @@ window.openPoolForm = openPoolForm
 
 async function deletePool(id) {
   if (!confirm('Supprimer cette piscine et ses entretiens ?')) return
-  try { await API.delete(`/pools/${id}`); closeModal(); await loadData(); navigate('pools'); toast('Piscine supprimée') }
+  try { const cid = state.currentPool?.client_id; await API.delete(`/pools/${id}`); closeModal(); await loadData(); if (cid) viewClient(cid); else navigate('clients'); toast('Piscine supprimée') }
   catch { toast('Erreur', 'error') }
 }
 window.deletePool = deletePool

@@ -229,17 +229,21 @@ function renderShell() {
   // Le client a sa propre interface (espace lecture)
   if (isClient()) return renderClientShell()
 
+  // Menu simplifié à 3 entrées (UX mobile) :
+  //  - Accueil : tableau de bord + accès Stats & Équipe (sections dépliables)
+  //  - Agenda  : calendrier + carte + tournée (3 modes)
+  //  - Clients : clients ET leurs piscines (fusionnés)
   const navItems = [
     { id: 'home', icon: 'fa-house', label: 'Accueil' },
     { id: 'agenda', icon: 'fa-calendar-days', label: 'Agenda' },
+    { id: 'clients', icon: 'fa-users', label: 'Clients' },
   ]
-  // Tout member a accès à l'ensemble : il peut gérer ses propres clients/piscines
-  // ET intervenir pour d'autres (la séparation des données reste assurée par le périmètre).
-  navItems.push({ id: 'clients', icon: 'fa-users', label: 'Clients' })
-  navItems.push({ id: 'pools', icon: 'fa-water', label: 'Piscines' })
-  navItems.push({ id: 'tour', icon: 'fa-route', label: 'Tournée' })
-  navItems.push({ id: 'stats', icon: 'fa-chart-line', label: 'Stats' })
-  navItems.push({ id: 'team', icon: 'fa-user-group', label: 'Équipe' })
+  // Les vues internes (pool-detail, client-detail, stats, team) restent accessibles
+  // depuis l'accueil / les fiches, mais n'encombrent plus la barre de navigation.
+  const activeNav = ['client-detail', 'pool-detail'].includes(state.view) ? 'clients'
+    : ['stats', 'team'].includes(state.view) ? 'home'
+    : ['tour'].includes(state.view) ? 'agenda'
+    : state.view
 
   el('app').innerHTML = `
     <div class="min-h-screen flex flex-col">
@@ -268,7 +272,7 @@ function renderShell() {
       <nav class="bg-white border-b border-slate-200 hidden sm:block">
         <div class="max-w-7xl mx-auto px-4 flex gap-1">
           ${navItems.map(n => `
-            <button onclick="navigate('${n.id}')" class="nav-btn px-4 py-3 text-sm font-semibold border-b-2 transition ${state.view === n.id ? 'border-cyan-600 text-cyan-700' : 'border-transparent text-slate-500 hover:text-slate-700'}">
+            <button onclick="navigate('${n.id}')" class="nav-btn px-4 py-3 text-sm font-semibold border-b-2 transition ${activeNav === n.id ? 'border-cyan-600 text-cyan-700' : 'border-transparent text-slate-500 hover:text-slate-700'}">
               <i class="fas ${n.icon} mr-1.5"></i>${n.label}
             </button>`).join('')}
         </div>
@@ -278,10 +282,10 @@ function renderShell() {
       <main id="main-content" class="flex-1 max-w-7xl w-full mx-auto px-4 py-5 pb-24 sm:pb-5"></main>
 
       <!-- Nav mobile -->
-      <nav class="sm:hidden fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 z-30 flex">
+      <nav class="sm:hidden fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 z-30 flex pb-[env(safe-area-inset-bottom)]">
         ${navItems.map(n => `
-          <button onclick="navigate('${n.id}')" class="flex-1 py-2.5 flex flex-col items-center gap-0.5 ${state.view === n.id ? 'text-cyan-600' : 'text-slate-400'}">
-            <i class="fas ${n.icon} text-lg"></i><span class="text-[10px] font-semibold">${n.label}</span>
+          <button onclick="navigate('${n.id}')" class="flex-1 py-3 flex flex-col items-center gap-1 ${activeNav === n.id ? 'text-cyan-600' : 'text-slate-400'}">
+            <i class="fas ${n.icon} text-xl"></i><span class="text-xs font-semibold">${n.label}</span>
           </button>`).join('')}
       </nav>
     </div>`
@@ -301,11 +305,12 @@ function renderView() {
   if (state.view === 'home') renderHome(c)
   else if (state.view === 'agenda') renderAgenda(c)
   else if (state.view === 'clients') renderClients(c)
-  else if (state.view === 'pools') renderPools(c)
+  else if (state.view === 'client-detail') renderClientDetail(c)
+  else if (state.view === 'pools') renderClients(c) // ancien onglet → redirige vers Clients
   else if (state.view === 'pool-detail') renderPoolDetail(c)
   else if (state.view === 'team') renderTeam(c)
   else if (state.view === 'stats') renderStats(c)
-  else if (state.view === 'tour') renderTour(c)
+  else if (state.view === 'tour') renderAgenda(c) // tournée intégrée à l'agenda
 }
 
 // ============================================================
@@ -376,15 +381,27 @@ function renderHome(c) {
 
   c.innerHTML = `
     <div class="mb-5">
-      <h2 class="text-2xl font-extrabold text-slate-800">Bonjour ${esc(state.user.name)} 👋</h2>
+      <h2 class="text-xl sm:text-2xl font-extrabold text-slate-800">Bonjour ${esc(state.user.name)} 👋</h2>
       <p class="text-slate-400 capitalize">${fmtDate(today)}</p>
     </div>
 
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
       ${stat('fa-list-check', `${doneCount}/${todayItems.length}`, "Aujourd'hui", '#0891b2')}
       ${stat('fa-water', state.pools.length, 'Piscines', '#16a34a')}
       ${stat('fa-users', state.clients.length, 'Clients', '#8b5cf6')}
       ${stat('fa-calendar-check', state.maintenances.length, 'Entretiens planifiés', '#f59e0b')}
+    </div>
+
+    <!-- Accès rapides : Stats & Équipe (anciens onglets, désormais ici) -->
+    <div class="grid grid-cols-2 gap-3 mb-5">
+      <button onclick="navigate('stats')" class="bg-white hover:bg-slate-50 rounded-2xl shadow-sm border border-slate-100 p-4 flex items-center gap-3 text-left transition">
+        <div class="w-11 h-11 rounded-xl flex items-center justify-center text-white bg-indigo-500"><i class="fas fa-chart-line"></i></div>
+        <div><div class="font-bold text-slate-800 leading-tight">Statistiques</div><div class="text-xs text-slate-400">Passages, temps, top piscines</div></div>
+      </button>
+      <button onclick="navigate('team')" class="bg-white hover:bg-slate-50 rounded-2xl shadow-sm border border-slate-100 p-4 flex items-center gap-3 text-left transition">
+        <div class="w-11 h-11 rounded-xl flex items-center justify-center text-white bg-emerald-500"><i class="fas fa-user-group"></i></div>
+        <div><div class="font-bold text-slate-800 leading-tight">Mon équipe</div><div class="text-xs text-slate-400">Intervenants & employeurs</div></div>
+      </button>
     </div>
 
     <!-- Centre d'alertes -->

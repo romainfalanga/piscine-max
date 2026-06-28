@@ -225,7 +225,8 @@ async function renderStats(c) {
     </div>`
 
   c.innerHTML = `
-    <h2 class="text-2xl font-extrabold text-slate-800 mb-4"><i class="fas fa-chart-line text-cyan-600 mr-2"></i>Statistiques</h2>
+    <button onclick="navigate('home')" class="text-slate-400 hover:text-slate-600 mb-3 text-sm"><i class="fas fa-arrow-left mr-1"></i>Retour à l'accueil</button>
+    <h2 class="text-xl sm:text-2xl font-extrabold text-slate-800 mb-4"><i class="fas fa-chart-line text-cyan-600 mr-2"></i>Statistiques</h2>
     <div class="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-5">
       ${stat('fa-clipboard-check', data.totals.passages || 0, 'Passages (12 mois)', '#0891b2')}
       ${stat('fa-clock', hrs + ' h', 'Temps total', '#16a34a')}
@@ -331,96 +332,4 @@ async function weatherWidgetHtml(lat, lng) {
 }
 window.weatherWidgetHtml = weatherWidgetHtml
 
-// ============================================================
-// MODE TOURNÉE (intervenant / pisciniste) — pas à pas du jour
-// ============================================================
-const tourState = { index: 0, items: [] }
-
-function renderTour(c) {
-  // Occurrences du jour sélectionné (par défaut aujourd'hui)
-  const day = state.selectedDate && state.view === 'tour' ? state.selectedDate : new Date()
-  const items = (typeof occurrencesForDate === 'function') ? occurrencesForDate(new Date()) : []
-  // Optimise l'ordre si on a des coordonnées (réutilise l'algo plus proche voisin de l'agenda si dispo)
-  tourState.items = items
-  tourState.index = Math.min(tourState.index, Math.max(0, items.length - 1))
-
-  const doneSet = (typeof builtDoneSet === 'function') ? builtDoneSet() : new Map()
-  const todayIso = isoDate(new Date())
-  const doneCount = items.filter(m => doneSet.has(occKey(m.id, todayIso))).length
-
-  if (!items.length) {
-    c.innerHTML = `
-      <h2 class="text-2xl font-extrabold text-slate-800 mb-4"><i class="fas fa-route text-cyan-600 mr-2"></i>Tournée du jour</h2>
-      <div class="bg-white rounded-2xl border border-slate-100 p-10 text-center text-slate-400">
-        <i class="fas fa-mug-hot text-4xl mb-3"></i><p>Aucun entretien prévu aujourd'hui. Repos bien mérité ! ☕</p>
-      </div>`
-    return
-  }
-
-  const cur = items[tourState.index]
-  const isDone = doneSet.has(occKey(cur.id, todayIso))
-  const progress = Math.round((doneCount / items.length) * 100)
-
-  c.innerHTML = `
-    <div class="flex items-center justify-between mb-3">
-      <h2 class="text-2xl font-extrabold text-slate-800"><i class="fas fa-route text-cyan-600 mr-2"></i>Tournée du jour</h2>
-      <span class="text-sm font-bold text-slate-500">${doneCount}/${items.length} faits</span>
-    </div>
-    <div class="h-2 bg-slate-200 rounded-full mb-4 overflow-hidden"><div class="h-full bg-emerald-500 transition-all" style="width:${progress}%"></div></div>
-
-    <!-- Arrêt courant -->
-    <div class="bg-white rounded-2xl shadow-sm border ${isDone?'border-emerald-200':'border-slate-100'} p-5 mb-4">
-      <div class="flex items-center justify-between mb-1">
-        <span class="text-xs font-bold text-cyan-600 uppercase">Arrêt ${tourState.index+1} / ${items.length}</span>
-        ${isDone ? '<span class="text-emerald-600 text-sm font-bold"><i class="fas fa-circle-check mr-1"></i>Fait</span>' : ''}
-      </div>
-      <div class="text-xl font-extrabold text-slate-800">${cur.time ? `<span class="text-slate-400">${esc(cur.time)} · </span>`:''}${esc(cur.pool_label)}</div>
-      <div class="text-sm text-slate-400">${esc(cur.client_name||'')}${cur.pool_address ? ' · ' + esc(cur.pool_address):''}</div>
-
-      ${cur.access_code ? `<div class="mt-2 inline-flex items-center gap-2 bg-amber-50 text-amber-700 px-3 py-1.5 rounded-lg text-sm font-bold"><i class="fas fa-key"></i>Code : ${esc(cur.access_code)}</div>`:''}
-      ${cur.access_notes ? `<div class="mt-2 text-xs text-slate-500"><i class="fas fa-circle-info mr-1"></i>${esc(cur.access_notes)}</div>`:''}
-
-      ${tourChecklistHtml(cur)}
-
-      <div class="flex gap-2 mt-4">
-        ${cur.lat && cur.lng ? `<button onclick="openGPS(${cur.lat},${cur.lng})" class="flex-1 bg-sky-50 text-sky-700 font-semibold py-2.5 rounded-xl"><i class="fas fa-diamond-turn-right mr-1"></i>Y aller</button>`:''}
-        ${cur.client_phone ? `<a href="tel:${esc(cur.client_phone)}" class="flex-1 text-center bg-slate-100 text-slate-700 font-semibold py-2.5 rounded-xl"><i class="fas fa-phone mr-1"></i>Appeler</a>`:''}
-      </div>
-      <div class="mt-2">
-        ${isDone
-          ? `<button onclick="tourNext()" class="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 rounded-xl">Arrêt suivant <i class="fas fa-arrow-right ml-1"></i></button>`
-          : `<button onclick="openLogForm(${cur.id}, '${esc(cur.pool_label).replace(/'/g,'')}', null, ${cur.pool_id})" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl"><i class="fas fa-clipboard-check mr-1"></i>Saisir le passage</button>`}
-      </div>
-    </div>
-
-    <!-- Navigation arrêts -->
-    <div class="flex items-center justify-between">
-      <button onclick="tourPrev()" ${tourState.index===0?'disabled':''} class="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 disabled:opacity-40"><i class="fas fa-chevron-left"></i></button>
-      <div class="flex gap-1.5">
-        ${items.map((m,i)=>{const d=doneSet.has(occKey(m.id,todayIso)); return `<button onclick="tourGo(${i})" class="w-2.5 h-2.5 rounded-full ${i===tourState.index?'ring-2 ring-cyan-400':''}" style="background:${d?'#16a34a':'#cbd5e1'}"></button>`}).join('')}
-      </div>
-      <button onclick="tourNext()" ${tourState.index>=items.length-1?'disabled':''} class="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 disabled:opacity-40"><i class="fas fa-chevron-right"></i></button>
-    </div>`
-}
-window.renderTour = renderTour
-
-function tourChecklistHtml(m) {
-  let routine = []
-  try { routine = m.routine ? JSON.parse(m.routine) : [] } catch {}
-  if (!routine.length) return ''
-  return `
-    <div class="mt-3 bg-slate-50 rounded-xl p-3">
-      <div class="text-xs font-bold text-slate-500 uppercase mb-2">Routine</div>
-      ${routine.map((step,i)=>`
-        <label class="flex items-center gap-2 py-1 cursor-pointer">
-          <input type="checkbox" class="w-5 h-5 rounded accent-emerald-600">
-          <span class="text-sm text-slate-700">${esc(step)}</span>
-        </label>`).join('')}
-    </div>`
-}
-
-function tourNext() { if (tourState.index < tourState.items.length - 1) { tourState.index++; renderTour(el('main-content')) } }
-function tourPrev() { if (tourState.index > 0) { tourState.index--; renderTour(el('main-content')) } }
-function tourGo(i) { tourState.index = i; renderTour(el('main-content')) }
-window.tourNext = tourNext; window.tourPrev = tourPrev; window.tourGo = tourGo
 

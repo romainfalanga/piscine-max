@@ -85,7 +85,7 @@ function renderAgenda(c) {
 
   c.innerHTML = `
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-      <h2 class="text-2xl font-extrabold text-slate-800"><i class="fas fa-calendar-days text-cyan-600 mr-2"></i>Agenda</h2>
+      <h2 class="text-xl sm:text-2xl font-extrabold text-slate-800"><i class="fas fa-calendar-days text-cyan-600 mr-2"></i>Agenda</h2>
       <div class="flex flex-wrap items-center gap-2">
         ${userFilter}
         <div class="bg-slate-200 rounded-lg p-0.5 flex">
@@ -93,8 +93,9 @@ function renderAgenda(c) {
           <button onclick="setScope('week')" class="view-toggle-btn px-3 py-1.5 rounded-md text-sm font-semibold ${state.agendaScope === 'week' ? 'bg-white shadow text-cyan-700' : 'text-slate-500'}">Semaine</button>
         </div>
         <div class="bg-slate-200 rounded-lg p-0.5 flex">
-          <button onclick="setMode('calendar')" class="view-toggle-btn px-3 py-1.5 rounded-md text-sm font-semibold ${state.agendaMode === 'calendar' ? 'bg-white shadow text-cyan-700' : 'text-slate-500'}"><i class="fas fa-list-ul mr-1"></i>Agenda</button>
-          <button onclick="setMode('map')" class="view-toggle-btn px-3 py-1.5 rounded-md text-sm font-semibold ${state.agendaMode === 'map' ? 'bg-white shadow text-cyan-700' : 'text-slate-500'}"><i class="fas fa-map-location-dot mr-1"></i>Carte</button>
+          <button onclick="setMode('calendar')" class="view-toggle-btn px-2.5 sm:px-3 py-1.5 rounded-md text-sm font-semibold ${state.agendaMode === 'calendar' ? 'bg-white shadow text-cyan-700' : 'text-slate-500'}"><i class="fas fa-list-ul sm:mr-1"></i><span class="hidden sm:inline">Liste</span></button>
+          <button onclick="setMode('map')" class="view-toggle-btn px-2.5 sm:px-3 py-1.5 rounded-md text-sm font-semibold ${state.agendaMode === 'map' ? 'bg-white shadow text-cyan-700' : 'text-slate-500'}"><i class="fas fa-map-location-dot sm:mr-1"></i><span class="hidden sm:inline">Carte</span></button>
+          <button onclick="setMode('tour')" class="view-toggle-btn px-2.5 sm:px-3 py-1.5 rounded-md text-sm font-semibold ${state.agendaMode === 'tour' ? 'bg-white shadow text-cyan-700' : 'text-slate-500'}"><i class="fas fa-route sm:mr-1"></i><span class="hidden sm:inline">Tournée</span></button>
         </div>
       </div>
     </div>
@@ -112,7 +113,8 @@ function renderAgenda(c) {
     <div id="agenda-body"></div>`
 
   if (state.agendaMode === 'calendar') renderAgendaCalendar()
-  else renderAgendaMap()
+  else if (state.agendaMode === 'map') renderAgendaMap()
+  else renderAgendaTour()
 }
 window.renderAgenda = renderAgenda
 
@@ -297,6 +299,87 @@ function toggleOptimize() {
   renderAgendaMap()
 }
 window.toggleOptimize = toggleOptimize
+
+// ---------- Vue tournée (assistant pas-à-pas, dans l'agenda) ----------
+const agendaTour = { index: 0 }
+function renderAgendaTour() {
+  const body = el('agenda-body')
+  // La tournée se base sur la date sélectionnée de l'agenda
+  const date = state.selectedDate || new Date()
+  let items = occurrencesForDate(date)
+  if (state.routeOptimized) {
+    const geo = items.filter(m => m.lat && m.lng)
+    const noGeo = items.filter(m => !(m.lat && m.lng))
+    items = [...optimizeRoute(geo), ...noGeo]
+  }
+  const dIso = isoDate(date)
+  const doneSet = builtDoneSet()
+  const doneCount = items.filter(m => doneSet.has(occKey(m.id, dIso))).length
+
+  if (!items.length) {
+    body.innerHTML = `<div class="bg-white rounded-2xl border border-slate-100 p-10 text-center text-slate-400">
+      <i class="fas fa-mug-hot text-4xl mb-3"></i><p>Aucun entretien prévu ce jour. Repos bien mérité ! ☕</p></div>`
+    return
+  }
+  agendaTour.index = Math.min(agendaTour.index, items.length - 1)
+  const cur = items[agendaTour.index]
+  const isDone = doneSet.has(occKey(cur.id, dIso))
+  const progress = Math.round((doneCount / items.length) * 100)
+  const label = esc(cur.pool_label).replace(/'/g, '')
+
+  let routine = []
+  try { routine = cur.routine ? JSON.parse(cur.routine) : [] } catch {}
+
+  body.innerHTML = `
+    <div class="fade-in">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-sm font-bold text-slate-500">${doneCount}/${items.length} faits</span>
+        ${items.length > 1 ? `<button onclick="toggleOptimize2()" class="text-xs ${state.routeOptimized ? 'text-cyan-600' : 'text-slate-400'} font-semibold"><i class="fas fa-wand-magic-sparkles mr-1"></i>${state.routeOptimized ? 'Parcours optimisé' : 'Optimiser'}</button>` : ''}
+      </div>
+      <div class="h-2 bg-slate-200 rounded-full mb-4 overflow-hidden"><div class="h-full bg-emerald-500 transition-all" style="width:${progress}%"></div></div>
+
+      <div class="bg-white rounded-2xl shadow-sm border ${isDone ? 'border-emerald-200' : 'border-slate-100'} p-5 mb-4">
+        <div class="flex items-center justify-between mb-1">
+          <span class="text-xs font-bold text-cyan-600 uppercase">Arrêt ${agendaTour.index + 1} / ${items.length}</span>
+          ${isDone ? '<span class="text-emerald-600 text-sm font-bold"><i class="fas fa-circle-check mr-1"></i>Fait</span>' : ''}
+        </div>
+        <div class="text-xl font-extrabold text-slate-800">${cur.time ? `<span class="text-slate-400">${esc(cur.time)} · </span>` : ''}${esc(cur.pool_label)}</div>
+        <div class="text-sm text-slate-400">${esc(cur.client_name || '')}${cur.pool_address ? ' · ' + esc(cur.pool_address) : ''}</div>
+
+        ${cur.access_code ? `<div class="mt-2 inline-flex items-center gap-2 bg-amber-50 text-amber-700 px-3 py-1.5 rounded-lg text-sm font-bold"><i class="fas fa-key"></i>Code : ${esc(cur.access_code)}</div>` : ''}
+        ${cur.access_notes ? `<div class="mt-2 text-xs text-slate-500"><i class="fas fa-circle-info mr-1"></i>${esc(cur.access_notes)}</div>` : ''}
+
+        ${routine.length ? `<div class="mt-3 bg-slate-50 rounded-xl p-3">
+          <div class="text-xs font-bold text-slate-500 uppercase mb-2">Routine</div>
+          ${routine.map(step => `<label class="flex items-center gap-2 py-1 cursor-pointer"><input type="checkbox" class="w-5 h-5 rounded accent-emerald-600"><span class="text-sm text-slate-700">${esc(step)}</span></label>`).join('')}
+        </div>` : ''}
+
+        <div class="grid grid-cols-2 gap-2 mt-4">
+          ${cur.lat && cur.lng ? `<button onclick="openGPS(${cur.lat},${cur.lng})" class="bg-sky-50 text-sky-700 font-semibold py-2.5 rounded-xl"><i class="fas fa-diamond-turn-right mr-1"></i>Y aller</button>` : '<span></span>'}
+          ${cur.client_phone ? `<a href="tel:${esc(cur.client_phone)}" class="text-center bg-slate-100 text-slate-700 font-semibold py-2.5 rounded-xl"><i class="fas fa-phone mr-1"></i>Appeler</a>` : '<span></span>'}
+        </div>
+        <div class="mt-2">
+          ${isDone
+            ? `<button onclick="agendaTourNext(${items.length})" class="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 rounded-xl">Arrêt suivant <i class="fas fa-arrow-right ml-1"></i></button>`
+            : `<button onclick="openLogForm(${cur.id}, '${label}', null, ${cur.pool_id})" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl"><i class="fas fa-clipboard-check mr-1"></i>Saisir le passage</button>`}
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between">
+        <button onclick="agendaTourPrev()" ${agendaTour.index === 0 ? 'disabled' : ''} class="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 disabled:opacity-40"><i class="fas fa-chevron-left"></i></button>
+        <div class="flex gap-1.5 flex-wrap justify-center max-w-[60%]">
+          ${items.map((m, i) => { const d = doneSet.has(occKey(m.id, dIso)); return `<button onclick="agendaTourGo(${i})" class="w-2.5 h-2.5 rounded-full ${i === agendaTour.index ? 'ring-2 ring-cyan-400' : ''}" style="background:${d ? '#16a34a' : '#cbd5e1'}"></button>` }).join('')}
+        </div>
+        <button onclick="agendaTourNext(${items.length})" ${agendaTour.index >= items.length - 1 ? 'disabled' : ''} class="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 disabled:opacity-40"><i class="fas fa-chevron-right"></i></button>
+      </div>
+    </div>`
+}
+window.renderAgendaTour = renderAgendaTour
+function agendaTourNext(n) { if (agendaTour.index < n - 1) { agendaTour.index++; renderAgendaTour() } }
+function agendaTourPrev() { if (agendaTour.index > 0) { agendaTour.index--; renderAgendaTour() } }
+function agendaTourGo(i) { agendaTour.index = i; renderAgendaTour() }
+function toggleOptimize2() { state.routeOptimized = !state.routeOptimized; renderAgendaTour() }
+window.agendaTourNext = agendaTourNext; window.agendaTourPrev = agendaTourPrev; window.agendaTourGo = agendaTourGo; window.toggleOptimize2 = toggleOptimize2
 
 function initMap(items) {
   if (agendaMap) { agendaMap.remove(); agendaMap = null }

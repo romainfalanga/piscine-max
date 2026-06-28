@@ -28,9 +28,10 @@ async function renderTeam(c) {
     </div>`).join('') : '<p class="text-sm text-slate-400 py-6 text-center">Tu ne travailles pour aucun autre pisciniste pour le moment.</p>'
 
   c.innerHTML = `
+    <button onclick="navigate('home')" class="text-slate-400 hover:text-slate-600 mb-3 text-sm"><i class="fas fa-arrow-left mr-1"></i>Retour à l'accueil</button>
     <div class="flex items-center justify-between mb-5">
-      <h2 class="text-2xl font-extrabold text-slate-800"><i class="fas fa-user-group text-cyan-600 mr-2"></i>Mon équipe</h2>
-      ${isPro() ? `<button onclick="openWorkerForm()" class="bg-cyan-600 hover:bg-cyan-700 text-white font-semibold px-4 py-2 rounded-xl shadow flex items-center gap-2">
+      <h2 class="text-xl sm:text-2xl font-extrabold text-slate-800"><i class="fas fa-user-group text-cyan-600 mr-2"></i>Mon équipe</h2>
+      ${isPro() ? `<button onclick="openWorkerForm()" class="bg-cyan-600 hover:bg-cyan-700 text-white font-semibold px-3 sm:px-4 py-2 rounded-xl shadow flex items-center gap-2">
         <i class="fas fa-user-plus"></i><span class="hidden sm:inline">Ajouter un intervenant</span></button>` : ''}
     </div>
 
