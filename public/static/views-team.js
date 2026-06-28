@@ -7,24 +7,24 @@ async function renderTeam(c) {
   try { team = (await API.get('/team')).data } catch { team = { workers: [], employers: [] } }
 
   const workersHtml = team.workers.length ? team.workers.map(w => `
-    <div class="flex items-center gap-3 bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
-      <div class="w-11 h-11 rounded-xl flex items-center justify-center text-white font-bold" style="background:${w.color || '#16a34a'}">${esc(w.name.charAt(0).toUpperCase())}</div>
+    <div class="flex items-center gap-3 bg-white rounded-2xl shadow-sm border border-slate-100 p-4 max-w-full overflow-hidden">
+      <div class="w-11 h-11 shrink-0 rounded-xl flex items-center justify-center text-white font-bold" style="background:${w.color || '#16a34a'}">${esc(w.name.charAt(0).toUpperCase())}</div>
       <div class="flex-1 min-w-0">
         <div class="font-bold text-slate-800 truncate">${esc(w.name)}</div>
         <div class="text-xs text-slate-400 truncate">${esc(w.email)}${w.phone ? ' · ' + esc(w.phone) : ''}</div>
       </div>
-      <button onclick="resetMemberPassword(${w.id}, '${esc(w.name).replace(/'/g,'')}')" class="w-9 h-9 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100" title="Réinitialiser le mot de passe"><i class="fas fa-key"></i></button>
-      <button onclick="detachWorker(${w.id}, '${esc(w.name).replace(/'/g,'')}')" class="w-9 h-9 rounded-lg bg-red-50 text-red-600 hover:bg-red-100" title="Retirer de l'équipe"><i class="fas fa-user-minus"></i></button>
+      <button onclick="resetMemberPassword(${w.id}, '${esc(w.name).replace(/'/g,'')}')" class="w-9 h-9 shrink-0 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100" title="Réinitialiser le mot de passe"><i class="fas fa-key"></i></button>
+      <button onclick="detachWorker(${w.id}, '${esc(w.name).replace(/'/g,'')}')" class="w-9 h-9 shrink-0 rounded-lg bg-red-50 text-red-600 hover:bg-red-100" title="Retirer de l'équipe"><i class="fas fa-user-minus"></i></button>
     </div>`).join('') : '<p class="text-sm text-slate-400 py-6 text-center"><i class="fas fa-user-group mr-1"></i>Aucun intervenant. Ajoute-en un pour déléguer tes entretiens.</p>'
 
   const employersHtml = team.employers.length ? team.employers.map(e => `
-    <div class="flex items-center gap-3 bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
-      <div class="w-11 h-11 rounded-xl flex items-center justify-center text-white font-bold" style="background:${e.color || '#0891b2'}">${esc(e.name.charAt(0).toUpperCase())}</div>
+    <div class="flex items-center gap-3 bg-white rounded-2xl shadow-sm border border-slate-100 p-4 max-w-full overflow-hidden">
+      <div class="w-11 h-11 shrink-0 rounded-xl flex items-center justify-center text-white font-bold" style="background:${e.color || '#0891b2'}">${esc(e.name.charAt(0).toUpperCase())}</div>
       <div class="flex-1 min-w-0">
         <div class="font-bold text-slate-800 truncate">${esc(e.company || e.name)}</div>
         <div class="text-xs text-slate-400 truncate">${esc(e.name)}${e.phone ? ' · ' + esc(e.phone) : ''}</div>
       </div>
-      <span class="text-xs bg-emerald-50 text-emerald-600 px-2 py-1 rounded-full font-semibold"><i class="fas fa-handshake mr-1"></i>Pro</span>
+      <span class="text-xs shrink-0 bg-emerald-50 text-emerald-600 px-2 py-1 rounded-full font-semibold whitespace-nowrap"><i class="fas fa-handshake mr-1"></i>Pro</span>
     </div>`).join('') : '<p class="text-sm text-slate-400 py-6 text-center">Tu ne travailles pour aucun autre pisciniste pour le moment.</p>'
 
   c.innerHTML = `

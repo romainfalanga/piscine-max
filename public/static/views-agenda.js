@@ -276,10 +276,10 @@ function renderAgendaMap() {
 
   body.innerHTML = `
     <div class="grid lg:grid-cols-3 gap-4 fade-in">
-      <div class="lg:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm p-1.5 relative">
-        <div id="map" class="h-[420px] sm:h-[560px] rounded-xl"></div>
+      <div class="lg:col-span-2 min-w-0 bg-white rounded-2xl border border-slate-100 shadow-sm p-1.5 relative overflow-hidden">
+        <div id="map" class="w-full h-[420px] sm:h-[560px] rounded-xl overflow-hidden"></div>
       </div>
-      <div class="space-y-2 lg:max-h-[560px] lg:overflow-y-auto pr-1">
+      <div class="space-y-2 min-w-0 lg:max-h-[560px] lg:overflow-y-auto pr-1">
         <div class="flex items-center justify-between px-1 mb-1">
           <span class="text-sm font-semibold text-slate-500">${items.length} étape${items.length > 1 ? 's' : ''}${dist ? ` · ~${dist.toFixed(1)} km` : ''}</span>
         </div>
@@ -391,6 +391,12 @@ function initMap(items) {
     attribution: '© OpenStreetMap', maxZoom: 19
   }).addTo(agendaMap)
 
+  // Force Leaflet à recalculer ses dimensions selon le conteneur réel
+  // (corrige les débordements / tuiles grises après changement de layout)
+  const fixSize = () => { if (agendaMap) agendaMap.invalidateSize(false) }
+  setTimeout(fixSize, 60)
+  setTimeout(fixSize, 300)
+
   if (!items.length) { agendaMap.setView([43.5283, 5.4497], 12); return }
 
   const latlngs = []
@@ -402,7 +408,7 @@ function initMap(items) {
     })
     const marker = L.marker([m.lat, m.lng], { icon }).addTo(agendaMap)
     marker.bindPopup(`
-      <div style="min-width:170px">
+      <div style="min-width:150px;max-width:220px">
         <b>${esc(m.pool_label)}</b><br>
         <span style="color:#64748b;font-size:12px">${esc(m.client_name)}</span><br>
         ${m.time ? `<span style="font-size:12px">🕐 ${esc(m.time)}</span><br>` : ''}

@@ -19,6 +19,31 @@ body {
   width: 100%;
 }
 
+/* ============================================================
+   FIX RACINE DU DÉBORDEMENT EN GRILLE (cause commune mobile)
+   Par défaut une colonne de grille Tailwind vaut minmax(auto, 1fr).
+   "auto" = la colonne peut grossir jusqu'à la taille de son
+   contenu, donc un texte/élément un peu large fait DÉPASSER la
+   grille hors de l'écran. On remplace par minmax(0, 1fr) : les
+   colonnes restent bornées et le contenu se coupe (truncate) au
+   lieu de pousser. C'est ce qui réglait les blocs équipe + carte.
+   ============================================================ */
+.grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+.grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (min-width: 640px) {
+  .sm\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sm\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .sm\:grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (min-width: 1024px) {
+  .lg\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .lg\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .lg\:grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .lg\:grid-cols-7 { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+}
+
 /* Les images ne débordent jamais */
 img { max-width: 100%; height: auto; }
 
