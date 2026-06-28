@@ -44,10 +44,10 @@ function toast(msg, type = 'success') {
   const colors = { success: 'bg-emerald-600', error: 'bg-red-600', info: 'bg-slate-700' }
   const icons = { success: 'fa-check-circle', error: 'fa-exclamation-circle', info: 'fa-info-circle' }
   const t = document.createElement('div')
-  t.className = `toast ${colors[type]} text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 max-w-sm`
+  t.className = `toast ${colors[type]} text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 max-w-full sm:max-w-sm pointer-events-auto`
   t.innerHTML = `<i class="fas ${icons[type]}"></i><span>${esc(msg)}</span>`
   el('toast-root').appendChild(t)
-  setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateX(30px)'; t.style.transition = 'all .3s'; setTimeout(() => t.remove(), 300) }, 3000)
+  setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateY(-12px)'; t.style.transition = 'all .3s'; setTimeout(() => t.remove(), 300) }, 3000)
 }
 
 // Depuis la fusion des rôles : 'member' = compte humain (ex pisciniste + ex intervenant

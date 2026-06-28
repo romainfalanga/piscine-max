@@ -3,7 +3,7 @@ export function renderApp(): string {
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
   <title>Piscine Max — Gestion d'entretien</title>
   <meta name="theme-color" content="#0891b2">
   <script src="https://cdn.tailwindcss.com"></script>
@@ -22,7 +22,7 @@ export function renderApp(): string {
 <body class="bg-slate-100 text-slate-800 antialiased">
   <div id="app"></div>
   <div id="modal-root"></div>
-  <div id="toast-root" class="fixed top-4 right-4 z-[9999] space-y-2"></div>
+  <div id="toast-root" class="fixed top-4 right-4 left-4 sm:left-auto z-[9999] space-y-2 flex flex-col items-end pointer-events-none"></div>
   <script src="/static/views-clients.js"></script>
   <script src="/static/views-pools.js"></script>
   <script src="/static/views-agenda.js"></script>
