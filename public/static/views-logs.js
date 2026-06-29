@@ -99,27 +99,49 @@ function openLogForm(maintenanceId, poolLabel, pool = null, poolId = null) {
         <span><i class="fas fa-camera text-cyan-500 mr-1"></i>Ajouter une photo après validation</span>
       </label>
 
+      ${EMAIL_ENABLED ? `
+      <label class="flex items-start gap-2 cursor-pointer text-sm text-slate-600 bg-cyan-50 border border-cyan-100 rounded-xl p-3">
+        <input type="checkbox" id="lf-sendmail" checked class="w-5 h-5 mt-0.5 rounded accent-cyan-600 shrink-0">
+        <span><i class="fas fa-envelope text-cyan-500 mr-1"></i><b>Envoyer le compte rendu au client par e-mail</b><br><span class="text-xs text-slate-400">Relevés, produits, photos et conseils — automatiquement, sans compte à créer côté client.</span></span>
+      </label>` : `
+      <div class="flex items-start gap-2 text-sm bg-slate-50 border border-slate-200 rounded-xl p-3 opacity-90">
+        <i class="fas fa-envelope text-slate-400 mt-0.5"></i>
+        <span class="text-slate-500"><b>Compte rendu par e-mail</b> <span class="text-[11px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full ml-1">Bientôt disponible</span><br><span class="text-xs text-slate-400">L'envoi automatique au client arrive très bientôt.</span></span>
+      </div>`}
+
       <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl shadow"><i class="fas fa-check mr-1"></i>Valider le passage</button>
     </form>`)
 
   el('log-form').addEventListener('submit', async (e) => {
     e.preventDefault()
+    const wantPhoto = el('lf-addphoto') && el('lf-addphoto').checked
+    const wantMail = EMAIL_ENABLED && el('lf-sendmail') && el('lf-sendmail').checked
+    // On n'envoie pas l'e-mail tout de suite si on ajoute une photo après :
+    // la photo doit figurer dans le compte rendu. Dans ce cas, l'envoi se fera
+    // après l'upload de la photo (voir openPhotoUploadForLog).
+    const sendNow = wantMail && !wantPhoto
     const payload = {
       done_date: el('lf-date').value, status: el('lf-status').value,
       ph: el('lf-ph').value, chlorine: el('lf-chlorine').value, salt: el('lf-salt').value,
       water_temp: el('lf-temp').value, stabilizer: el('lf-stab').value, tac: el('lf-tac').value,
-      products_added: el('lf-products').value, notes: el('lf-notes').value, duration_min: el('lf-duration').value
+      products_added: el('lf-products').value, notes: el('lf-notes').value, duration_min: el('lf-duration').value,
+      send_email: sendNow
     }
-    const wantPhoto = el('lf-addphoto') && el('lf-addphoto').checked
     try {
       const { data } = await API.post(`/maintenances/${maintenanceId}/log`, payload)
       await loadLogs()
       if (wantPhoto && poolId) {
-        openPhotoUploadForLog(poolId, data.log_id)
+        // On mémorise l'intention d'envoyer le mail après ajout de la photo
+        openPhotoUploadForLog(poolId, data.log_id, wantMail)
       } else {
         closeModal(); renderView()
       }
       toast('Passage enregistré ✅')
+      // Retour d'envoi e-mail (best-effort côté serveur)
+      if (sendNow && data.email) {
+        if (data.email.sent) toast('Compte rendu envoyé au client 📧', 'success')
+        else if (data.email.error) toast('Passage OK, mais e-mail non envoyé : ' + data.email.error, 'info')
+      }
     } catch (err) { toast(err.response?.data?.error || 'Erreur', 'error') }
   })
 }
@@ -138,11 +160,10 @@ function checkReading(id, min, max) {
 window.checkReading = checkReading
 
 // Upload photo lié à un passage qu'on vient de créer (réutilise le flow de pool)
-function openPhotoUploadForLog(poolId, logId) {
+// wantMail : si vrai, le compte rendu sera envoyé au client APRÈS l'upload (photo incluse).
+function openPhotoUploadForLog(poolId, logId, wantMail = false) {
   if (typeof openPhotoUpload === 'function') {
-    openPhotoUpload(poolId, logId)
-    // après fermeture, on rafraîchit la vue courante
-    const prevClose = window.closeModal
+    openPhotoUpload(poolId, logId, wantMail)
   } else {
     closeModal(); renderView()
   }

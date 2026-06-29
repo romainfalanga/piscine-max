@@ -3,13 +3,17 @@
 // ============================================================
 
 const API = axios.create({ baseURL: '/api' })
+
+// Envoi du compte rendu par e-mail : prêt côté code mais désactivé tant qu'un
+// domaine expéditeur n'est pas vérifié chez Resend. Passer à true pour réactiver.
+const EMAIL_ENABLED = false
+
 const WEEKDAYS = ['', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
 const WEEKDAYS_SHORT = ['', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
 
 const state = {
   user: null,
-  view: 'agenda',       // agenda | clients | pools | pool-detail
-  agendaMode: 'calendar', // calendar | map
+  view: 'agenda',       // home | agenda | carte | clients | pool-detail
   agendaScope: 'week',   // day | week
   agendaUser: 'all',     // all | userId
   selectedDate: new Date(),
@@ -20,7 +24,6 @@ const state = {
   currentClient: null,
   currentPool: null,
   logs: [],          // logs récents (pour statut "fait")
-  routeOptimized: false,
 }
 
 // Clé pour identifier une occurrence (entretien + date)
@@ -229,20 +232,21 @@ function renderShell() {
   // Le client a sa propre interface (espace lecture)
   if (isClient()) return renderClientShell()
 
-  // Menu simplifié à 3 entrées (UX mobile) :
-  //  - Accueil : tableau de bord + accès Stats & Équipe (sections dépliables)
-  //  - Agenda  : calendrier + carte + tournée (3 modes)
+  // Menu à 4 entrées (UX mobile) :
+  //  - Accueil : tableau de bord + accès Stats & Équipe
+  //  - Agenda  : calendrier (liste jour/semaine)
+  //  - Carte   : carte du jour (jour par jour, atterrissage auto sur aujourd'hui)
   //  - Clients : clients ET leurs piscines (fusionnés)
   const navItems = [
     { id: 'home', icon: 'fa-house', label: 'Accueil' },
     { id: 'agenda', icon: 'fa-calendar-days', label: 'Agenda' },
+    { id: 'carte', icon: 'fa-map-location-dot', label: 'Carte' },
     { id: 'clients', icon: 'fa-users', label: 'Clients' },
   ]
   // Les vues internes (pool-detail, client-detail, stats, team) restent accessibles
   // depuis l'accueil / les fiches, mais n'encombrent plus la barre de navigation.
   const activeNav = ['client-detail', 'pool-detail'].includes(state.view) ? 'clients'
     : ['stats', 'team'].includes(state.view) ? 'home'
-    : ['tour'].includes(state.view) ? 'agenda'
     : state.view
 
   el('app').innerHTML = `
@@ -304,13 +308,13 @@ function renderView() {
   if (isClient()) { renderClientView(c); return }
   if (state.view === 'home') renderHome(c)
   else if (state.view === 'agenda') renderAgenda(c)
+  else if (state.view === 'carte') renderCarte(c)
   else if (state.view === 'clients') renderClients(c)
   else if (state.view === 'client-detail') renderClientDetail(c)
   else if (state.view === 'pools') renderClients(c) // ancien onglet → redirige vers Clients
   else if (state.view === 'pool-detail') renderPoolDetail(c)
   else if (state.view === 'team') renderTeam(c)
   else if (state.view === 'stats') renderStats(c)
-  else if (state.view === 'tour') renderAgenda(c) // tournée intégrée à l'agenda
 }
 
 // ============================================================
@@ -330,7 +334,6 @@ async function loadData() {
   state.users = res[2].data
   if (isPro()) state.clients = res[3].data
   await loadLogs()
-  await loadAlerts()
 }
 
 // Charge les logs sur une fenêtre de +/- 5 semaines autour de la date courante
@@ -404,12 +407,6 @@ function renderHome(c) {
       </button>
     </div>
 
-    <!-- Centre d'alertes -->
-    ${alertsCardHtml()}
-
-    <!-- Météo (1ère piscine géolocalisée) -->
-    <div id="home-weather"></div>
-
     <!-- Aujourd'hui -->
     <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 mb-5">
       <div class="flex items-center justify-between mb-3">
@@ -436,15 +433,6 @@ function renderHome(c) {
           </div>`).join('')}
       </div>
     </div>` : ''}`
-
-  // Météo de la 1ère piscine géolocalisée (asynchrone, non bloquant)
-  const geoPool = (state.pools || []).find(p => p.lat && p.lng)
-  if (geoPool && typeof weatherWidgetHtml === 'function') {
-    weatherWidgetHtml(geoPool.lat, geoPool.lng).then(html => {
-      const box = el('home-weather')
-      if (box && html) box.innerHTML = `<div class="mb-5">${html}</div>`
-    })
-  }
 }
 
 function homeItem(m, done) {

@@ -247,7 +247,7 @@ async function loadPoolPhotos(poolId) {
 }
 window.loadPoolPhotos = loadPoolPhotos
 
-function openPhotoUpload(poolId, logId = null) {
+function openPhotoUpload(poolId, logId = null, sendMailAfter = false) {
   openModal('Ajouter une photo', `
     <form id="photo-form" class="space-y-4">
       <div>
@@ -274,6 +274,16 @@ function openPhotoUpload(poolId, logId = null) {
       await API.post('/photos', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
       closeModal(); toast('Photo ajoutée')
       if (state.view === 'pool-detail') loadPoolPhotos(poolId)
+      // Si on devait envoyer le compte rendu au client après la photo : on le fait
+      // maintenant pour que la photo figure bien dans l'e-mail.
+      if (sendMailAfter && logId) {
+        try {
+          const { data } = await API.post(`/logs/${logId}/send-report`)
+          toast('Compte rendu envoyé au client 📧', 'success')
+        } catch (e2) {
+          toast('Photo OK, mais e-mail non envoyé : ' + (e2.response?.data?.error || 'erreur'), 'info')
+        }
+      }
     } catch (err) { btn.disabled = false; btn.innerHTML = 'Réessayer'; toast(err.response?.data?.error || 'Erreur', 'error') }
   })
 }

@@ -186,18 +186,21 @@ async function renderClientDetail(c) {
       ? `<div class="grid gap-3 sm:grid-cols-2 mb-5">${data.pools.map(poolCard).join('')}</div>`
       : '<div class="bg-white rounded-2xl border border-slate-100 p-8 text-center text-slate-400 mb-5"><i class="fas fa-water text-3xl mb-2"></i><p class="text-sm">Aucune piscine. Ajoutes-en une.</p></div>'}
 
-    <!-- Accès espace client -->
+    <!-- Compte rendu par e-mail -->
     <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-5">
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div class="flex items-start gap-3">
+        <span class="w-9 h-9 shrink-0 bg-cyan-100 text-cyan-600 rounded-lg flex items-center justify-center"><i class="fas fa-envelope-circle-check"></i></span>
         <div class="min-w-0">
-          <div class="font-bold text-sm text-slate-700"><i class="fas fa-user-lock text-cyan-500 mr-1"></i>Accès espace client</div>
-          <div class="text-xs text-slate-400 mt-0.5">${data.client_user_id ? 'Actif · ' + esc(data.client_account_email || '') : "Le client peut consulter l'historique de ses piscines en lecture seule"}</div>
-        </div>
-        <div class="flex gap-2 shrink-0">
-          ${data.client_user_id
-            ? `<button onclick="resetMemberPassword(${data.client_user_id}, '${esc(data.name).replace(/'/g,'')}')" class="text-xs bg-amber-50 text-amber-600 px-3 py-1.5 rounded-lg font-semibold hover:bg-amber-100"><i class="fas fa-key mr-1"></i>Mot de passe</button>
-               <button onclick="revokeClientAccess(${data.id})" class="text-xs bg-red-50 text-red-600 px-3 py-1.5 rounded-lg font-semibold hover:bg-red-100">Révoquer</button>`
-            : `<button onclick="createClientAccess(${data.id}, '${esc(data.email || '').replace(/'/g,'')}')" class="text-xs bg-cyan-600 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-cyan-700">Créer l'accès</button>`}
+          <div class="font-bold text-sm text-slate-700">Compte rendu par e-mail
+            ${EMAIL_ENABLED ? '' : '<span class="text-[11px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full ml-1">Bientôt disponible</span>'}
+          </div>
+          <div class="text-xs text-slate-500 mt-1">
+            ${!EMAIL_ENABLED
+              ? `Bientôt : à chaque passage validé, un compte rendu complet (relevés d'eau, produits, photos, conseils) sera envoyé automatiquement par e-mail au client — sans aucun compte à créer.${data.email ? '' : ' Pense à renseigner son <b>e-mail</b> dès maintenant (bouton « Modifier »).'}`
+              : (data.email
+                ? `À chaque passage validé, un compte rendu complet (relevés d'eau, produits, photos, conseils) est envoyé automatiquement à <b class="text-slate-700">${esc(data.email)}</b>. Le client n'a aucun compte à créer.`
+                : `Ajoute un <b>e-mail</b> à ce client (bouton « Modifier » en haut) pour qu'il reçoive automatiquement le compte rendu après chaque passage validé.`)}
+          </div>
         </div>
       </div>
     </div>`
@@ -207,34 +210,3 @@ window.renderClientDetail = renderClientDetail
 // Compat : openClientDetail ouvre désormais la page complète
 function openClientDetail(id) { closeModal(); viewClient(id) }
 window.openClientDetail = openClientDetail
-
-function createClientAccess(clientId, defaultEmail) {
-  openModal('Créer un accès client', `
-    <form id="ca-form" class="space-y-4">
-      <div class="bg-cyan-50 rounded-xl p-3 text-sm text-cyan-800">
-        <i class="fas fa-circle-info mr-1"></i> Saisis l'email du client. Un mot de passe sera généré automatiquement : transmets-le lui pour qu'il puisse consulter l'historique de ses piscines.
-      </div>
-      <div>
-        <label class="block text-sm font-semibold text-slate-600 mb-1">Email du client *</label>
-        <input id="ca-email" type="email" required value="${esc(defaultEmail || '')}" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-cyan-500 outline-none" placeholder="client@exemple.fr">
-      </div>
-      <button type="submit" class="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2.5 rounded-xl">Générer l'accès</button>
-    </form>`)
-  el('ca-form').addEventListener('submit', async (e) => {
-    e.preventDefault()
-    try {
-      const { data } = await API.post(`/clients/${clientId}/account`, { email: el('ca-email').value })
-      closeModal()
-      showCredentials('Accès client créé', data.email, data.password, 'Transmettez ces identifiants à votre client pour qu\'il accède à son espace.')
-      await loadData()
-    } catch (err) { toast(err.response?.data?.error || 'Erreur', 'error') }
-  })
-}
-window.createClientAccess = createClientAccess
-
-async function revokeClientAccess(clientId) {
-  if (!confirm("Révoquer l'accès de ce client ? Son compte sera supprimé.")) return
-  try { await API.delete(`/clients/${clientId}/account`); closeModal(); await loadData(); renderView(); toast('Accès révoqué') }
-  catch { toast('Erreur', 'error') }
-}
-window.revokeClientAccess = revokeClientAccess

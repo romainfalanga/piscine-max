@@ -69,51 +69,6 @@ function liveDiagnose(poolId) {
 window.liveDiagnose = liveDiagnose
 
 // ============================================================
-// CENTRE D'ALERTES
-// ============================================================
-async function loadAlerts() {
-  try { const { data } = await API.get('/alerts'); state.alerts = data; return data }
-  catch (e) { console.warn('loadAlerts:', e); state.alerts = { alerts: [], counts: { alert: 0, warn: 0 } }; return state.alerts }
-}
-window.loadAlerts = loadAlerts
-
-function alertsCardHtml() {
-  const a = state.alerts
-  if (!a || !a.alerts || !a.alerts.length) {
-    return `
-      <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 mb-5">
-        <div class="flex items-center gap-2 text-emerald-600 font-bold"><i class="fas fa-shield-heart"></i><span>Tout va bien</span></div>
-        <p class="text-sm text-slate-400 mt-1">Aucune alerte : toutes tes piscines sont à jour et l'eau est dans les normes. 🎉</p>
-      </div>`
-  }
-  const items = a.alerts.slice(0, 8).map(al => {
-    const s = SEVERITY_STYLE[al.level] || SEVERITY_STYLE.warn
-    const typeIcon = al.type === 'overdue' ? 'fa-clock' : 'fa-flask'
-    return `
-      <button onclick="viewPool(${al.pool_id})" class="w-full text-left flex items-start gap-3 p-3 rounded-xl border ${s.border} ${s.bg} hover:brightness-95 transition">
-        <span class="w-8 h-8 rounded-lg flex items-center justify-center text-white shrink-0" style="background:${s.dot}"><i class="fas ${typeIcon}"></i></span>
-        <div class="flex-1 min-w-0">
-          <div class="font-bold text-sm text-slate-800 truncate">${esc(al.pool_label)} <span class="text-xs font-normal text-slate-400">· ${esc(al.client_name)}</span></div>
-          <div class="text-sm ${s.text} font-medium">${esc(al.title)}</div>
-          ${al.detail ? `<div class="text-xs text-slate-500 truncate">${esc(al.detail)}</div>` : ''}
-        </div>
-        <i class="fas fa-chevron-right text-slate-300 mt-1"></i>
-      </button>`
-  }).join('')
-  return `
-    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 mb-5">
-      <div class="flex items-center justify-between mb-3">
-        <h3 class="font-bold text-slate-700"><i class="fas fa-bell text-red-500 mr-2"></i>Centre d'alertes
-          ${a.counts.alert ? `<span class="ml-1 text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">${a.counts.alert} urgent${a.counts.alert>1?'s':''}</span>` : ''}
-          ${a.counts.warn ? `<span class="ml-1 text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">${a.counts.warn} à surveiller</span>` : ''}
-        </h3>
-      </div>
-      <div class="space-y-2">${items}</div>
-    </div>`
-}
-window.alertsCardHtml = alertsCardHtml
-
-// ============================================================
 // RAPPORT DE PASSAGE (partageable / imprimable)
 // ============================================================
 async function openReport(logId) {
@@ -174,7 +129,9 @@ async function openReport(logId) {
       </div>
       <div class="flex gap-2 pt-4 mt-2 border-t border-slate-100 no-print">
         <button onclick="printReport()" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-xl"><i class="fas fa-print mr-1"></i>Imprimer / PDF</button>
-        <button onclick="shareReport(${logId})" class="flex-1 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold py-2.5 rounded-xl"><i class="fas fa-share-nodes mr-1"></i>Partager</button>
+        ${EMAIL_ENABLED
+          ? `<button id="report-mail-btn" onclick="sendReportByMail(${logId})" class="flex-1 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold py-2.5 rounded-xl"><i class="fas fa-envelope mr-1"></i>Envoyer au client</button>`
+          : `<button disabled title="Bientôt disponible" class="flex-1 bg-slate-100 text-slate-400 font-semibold py-2.5 rounded-xl cursor-not-allowed"><i class="fas fa-envelope mr-1"></i>Envoyer au client · bientôt</button>`}
       </div>`
     el('modal-root').querySelector('.overflow-y-auto').innerHTML = html
   } catch (err) {
@@ -198,14 +155,20 @@ function printReport() {
 }
 window.printReport = printReport
 
-async function shareReport(logId) {
-  const text = 'Compte-rendu de votre entretien piscine — consultez votre espace Piscine Max.'
-  if (navigator.share) {
-    try { await navigator.share({ title: 'Compte-rendu Piscine Max', text }); return } catch {}
+// Envoie (ou renvoie) le compte rendu de ce passage au client, par e-mail.
+async function sendReportByMail(logId) {
+  const btn = el('report-mail-btn')
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Envoi...' }
+  try {
+    const { data } = await API.post(`/logs/${logId}/send-report`)
+    toast('Compte rendu envoyé à ' + (data.to || 'au client') + ' 📧', 'success')
+    if (btn) { btn.innerHTML = '<i class="fas fa-check mr-1"></i>Envoyé'; btn.classList.remove('bg-cyan-600','hover:bg-cyan-700'); btn.classList.add('bg-emerald-600') }
+  } catch (err) {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-envelope mr-1"></i>Réessayer' }
+    toast(err.response?.data?.error || "Échec de l'envoi", 'error')
   }
-  toast('Le client retrouve ce rapport dans son espace 👍', 'info')
 }
-window.shareReport = shareReport
+window.sendReportByMail = sendReportByMail
 
 // ============================================================
 // STATISTIQUES
@@ -274,62 +237,5 @@ async function renderStats(c) {
   }
 }
 window.renderStats = renderStats
-
-// ============================================================
-// MÉTÉO + conseils saisonniers
-// ============================================================
-const WEATHER_CODES = {
-  0: ['Ciel dégagé', 'fa-sun', '#f59e0b'], 1: ['Plutôt clair', 'fa-sun', '#f59e0b'],
-  2: ['Partiellement nuageux', 'fa-cloud-sun', '#fbbf24'], 3: ['Couvert', 'fa-cloud', '#94a3b8'],
-  45: ['Brouillard', 'fa-smog', '#94a3b8'], 48: ['Brouillard givrant', 'fa-smog', '#94a3b8'],
-  51: ['Bruine', 'fa-cloud-rain', '#60a5fa'], 61: ['Pluie', 'fa-cloud-rain', '#3b82f6'],
-  63: ['Pluie modérée', 'fa-cloud-showers-heavy', '#3b82f6'], 65: ['Forte pluie', 'fa-cloud-showers-heavy', '#2563eb'],
-  80: ['Averses', 'fa-cloud-showers-heavy', '#3b82f6'], 95: ['Orage', 'fa-cloud-bolt', '#7c3aed'],
-}
-function weatherInfo(code) { return WEATHER_CODES[code] || ['—', 'fa-cloud', '#94a3b8'] }
-
-// Conseil saisonnier selon température et UV
-function seasonalAdvice(tempMax, uv) {
-  const tips = []
-  if (tempMax >= 30) tips.push('🔥 Forte chaleur : le chlore se consomme vite, vérifie le niveau et la filtration (augmente la durée).')
-  else if (tempMax >= 25) tips.push('☀️ Temps chaud : surveille le chlore et le pH, risque d\'algues accru.')
-  else if (tempMax <= 12) tips.push('❄️ Temps frais : ralentis la filtration, pense à l\'hivernage si la saison se termine.')
-  if (uv >= 7) tips.push('🌞 UV élevés : le stabilisant protège le chlore, vérifie qu\'il est suffisant.')
-  if (!tips.length) tips.push('🌤️ Conditions clémentes : entretien de routine.')
-  return tips
-}
-
-async function weatherWidgetHtml(lat, lng) {
-  if (!lat || !lng) return ''
-  try {
-    const { data } = await API.get(`/weather?lat=${lat}&lng=${lng}`)
-    const cur = data.current, daily = data.daily
-    const [label, icon, color] = weatherInfo(cur.weather_code)
-    const tempMax = daily.temperature_2m_max?.[0]
-    const uv = daily.uv_index_max?.[0] ?? 0
-    const advice = seasonalAdvice(tempMax, uv)
-    const days = (daily.time || []).slice(0, 3).map((t, i) => {
-      const [, di, dc] = weatherInfo(daily.weather_code[i])
-      return `<div class="text-center flex-1">
-        <div class="text-[11px] text-slate-400">${i===0?'Auj.':new Date(t).toLocaleDateString('fr-FR',{weekday:'short'})}</div>
-        <i class="fas ${di} text-lg my-1" style="color:${dc}"></i>
-        <div class="text-xs font-bold text-slate-600">${Math.round(daily.temperature_2m_max[i])}°</div>
-      </div>`
-    }).join('')
-    return `
-      <div class="bg-gradient-to-br from-sky-50 to-cyan-50 rounded-xl border border-sky-100 p-3 mt-3">
-        <div class="flex items-center gap-3">
-          <i class="fas ${icon} text-3xl" style="color:${color}"></i>
-          <div class="flex-1">
-            <div class="font-bold text-slate-700">${Math.round(cur.temperature_2m)}°C · ${label}</div>
-            <div class="text-xs text-slate-400">UV max ${uv}</div>
-          </div>
-          <div class="flex gap-2">${days}</div>
-        </div>
-        <div class="mt-2 space-y-1">${advice.map(t => `<div class="text-xs text-slate-600">${t}</div>`).join('')}</div>
-      </div>`
-  } catch { return '' }
-}
-window.weatherWidgetHtml = weatherWidgetHtml
 
 

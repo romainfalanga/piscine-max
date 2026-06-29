@@ -6,12 +6,15 @@ import { verifyPassword, createSession, verifySession, hashPassword } from './au
 import { geocodeAddress } from './geocode'
 import { renderApp } from './html'
 import { diagnoseWater } from './water'
+import { renderReportEmail, reportEmailSubject, sendReportEmail, type ReportData } from './email'
 import { effectiveIntervalForDate, effectiveSeasonLabel, findSeasonOverlap, type Season } from './seasons'
 
 type Bindings = {
   DB: D1Database
   PHOTOS: R2Bucket
   SESSION_SECRET?: string
+  RESEND_API_KEY?: string        // Clé API Resend (secret Cloudflare)
+  RESEND_FROM?: string           // Expéditeur vérifié, ex: "Piscine Max <contact@mondomaine.fr>"
 }
 
 // Fallback si le secret n'est pas défini en variable d'environnement Cloudflare.
@@ -134,6 +137,9 @@ app.post('/api/login', async (c) => {
   if (!user) return c.json({ error: 'Identifiants incorrects' }, 401)
   const ok = await verifyPassword(password, user.password_hash)
   if (!ok) return c.json({ error: 'Identifiants incorrects' }, 401)
+  // Les comptes clients ont été supprimés : on bloque toute connexion d'un éventuel
+  // ancien compte client resté en base. Seuls les membres (piscinistes/intervenants) se connectent.
+  if (user.role === 'client') return c.json({ error: 'Les espaces clients ont été supprimés. Contactez votre pisciniste : il vous transmet désormais les comptes rendus par e-mail.' }, 403)
 
   const token = await createSession(
     { uid: user.id, role: user.role, name: user.name, exp: Date.now() + SESSION_TTL },
@@ -338,38 +344,13 @@ async function clientOwnedByPro(c: any, clientId: any, proId: number): Promise<b
   return !!row && row.owner_id === proId
 }
 
-// Créer un compte d'accès pour un client (mot de passe généré)
-app.post('/api/clients/:id/account', requireAuth, requirePro, async (c) => {
-  const user = c.get('user')
-  const id = c.req.param('id')
-  if (!(await clientOwnedByPro(c, id, user.uid))) return c.json({ error: 'Action non autorisée' }, 403)
-  const { email } = await c.req.json()
-  if (!email) return c.json({ error: 'Email du client requis' }, 400)
-  const mail = email.toLowerCase().trim()
-  const client = await c.env.DB.prepare('SELECT name, client_user_id FROM clients WHERE id = ?').bind(id).first<any>()
-  if (client?.client_user_id) return c.json({ error: 'Ce client a déjà un accès' }, 409)
-  const existing = await c.env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(mail).first()
-  if (existing) return c.json({ error: 'Cet email est déjà utilisé par un autre compte' }, 409)
-  const newPwd = genPassword()
-  const r = await c.env.DB.prepare('INSERT INTO users (email, password_hash, name, role, color, created_by) VALUES (?, ?, ?, ?, ?, ?)')
-    .bind(mail, await hashPassword(newPwd), client.name, 'client', '#64748b', user.uid).run()
-  const cuid = r.meta.last_row_id as number
-  await c.env.DB.prepare('UPDATE clients SET client_user_id = ?, email = COALESCE(email, ?) WHERE id = ?').bind(cuid, mail, id).run()
-  return c.json({ ok: true, email: mail, password: newPwd, user_id: cuid })
-})
-
-// Révoquer l'accès d'un client
-app.delete('/api/clients/:id/account', requireAuth, requirePro, async (c) => {
-  const user = c.get('user')
-  const id = c.req.param('id')
-  if (!(await clientOwnedByPro(c, id, user.uid))) return c.json({ error: 'Action non autorisée' }, 403)
-  const client = await c.env.DB.prepare('SELECT client_user_id FROM clients WHERE id = ?').bind(id).first<any>()
-  if (client?.client_user_id) {
-    await c.env.DB.prepare('DELETE FROM users WHERE id = ? AND role = ?').bind(client.client_user_id, 'client').run()
-    await c.env.DB.prepare('UPDATE clients SET client_user_id = NULL WHERE id = ?').bind(id).run()
-  }
-  return c.json({ ok: true })
-})
+// [SUPPRIMÉ] Les comptes clients n'existent plus : le client ne se connecte plus.
+// Les informations lui sont transmises par e-mail (compte rendu après chaque passage).
+// Ces routes sont conservées en 410 Gone pour neutraliser tout ancien appel front.
+app.post('/api/clients/:id/account', requireAuth, requirePro, (c) =>
+  c.json({ error: 'Les comptes clients ont été supprimés. Les comptes rendus sont désormais envoyés par e-mail.' }, 410))
+app.delete('/api/clients/:id/account', requireAuth, requirePro, (c) =>
+  c.json({ error: 'Les comptes clients ont été supprimés.' }, 410))
 
 // ============================================================
 // POOLS (piscines)
@@ -667,7 +648,30 @@ app.post('/api/maintenances/:id/log', requireAuth, async (c) => {
     num(b.ph), num(b.chlorine), num(b.salt), num(b.water_temp), num(b.stabilizer), num(b.tac),
     b.products_added || null, b.duration_min ? parseInt(b.duration_min) : null
   ).run()
-  return c.json({ ok: true, log_id: r.meta.last_row_id })
+  const logId = r.meta.last_row_id
+
+  // Envoi automatique du compte rendu au client (si demandé et e-mail dispo).
+  // Best-effort : un échec d'e-mail ne fait jamais échouer la validation du passage.
+  let email: { sent: boolean; to?: string; error?: string } = { sent: false }
+  if (b.send_email) {
+    try {
+      const data = await buildReportData(c, logId, user)
+      const to = data?.pool?.client_email
+      const apiKey = c.env.RESEND_API_KEY
+      if (!data) email = { sent: false, error: 'Passage introuvable' }
+      else if (!to) email = { sent: false, error: "Le client n'a pas d'adresse e-mail" }
+      else if (!apiKey) email = { sent: false, error: "Envoi d'e-mails non configuré" }
+      else {
+        const from = c.env.RESEND_FROM || 'Piscine Max <onboarding@resend.dev>'
+        const origin = new URL(c.req.url).origin
+        const res = await sendReportEmail(apiKey, from, to, reportEmailSubject(data), renderReportEmail(data, origin), data.pool?.pro_email || undefined)
+        email = res.ok ? { sent: true, to } : { sent: false, to, error: res.error }
+      }
+    } catch (e: any) {
+      email = { sent: false, error: e?.message || 'Échec e-mail' }
+    }
+  }
+  return c.json({ ok: true, log_id: logId, email })
 })
 
 app.delete('/api/logs/:id', requireAuth, async (c) => {
@@ -939,7 +943,7 @@ app.get('/api/logs/:id/report', requireAuth, async (c) => {
   if (!(await canAccessPool(c, log.pool_id, user))) return c.json({ error: 'Non autorisé' }, 403)
 
   const pool = await c.env.DB.prepare(`
-    SELECT p.*, cl.name as client_name, owner.name as pro_name, owner.company as pro_company, owner.phone as pro_phone
+    SELECT p.*, cl.name as client_name, cl.email as client_email, owner.name as pro_name, owner.company as pro_company, owner.phone as pro_phone, owner.email as pro_email
     FROM pools p JOIN clients cl ON cl.id = p.client_id
     LEFT JOIN users owner ON owner.id = p.owner_id
     WHERE p.id = ?
@@ -955,6 +959,58 @@ app.get('/api/logs/:id/report', requireAuth, async (c) => {
     photos: (photos as any[]).map(p => ({ ...p, url: `/api/photos/${p.id}` })),
     diagnosis: diag
   })
+})
+
+// Collecte les données d'un passage (log + pool + photos + diagnostic) pour le rapport/e-mail.
+// Renvoie null si introuvable ou hors périmètre.
+async function buildReportData(c: any, logId: any, user: SessionUser): Promise<ReportData | null> {
+  const log = await c.env.DB.prepare(`
+    SELECT l.*, m.pool_id, u.name as done_by_name, u.company as done_by_company
+    FROM maintenance_logs l
+    JOIN maintenances m ON m.id = l.maintenance_id
+    LEFT JOIN users u ON u.id = l.done_by
+    WHERE l.id = ?
+  `).bind(logId).first<any>()
+  if (!log) return null
+  if (!(await canAccessPool(c, log.pool_id, user))) return null
+  const pool = await c.env.DB.prepare(`
+    SELECT p.*, cl.name as client_name, cl.email as client_email, owner.name as pro_name, owner.company as pro_company, owner.phone as pro_phone, owner.email as pro_email
+    FROM pools p JOIN clients cl ON cl.id = p.client_id
+    LEFT JOIN users owner ON owner.id = p.owner_id
+    WHERE p.id = ?
+  `).bind(log.pool_id).first<any>()
+  const { results: photos } = await c.env.DB.prepare(
+    'SELECT id, caption FROM photos WHERE log_id = ? ORDER BY created_at'
+  ).bind(logId).all()
+  return {
+    log, pool,
+    photos: (photos as any[]).map(p => ({ ...p, caption: p.caption, url: `/api/photos/${p.id}` })),
+    diagnosis: diagnoseWater(log, pool || {}),
+  }
+}
+
+// Envoie au client (par e-mail) le compte rendu d'un passage validé.
+// Utilisé par le bouton "Valider & envoyer au client" et par la validation automatique.
+app.post('/api/logs/:id/send-report', requireAuth, requirePro, async (c) => {
+  const user = c.get('user')
+  const data = await buildReportData(c, c.req.param('id'), user)
+  if (!data) return c.json({ error: 'Passage introuvable ou non autorisé' }, 404)
+
+  const to = data.pool?.client_email
+  if (!to) return c.json({ error: "Ce client n'a pas d'adresse e-mail. Ajoute-la sur sa fiche pour lui envoyer le compte rendu." }, 422)
+
+  const apiKey = c.env.RESEND_API_KEY
+  if (!apiKey) return c.json({ error: "L'envoi d'e-mails n'est pas encore configuré (clé Resend manquante)." }, 503)
+  // Expéditeur : le secret RESEND_FROM (domaine vérifié) ou le bac à sable Resend par défaut.
+  const from = c.env.RESEND_FROM || 'Piscine Max <onboarding@resend.dev>'
+  const origin = new URL(c.req.url).origin
+  const replyTo = data.pool?.pro_email || undefined
+
+  const html = renderReportEmail(data, origin)
+  const subject = reportEmailSubject(data)
+  const result = await sendReportEmail(apiKey, from, to, subject, html, replyTo)
+  if (!result.ok) return c.json({ error: result.error || "Échec de l'envoi" }, 502)
+  return c.json({ ok: true, to, id: result.id })
 })
 
 // ============================================================

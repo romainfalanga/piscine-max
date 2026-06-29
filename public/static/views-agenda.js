@@ -92,11 +92,6 @@ function renderAgenda(c) {
           <button onclick="setScope('day')" class="view-toggle-btn px-3 py-1.5 rounded-md text-sm font-semibold ${state.agendaScope === 'day' ? 'bg-white shadow text-cyan-700' : 'text-slate-500'}">Jour</button>
           <button onclick="setScope('week')" class="view-toggle-btn px-3 py-1.5 rounded-md text-sm font-semibold ${state.agendaScope === 'week' ? 'bg-white shadow text-cyan-700' : 'text-slate-500'}">Semaine</button>
         </div>
-        <div class="bg-slate-200 rounded-lg p-0.5 flex">
-          <button onclick="setMode('calendar')" class="view-toggle-btn px-2.5 sm:px-3 py-1.5 rounded-md text-sm font-semibold ${state.agendaMode === 'calendar' ? 'bg-white shadow text-cyan-700' : 'text-slate-500'}"><i class="fas fa-list-ul sm:mr-1"></i><span class="hidden sm:inline">Liste</span></button>
-          <button onclick="setMode('map')" class="view-toggle-btn px-2.5 sm:px-3 py-1.5 rounded-md text-sm font-semibold ${state.agendaMode === 'map' ? 'bg-white shadow text-cyan-700' : 'text-slate-500'}"><i class="fas fa-map-location-dot sm:mr-1"></i><span class="hidden sm:inline">Carte</span></button>
-          <button onclick="setMode('tour')" class="view-toggle-btn px-2.5 sm:px-3 py-1.5 rounded-md text-sm font-semibold ${state.agendaMode === 'tour' ? 'bg-white shadow text-cyan-700' : 'text-slate-500'}"><i class="fas fa-route sm:mr-1"></i><span class="hidden sm:inline">Tournée</span></button>
-        </div>
       </div>
     </div>
 
@@ -112,9 +107,7 @@ function renderAgenda(c) {
 
     <div id="agenda-body"></div>`
 
-  if (state.agendaMode === 'calendar') renderAgendaCalendar()
-  else if (state.agendaMode === 'map') renderAgendaMap()
-  else renderAgendaTour()
+  renderAgendaCalendar()
 }
 window.renderAgenda = renderAgenda
 
@@ -126,7 +119,6 @@ function agendaTitle() {
 }
 
 function setScope(s) { state.agendaScope = s; renderAgenda(el('main-content')) }
-function setMode(m) { state.agendaMode = m; renderAgenda(el('main-content')) }
 function shiftDate(dir) {
   const d = new Date(state.selectedDate)
   d.setDate(d.getDate() + dir * (state.agendaScope === 'day' ? 1 : 7))
@@ -134,7 +126,7 @@ function shiftDate(dir) {
   renderAgenda(el('main-content'))
 }
 function goToday() { state.selectedDate = new Date(); renderAgenda(el('main-content')) }
-window.setScope = setScope; window.setMode = setMode; window.shiftDate = shiftDate; window.goToday = goToday
+window.setScope = setScope; window.shiftDate = shiftDate; window.goToday = goToday
 
 // ---------- Carte d'un entretien ----------
 // dateIso : la date de l'occurrence (pour savoir si "fait")
@@ -220,19 +212,10 @@ function renderAgendaCalendar() {
   }
 }
 
-// ---------- Vue carte ----------
-function collectMapItems() {
-  let items = []
-  if (state.agendaScope === 'day') {
-    items = occurrencesForDate(state.selectedDate).map(m => ({ ...m, _date: state.selectedDate }))
-  } else {
-    const start = startOfWeek(state.selectedDate)
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(start); d.setDate(d.getDate() + i)
-      occurrencesForDate(d).forEach(m => items.push({ ...m, _date: new Date(d) }))
-    }
-  }
-  return items.filter(m => m.lat && m.lng)
+// ---------- Carte : items géolocalisés d'une journée ----------
+function collectMapItems(date) {
+  const d = date || carteState.date
+  return occurrencesForDate(d).map(m => ({ ...m, _date: new Date(d) })).filter(m => m.lat && m.lng)
 }
 
 // Distance approximative (haversine) en km
@@ -268,13 +251,54 @@ function routeDistance(items) {
   return total
 }
 
-function renderAgendaMap() {
-  const body = el('agenda-body')
-  let items = collectMapItems()
-  if (state.routeOptimized) items = optimizeRoute(items)
+// ============================================================
+// PAGE CARTE (dédiée) — jour par jour uniquement, atterrissage auto sur aujourd'hui
+// ============================================================
+const carteState = { date: new Date(), optimized: false }
+
+function carteTitle() {
+  const t = isoDate(new Date())
+  const isToday = isoDate(carteState.date) === t
+  return (isToday ? "Aujourd'hui · " : '') + fmtDate(carteState.date)
+}
+function carteShift(dir) {
+  const d = new Date(carteState.date); d.setDate(d.getDate() + dir)
+  carteState.date = d; renderCarte(el('main-content'))
+}
+function carteToday() { carteState.date = new Date(); renderCarte(el('main-content')) }
+function carteToggleOptimize() { carteState.optimized = !carteState.optimized; renderCarte(el('main-content')) }
+window.carteShift = carteShift; window.carteToday = carteToday; window.carteToggleOptimize = carteToggleOptimize
+
+function renderCarte(c) {
+  // On arrive toujours sur le jour présent à la première ouverture de la session
+  if (!carteState._touched) { carteState.date = new Date(); carteState._touched = true }
+
+  const userFilter = isAdmin() ? `
+    <select id="carte-user" onchange="state.agendaUser=this.value; renderCarte(document.getElementById('main-content'))" class="px-3 py-2 rounded-lg border border-slate-300 text-sm bg-white">
+      <option value="all" ${state.agendaUser === 'all' ? 'selected' : ''}>Tous les intervenants</option>
+      ${state.users.map(u => `<option value="${u.id}" ${String(state.agendaUser) === String(u.id) ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}
+    </select>` : ''
+
+  let items = collectMapItems(carteState.date)
+  if (carteState.optimized) items = optimizeRoute(items)
   const dist = items.length > 1 ? routeDistance(items) : 0
 
-  body.innerHTML = `
+  c.innerHTML = `
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+      <h2 class="text-xl sm:text-2xl font-extrabold text-slate-800"><i class="fas fa-map-location-dot text-cyan-600 mr-2"></i>Carte du jour</h2>
+      <div class="flex flex-wrap items-center gap-2">${userFilter}</div>
+    </div>
+
+    <!-- Navigation date (jour par jour) -->
+    <div class="flex items-center justify-between bg-white rounded-xl border border-slate-100 px-3 py-2 mb-4 shadow-sm">
+      <button onclick="carteShift(-1)" class="w-9 h-9 rounded-lg hover:bg-slate-100 text-slate-500"><i class="fas fa-chevron-left"></i></button>
+      <div class="text-center">
+        <div class="font-bold text-slate-700 capitalize">${carteTitle()}</div>
+        <button onclick="carteToday()" class="text-xs text-cyan-600 font-semibold">Aujourd'hui</button>
+      </div>
+      <button onclick="carteShift(1)" class="w-9 h-9 rounded-lg hover:bg-slate-100 text-slate-500"><i class="fas fa-chevron-right"></i></button>
+    </div>
+
     <div class="grid lg:grid-cols-3 gap-4 fade-in">
       <div class="lg:col-span-2 min-w-0 bg-white rounded-2xl border border-slate-100 shadow-sm p-1.5 relative overflow-hidden">
         <div id="map" class="w-full h-[420px] sm:h-[560px] rounded-xl overflow-hidden"></div>
@@ -284,102 +308,16 @@ function renderAgendaMap() {
           <span class="text-sm font-semibold text-slate-500">${items.length} étape${items.length > 1 ? 's' : ''}${dist ? ` · ~${dist.toFixed(1)} km` : ''}</span>
         </div>
         ${items.length > 1 ? `
-          <button onclick="toggleOptimize()" class="w-full mb-1 ${state.routeOptimized ? 'bg-cyan-600 text-white' : 'bg-white text-cyan-700 border border-cyan-200'} font-semibold py-2 rounded-xl text-sm shadow-sm transition">
-            <i class="fas fa-wand-magic-sparkles mr-1"></i>${state.routeOptimized ? 'Parcours optimisé ✓' : 'Optimiser le parcours'}
+          <button onclick="carteToggleOptimize()" class="w-full mb-1 ${carteState.optimized ? 'bg-cyan-600 text-white' : 'bg-white text-cyan-700 border border-cyan-200'} font-semibold py-2 rounded-xl text-sm shadow-sm transition">
+            <i class="fas fa-wand-magic-sparkles mr-1"></i>${carteState.optimized ? 'Parcours optimisé ✓' : 'Optimiser le parcours'}
           </button>` : ''}
-        ${items.length ? items.map((m, i) => maintCard(m, i + 1, isoDate(m._date))).join('') : '<div class="text-center py-12 text-slate-400"><i class="fas fa-map-pin text-3xl mb-2"></i><p class="text-sm">Aucune piscine géolocalisée sur cette période</p></div>'}
+        ${items.length ? items.map((m, i) => maintCard(m, i + 1, isoDate(m._date))).join('') : '<div class="text-center py-12 text-slate-400"><i class="fas fa-map-pin text-3xl mb-2"></i><p class="text-sm">Aucune piscine géolocalisée ce jour</p></div>'}
       </div>
     </div>`
 
   setTimeout(() => initMap(items), 100)
 }
-
-function toggleOptimize() {
-  state.routeOptimized = !state.routeOptimized
-  renderAgendaMap()
-}
-window.toggleOptimize = toggleOptimize
-
-// ---------- Vue tournée (assistant pas-à-pas, dans l'agenda) ----------
-const agendaTour = { index: 0 }
-function renderAgendaTour() {
-  const body = el('agenda-body')
-  // La tournée se base sur la date sélectionnée de l'agenda
-  const date = state.selectedDate || new Date()
-  let items = occurrencesForDate(date)
-  if (state.routeOptimized) {
-    const geo = items.filter(m => m.lat && m.lng)
-    const noGeo = items.filter(m => !(m.lat && m.lng))
-    items = [...optimizeRoute(geo), ...noGeo]
-  }
-  const dIso = isoDate(date)
-  const doneSet = builtDoneSet()
-  const doneCount = items.filter(m => doneSet.has(occKey(m.id, dIso))).length
-
-  if (!items.length) {
-    body.innerHTML = `<div class="bg-white rounded-2xl border border-slate-100 p-10 text-center text-slate-400">
-      <i class="fas fa-mug-hot text-4xl mb-3"></i><p>Aucun entretien prévu ce jour. Repos bien mérité ! ☕</p></div>`
-    return
-  }
-  agendaTour.index = Math.min(agendaTour.index, items.length - 1)
-  const cur = items[agendaTour.index]
-  const isDone = doneSet.has(occKey(cur.id, dIso))
-  const progress = Math.round((doneCount / items.length) * 100)
-  const label = esc(cur.pool_label).replace(/'/g, '')
-
-  let routine = []
-  try { routine = cur.routine ? JSON.parse(cur.routine) : [] } catch {}
-
-  body.innerHTML = `
-    <div class="fade-in">
-      <div class="flex items-center justify-between mb-2">
-        <span class="text-sm font-bold text-slate-500">${doneCount}/${items.length} faits</span>
-        ${items.length > 1 ? `<button onclick="toggleOptimize2()" class="text-xs ${state.routeOptimized ? 'text-cyan-600' : 'text-slate-400'} font-semibold"><i class="fas fa-wand-magic-sparkles mr-1"></i>${state.routeOptimized ? 'Parcours optimisé' : 'Optimiser'}</button>` : ''}
-      </div>
-      <div class="h-2 bg-slate-200 rounded-full mb-4 overflow-hidden"><div class="h-full bg-emerald-500 transition-all" style="width:${progress}%"></div></div>
-
-      <div class="bg-white rounded-2xl shadow-sm border ${isDone ? 'border-emerald-200' : 'border-slate-100'} p-5 mb-4">
-        <div class="flex items-center justify-between mb-1">
-          <span class="text-xs font-bold text-cyan-600 uppercase">Arrêt ${agendaTour.index + 1} / ${items.length}</span>
-          ${isDone ? '<span class="text-emerald-600 text-sm font-bold"><i class="fas fa-circle-check mr-1"></i>Fait</span>' : ''}
-        </div>
-        <div class="text-xl font-extrabold text-slate-800">${cur.time ? `<span class="text-slate-400">${esc(cur.time)} · </span>` : ''}${esc(cur.pool_label)}</div>
-        <div class="text-sm text-slate-400">${esc(cur.client_name || '')}${cur.pool_address ? ' · ' + esc(cur.pool_address) : ''}</div>
-
-        ${cur.access_code ? `<div class="mt-2 inline-flex items-center gap-2 bg-amber-50 text-amber-700 px-3 py-1.5 rounded-lg text-sm font-bold"><i class="fas fa-key"></i>Code : ${esc(cur.access_code)}</div>` : ''}
-        ${cur.access_notes ? `<div class="mt-2 text-xs text-slate-500"><i class="fas fa-circle-info mr-1"></i>${esc(cur.access_notes)}</div>` : ''}
-
-        ${routine.length ? `<div class="mt-3 bg-slate-50 rounded-xl p-3">
-          <div class="text-xs font-bold text-slate-500 uppercase mb-2">Routine</div>
-          ${routine.map(step => `<label class="flex items-center gap-2 py-1 cursor-pointer"><input type="checkbox" class="w-5 h-5 rounded accent-emerald-600"><span class="text-sm text-slate-700">${esc(step)}</span></label>`).join('')}
-        </div>` : ''}
-
-        <div class="grid grid-cols-2 gap-2 mt-4">
-          ${cur.lat && cur.lng ? `<button onclick="openGPS(${cur.lat},${cur.lng})" class="bg-sky-50 text-sky-700 font-semibold py-2.5 rounded-xl"><i class="fas fa-diamond-turn-right mr-1"></i>Y aller</button>` : '<span></span>'}
-          ${cur.client_phone ? `<a href="tel:${esc(cur.client_phone)}" class="text-center bg-slate-100 text-slate-700 font-semibold py-2.5 rounded-xl"><i class="fas fa-phone mr-1"></i>Appeler</a>` : '<span></span>'}
-        </div>
-        <div class="mt-2">
-          ${isDone
-            ? `<button onclick="agendaTourNext(${items.length})" class="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 rounded-xl">Arrêt suivant <i class="fas fa-arrow-right ml-1"></i></button>`
-            : `<button onclick="openLogForm(${cur.id}, '${label}', null, ${cur.pool_id})" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl"><i class="fas fa-clipboard-check mr-1"></i>Saisir le passage</button>`}
-        </div>
-      </div>
-
-      <div class="flex items-center justify-between">
-        <button onclick="agendaTourPrev()" ${agendaTour.index === 0 ? 'disabled' : ''} class="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 disabled:opacity-40"><i class="fas fa-chevron-left"></i></button>
-        <div class="flex gap-1.5 flex-wrap justify-center max-w-[60%]">
-          ${items.map((m, i) => { const d = doneSet.has(occKey(m.id, dIso)); return `<button onclick="agendaTourGo(${i})" class="w-2.5 h-2.5 rounded-full ${i === agendaTour.index ? 'ring-2 ring-cyan-400' : ''}" style="background:${d ? '#16a34a' : '#cbd5e1'}"></button>` }).join('')}
-        </div>
-        <button onclick="agendaTourNext(${items.length})" ${agendaTour.index >= items.length - 1 ? 'disabled' : ''} class="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 disabled:opacity-40"><i class="fas fa-chevron-right"></i></button>
-      </div>
-    </div>`
-}
-window.renderAgendaTour = renderAgendaTour
-function agendaTourNext(n) { if (agendaTour.index < n - 1) { agendaTour.index++; renderAgendaTour() } }
-function agendaTourPrev() { if (agendaTour.index > 0) { agendaTour.index--; renderAgendaTour() } }
-function agendaTourGo(i) { agendaTour.index = i; renderAgendaTour() }
-function toggleOptimize2() { state.routeOptimized = !state.routeOptimized; renderAgendaTour() }
-window.agendaTourNext = agendaTourNext; window.agendaTourPrev = agendaTourPrev; window.agendaTourGo = agendaTourGo; window.toggleOptimize2 = toggleOptimize2
+window.renderCarte = renderCarte
 
 function initMap(items) {
   if (agendaMap) { agendaMap.remove(); agendaMap = null }
