@@ -263,10 +263,18 @@ app.post('/api/team/workers', requireAuth, requirePro, async (c) => {
   return c.json({ id: wid, name, email: mail, attached: false, generated_password: generatedPassword })
 })
 
-// Détacher un intervenant de mon équipe
+// Détacher un intervenant de mon équipe (côté employeur)
 app.delete('/api/team/workers/:id', requireAuth, requirePro, async (c) => {
   const user = c.get('user')
   await c.env.DB.prepare('DELETE FROM pro_workers WHERE pro_id = ? AND worker_id = ?').bind(user.uid, c.req.param('id')).run()
+  return c.json({ ok: true })
+})
+
+// Quitter un employeur (côté intervenant) : je me retire de l'équipe d'un pro pour qui je travaille.
+// L'id passé est celui de l'employeur (pro_id). On ne supprime que MA relation.
+app.delete('/api/team/employers/:id', requireAuth, requirePro, async (c) => {
+  const user = c.get('user')
+  await c.env.DB.prepare('DELETE FROM pro_workers WHERE pro_id = ? AND worker_id = ?').bind(c.req.param('id'), user.uid).run()
   return c.json({ ok: true })
 })
 

@@ -19,12 +19,13 @@ async function renderTeam(c) {
 
   const employersHtml = team.employers.length ? team.employers.map(e => `
     <div class="flex items-center gap-3 bg-white rounded-2xl shadow-sm border border-slate-100 p-4 max-w-full overflow-hidden">
-      <div class="w-11 h-11 shrink-0 rounded-xl flex items-center justify-center text-white font-bold" style="background:${e.color || '#0891b2'}">${esc(e.name.charAt(0).toUpperCase())}</div>
+      <div class="w-11 h-11 shrink-0 rounded-xl flex items-center justify-center text-white font-bold" style="background:${e.color || '#0891b2'}">${esc((e.company || e.name).charAt(0).toUpperCase())}</div>
       <div class="flex-1 min-w-0">
         <div class="font-bold text-slate-800 truncate">${esc(e.company || e.name)}</div>
         <div class="text-xs text-slate-400 truncate">${esc(e.name)}${e.phone ? ' · ' + esc(e.phone) : ''}</div>
       </div>
-      <span class="text-xs shrink-0 bg-emerald-50 text-emerald-600 px-2 py-1 rounded-full font-semibold whitespace-nowrap"><i class="fas fa-handshake mr-1"></i>Pro</span>
+      <span class="text-xs shrink-0 bg-emerald-50 text-emerald-600 px-2 py-1 rounded-full font-semibold whitespace-nowrap hidden sm:inline-flex items-center"><i class="fas fa-handshake mr-1"></i>Pro</span>
+      <button onclick="detachEmployer(${e.id}, '${esc(e.company || e.name).replace(/'/g,'')}')" class="w-9 h-9 shrink-0 rounded-lg bg-red-50 text-red-600 hover:bg-red-100" title="Quitter cet employeur"><i class="fas fa-right-from-bracket"></i></button>
     </div>`).join('') : '<p class="text-sm text-slate-400 py-6 text-center">Tu ne travailles pour aucun autre pisciniste pour le moment.</p>'
 
   c.innerHTML = `
@@ -87,6 +88,14 @@ async function detachWorker(id, name) {
   catch { toast('Erreur', 'error') }
 }
 window.detachWorker = detachWorker
+
+// Je quitte un employeur pour qui je suis intervenant (je me retire de son équipe).
+async function detachEmployer(id, name) {
+  if (!confirm(`Quitter ${name} ? Tu ne seras plus intervenant pour ce pisciniste. (aucun compte n'est supprimé)`)) return
+  try { await API.delete(`/team/employers/${id}`); await loadData(); renderView(); toast('Tu ne travailles plus pour ' + name) }
+  catch { toast('Erreur', 'error') }
+}
+window.detachEmployer = detachEmployer
 
 async function resetMemberPassword(id, name) {
   if (!confirm(`Générer un nouveau mot de passe pour ${name} ?`)) return
