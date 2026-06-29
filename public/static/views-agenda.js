@@ -335,7 +335,8 @@ function initMap(items) {
   setTimeout(fixSize, 60)
   setTimeout(fixSize, 300)
 
-  if (!items.length) { agendaMap.setView([43.5283, 5.4497], 12); return }
+  // Aucun client ce jour-là : on centre par défaut sur Bandol
+  if (!items.length) { agendaMap.setView([43.1357, 5.7531], 13); return }
 
   const latlngs = []
   items.forEach((m, i) => {

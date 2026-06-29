@@ -14,7 +14,7 @@ const WEEKDAYS_SHORT = ['', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
 const state = {
   user: null,
   view: 'agenda',       // home | agenda | carte | clients | pool-detail
-  agendaScope: 'week',   // day | week
+  agendaScope: 'day',    // day | week
   agendaUser: 'all',     // all | userId
   selectedDate: new Date(),
   clients: [],
@@ -297,6 +297,11 @@ function renderShell() {
 
 function navigate(view) {
   state.view = view
+  // À chaque arrivée sur l'Agenda : on force la vue Jour sur aujourd'hui
+  if (view === 'agenda') {
+    state.agendaScope = 'day'
+    state.selectedDate = new Date()
+  }
   renderShell()
   renderView()
 }

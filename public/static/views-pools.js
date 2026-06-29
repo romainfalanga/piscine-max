@@ -320,7 +320,7 @@ function openPoolForm(pool = null, presetClientId = null) {
       </div>
       <div>
         <label class="block text-sm font-semibold text-slate-600 mb-1">Adresse <span class="text-xs text-slate-400 font-normal">(géolocalisée automatiquement)</span></label>
-        <input id="pf-address" value="${esc(pool?.address || '')}" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-cyan-500 outline-none" placeholder="10 rue des Lilas, 13100 Aix-en-Provence">
+        <input id="pf-address" value="${esc(pool?.address || '')}" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-cyan-500 outline-none" placeholder="10 rue des Lilas, 83150 Bandol">
       </div>
       <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <div><label class="block text-xs font-semibold text-slate-500 mb-1">Type</label><select id="pf-type" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm">${selectOptions(POOL_TYPES, pool?.pool_type)}</select></div>
