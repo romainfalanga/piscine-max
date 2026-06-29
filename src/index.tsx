@@ -150,22 +150,9 @@ app.post('/api/login', async (c) => {
 })
 
 // Inscription publique d'un membre (humain : gère ses clients/piscines + peut être intervenant)
+// Création de compte désactivée : on ne crée plus de compte depuis la page de connexion.
 app.post('/api/signup', async (c) => {
-  const { name, email, password, company, phone } = await c.req.json()
-  if (!name || !email || !password) return c.json({ error: 'Nom, email et mot de passe requis' }, 400)
-  if (password.length < 4) return c.json({ error: 'Mot de passe trop court (4 caractères min)' }, 400)
-  const mail = email.toLowerCase().trim()
-  const exists = await c.env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(mail).first()
-  if (exists) return c.json({ error: 'Cet email est déjà utilisé' }, 409)
-  const hash = await hashPassword(password)
-  const colors = ['#0891b2', '#16a34a', '#8b5cf6', '#f59e0b', '#e11d48', '#0ea5e9']
-  const color = colors[Math.floor(Math.random() * colors.length)]
-  const r = await c.env.DB.prepare('INSERT INTO users (email, password_hash, name, role, color, company, phone) VALUES (?, ?, ?, ?, ?, ?, ?)')
-    .bind(mail, hash, name, 'member', color, company || null, phone || null).run()
-  const uid = r.meta.last_row_id as number
-  const token = await createSession({ uid, role: 'member', name, exp: Date.now() + SESSION_TTL }, getSecret(c))
-  setCookie(c, COOKIE_NAME, token, { httpOnly: true, secure: true, sameSite: 'Lax', maxAge: SESSION_TTL / 1000, path: '/' })
-  return c.json({ id: uid, name, role: 'member', email: mail, color })
+  return c.json({ error: "La création de compte n'est plus disponible" }, 410)
 })
 
 app.post('/api/logout', async (c) => {
