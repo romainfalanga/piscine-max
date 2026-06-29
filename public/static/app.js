@@ -179,7 +179,7 @@ function renderLogin(mode = 'login') {
           Vous êtes pisciniste ? <button onclick="renderLogin('signup')" class="text-cyan-600 font-semibold">Créer un compte</button>
         </div>
         <div class="mt-3 text-xs text-slate-400 text-center">
-          Démo · mdp <b>piscine</b> · franck@piscine-max.fr (pisciniste)<br>romain@piscine-max.fr (intervenant) · client1@piscine-max.fr (client)
+          Démo · mdp <b>piscine</b> · franck@piscine-max.fr (pisciniste)<br>romain@piscine-max.fr (intervenant)
         </div>
         `}
       </div>

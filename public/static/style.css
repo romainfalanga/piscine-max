@@ -69,11 +69,24 @@ input[type="date"], input[type="time"], input[type="datetime-local"] {
    mais son conteneur reste borné par le parent (overflow-hidden + width 100%) */
 .leaflet-container { max-width: 100%; }
 
-#map { z-index: 1; }
 .leaflet-routing-container { display: none; }
-/* La carte ne déborde jamais de son conteneur arrondi */
-#map, #pool-mini-map { overflow: hidden; }
+/* La carte ne déborde jamais de son conteneur arrondi.
+   isolation:isolate crée un contexte d'empilement LOCAL : tous les z-index
+   internes de Leaflet (panes 200-700, contrôles 1000) restent emprisonnés
+   dans le conteneur et ne peuvent plus passer au-dessus du modal (z-50)
+   ni du menu du bas (z-30). z-index:0 garde la carte tout en arrière-fond. */
+#map, #pool-mini-map {
+  overflow: hidden;
+  position: relative;
+  z-index: 0;
+  isolation: isolate;
+}
 .leaflet-pane, .leaflet-top, .leaflet-bottom { max-width: 100%; }
+/* Ceinture + bretelles : on borne aussi les couches Leaflet en interne */
+#map .leaflet-top, #map .leaflet-bottom, #map .leaflet-control,
+#pool-mini-map .leaflet-top, #pool-mini-map .leaflet-bottom, #pool-mini-map .leaflet-control {
+  z-index: 2;
+}
 
 /* Marqueurs numérotés */
 .route-marker {
