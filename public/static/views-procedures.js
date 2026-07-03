@@ -15,7 +15,7 @@ const INFORMATION_CATEGORIES = [
 const TYPE_LABELS = { procedure: 'Procédure', information: 'Information' }
 const TYPE_ICONS = { procedure: 'fa-screwdriver-wrench', information: 'fa-circle-info' }
 
-const procState = { query: '', category: '', type: '', items: [], loaded: false }
+const procState = { query: '', category: '', type: 'important', items: [], loaded: false }
 
 async function renderProcedures(c) {
   c.innerHTML = `<div class="text-center py-16 text-slate-400"><i class="fas fa-spinner fa-spin text-2xl"></i></div>`
@@ -29,7 +29,7 @@ async function renderProcedures(c) {
         <i class="fas fa-plus"></i><span class="hidden sm:inline">Nouvelle fiche</span>
       </button>
     </div>
-    <p class="text-xs sm:text-sm text-slate-400 mb-3">Le centre de connaissances du métier : <b>procédures</b> pas à pas et <b>informations</b> de référence.</p>
+    <p class="text-xs sm:text-sm text-slate-400 mb-3">Le centre de connaissances du métier : <b>procédures</b> pas à pas et <b>informations</b> de référence. <b>Important</b> réunit l'essentiel à connaître sur le terrain.</p>
 
     <div id="proc-filterbar" class="mb-1">
       <div id="proc-type-tabs" class="flex bg-white rounded-xl border border-slate-200 p-1 mb-2 shadow-sm"></div>
@@ -51,12 +51,12 @@ window.renderProcedures = renderProcedures
 function renderProcedureTypeTabs() {
   const box = el('proc-type-tabs')
   if (!box) return
-  const countFor = (t) => t ? procState.items.filter(p => (p.type || 'procedure') === t).length : procState.items.length
+  const countFor = (t) => t === 'important' ? procState.items.filter(p => !!p.important).length : procState.items.filter(p => (p.type || 'procedure') === t).length
   const tab = (label, value, icon) => `
-    <button onclick="filterProceduresByType('${value}')" class="flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-xs sm:text-sm font-bold transition ${procState.type === value ? 'bg-cyan-600 text-white shadow' : 'text-slate-500 hover:bg-slate-50'}">
-      <i class="fas ${icon} text-[11px] sm:text-xs"></i><span>${label}</span><span class="text-[10px] font-normal ${procState.type === value ? 'text-cyan-50' : 'text-slate-400'}">${countFor(value)}</span>
+    <button onclick="filterProceduresByType('${value}')" class="flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-xs sm:text-sm font-bold transition ${procState.type === value ? (value === 'important' ? 'bg-amber-500 text-white shadow' : 'bg-cyan-600 text-white shadow') : 'text-slate-500 hover:bg-slate-50'}">
+      <i class="fas ${icon} text-[11px] sm:text-xs"></i><span>${label}</span><span class="text-[10px] font-normal ${procState.type === value ? 'text-white/80' : 'text-slate-400'}">${countFor(value)}</span>
     </button>`
-  box.innerHTML = tab('Toutes', '', 'fa-layer-group') + tab('Procédure', 'procedure', TYPE_ICONS.procedure) + tab('Information', 'information', TYPE_ICONS.information)
+  box.innerHTML = tab('Important', 'important', 'fa-star') + tab('Procédure', 'procedure', TYPE_ICONS.procedure) + tab('Information', 'information', TYPE_ICONS.information)
 }
 
 function filterProceduresByType(type) {
@@ -68,13 +68,21 @@ function filterProceduresByType(type) {
 }
 window.filterProceduresByType = filterProceduresByType
 
+function procedureScopeForType() {
+  if (procState.type === 'important') return procState.items.filter(p => !!p.important)
+  return procState.items.filter(p => (p.type || 'procedure') === procState.type)
+}
+
+function categoryOrderForType() {
+  return procState.type === 'information' ? INFORMATION_CATEGORIES : procState.type === 'procedure' ? PROCEDURE_CATEGORIES : [...PROCEDURE_CATEGORIES, ...INFORMATION_CATEGORIES]
+}
+
 function renderProcedureCategoryChips() {
   const box = el('proc-categories')
   if (!box) return
-  const scope = procState.type ? procState.items.filter(p => (p.type || 'procedure') === procState.type) : procState.items
+  const scope = procedureScopeForType()
   const present = new Set(scope.map(p => p.category).filter(Boolean))
-  const orderedFallback = procState.type === 'information' ? INFORMATION_CATEGORIES : procState.type === 'procedure' ? PROCEDURE_CATEGORIES : [...PROCEDURE_CATEGORIES, ...INFORMATION_CATEGORIES]
-  const cats = orderedFallback.filter(cat => present.has(cat))
+  const cats = categoryOrderForType().filter(cat => present.has(cat))
   const chip = (label, value, count) => `
     <button onclick="filterProceduresByCategory('${value.replace(/'/g, "\\'")}')" class="shrink-0 whitespace-nowrap text-xs font-semibold px-3 py-1.5 rounded-full border transition ${procState.category === value ? 'bg-cyan-600 text-white border-cyan-600' : 'bg-white text-slate-500 border-slate-200 hover:border-cyan-300'}">${esc(label)}${count != null ? ` <span class="opacity-60">${count}</span>` : ''}</button>`
   box.innerHTML = chip('Toutes', '') + cats.map(cat => chip(cat, cat, scope.filter(p => p.category === cat).length)).join('')
@@ -99,7 +107,7 @@ function procedureCardHtml(p) {
   const accent = type === 'information' ? 'border-l-indigo-300' : 'border-l-cyan-300'
   return `
     <div class="pool-card bg-white rounded-2xl shadow-sm border border-slate-100 border-l-4 ${accent} p-4 cursor-pointer" onclick="openProcedureView(${p.id})">
-      <div class="font-bold text-slate-800 leading-tight mb-1.5"><i class="fas ${TYPE_ICONS[type]} text-xs ${type === 'information' ? 'text-indigo-400' : 'text-cyan-500'} mr-1.5"></i>${esc(p.title)}</div>
+      <div class="font-bold text-slate-800 leading-tight mb-1.5">${p.important ? '<i class="fas fa-star text-amber-400 text-xs mr-1" title="Fiche importante"></i>' : ''}<i class="fas ${TYPE_ICONS[type]} text-xs ${type === 'information' ? 'text-indigo-400' : 'text-cyan-500'} mr-1.5"></i>${esc(p.title)}</div>
       ${p.summary ? `<p class="text-sm text-slate-500 line-clamp-2 mb-1.5">${esc(p.summary)}</p>` : ''}
       <div class="flex items-center justify-between text-[11px] text-slate-400">
         <span class="${badgeColor} px-2 py-0.5 rounded-full font-semibold">${TYPE_LABELS[type]}</span>
@@ -116,8 +124,7 @@ function renderProceduresList() {
     return
   }
 
-  let items = procState.items
-  if (procState.type) items = items.filter(p => (p.type || 'procedure') === procState.type)
+  let items = procedureScopeForType()
   if (procState.category) items = items.filter(p => p.category === procState.category)
   if (procState.query) {
     const q = procState.query.toLowerCase()
@@ -125,7 +132,11 @@ function renderProceduresList() {
   }
 
   if (!items.length) {
-    list.innerHTML = `<div class="text-center py-12 text-slate-400"><i class="fas fa-magnifying-glass text-3xl mb-2"></i><p class="text-sm">Aucun résultat</p></div>`
+    if (procState.type === 'important' && !procState.category && !procState.query) {
+      list.innerHTML = `<div class="text-center py-12 text-slate-400"><i class="fas fa-star text-3xl mb-2"></i><p class="text-sm">Aucune fiche marquée importante pour l'instant.</p><p class="text-xs mt-1">Ouvre une fiche dans « Procédure » ou « Information » et coche « Fiche importante » pour la retrouver ici.</p></div>`
+    } else {
+      list.innerHTML = `<div class="text-center py-12 text-slate-400"><i class="fas fa-magnifying-glass text-3xl mb-2"></i><p class="text-sm">Aucun résultat</p></div>`
+    }
     return
   }
 
@@ -133,7 +144,7 @@ function renderProceduresList() {
   // catégorie façon "sommaire" pour éviter le mur de fiches indifférenciées.
   // Dès qu'une recherche ou une catégorie précise est active, la grille reste plate.
   if (!procState.category && !procState.query) {
-    const order = procState.type === 'information' ? INFORMATION_CATEGORIES : procState.type === 'procedure' ? PROCEDURE_CATEGORIES : [...PROCEDURE_CATEGORIES, ...INFORMATION_CATEGORIES]
+    const order = categoryOrderForType()
     const byCat = new Map()
     for (const p of items) {
       const cat = p.category || 'Autre'
@@ -168,6 +179,7 @@ function openProcedureView(id) {
   openModal(esc(p.title), `
     <div class="space-y-4">
       <div class="flex flex-wrap items-center gap-2">
+        ${p.important ? `<span class="text-xs bg-amber-50 text-amber-700 px-2.5 py-1 rounded-full font-semibold"><i class="fas fa-star mr-1"></i>Important</span>` : ''}
         <span class="text-xs ${type === 'information' ? 'bg-indigo-50 text-indigo-700' : 'bg-cyan-50 text-cyan-700'} px-2.5 py-1 rounded-full font-semibold"><i class="fas ${TYPE_ICONS[type]} mr-1"></i>${TYPE_LABELS[type]}</span>
         ${p.category ? `<span class="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full font-semibold"><i class="fas fa-tag mr-1"></i>${esc(p.category)}</span>` : ''}
         ${p.author_name ? `<span class="text-xs text-slate-400"><i class="fas fa-user mr-1"></i>${esc(p.author_name)}</span>` : ''}
@@ -229,6 +241,10 @@ function openProcedureForm(p = null) {
         <label class="block text-sm font-semibold text-slate-600 mb-1">Mots-clés (séparés par des virgules)</label>
         <input id="pf-tags" value="${esc(p?.tags || '')}" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-cyan-500 outline-none" placeholder="préfiltre, pompe, filtration">
       </div>
+      <label class="flex items-center gap-2 px-3 py-2.5 rounded-xl border cursor-pointer has-[:checked]:border-amber-400 has-[:checked]:bg-amber-50">
+        <input type="checkbox" id="pf-important" ${p?.important ? 'checked' : ''}>
+        <span class="text-sm font-semibold"><i class="fas fa-star text-amber-400 mr-1"></i>Fiche importante (accès rapide dans l'onglet « Important »)</span>
+      </label>
       <div class="flex gap-2 pt-2">
         ${isEdit ? `<button type="button" onclick="deleteProcedure(${p.id})" class="px-4 py-2.5 rounded-xl bg-red-50 text-red-600 font-semibold hover:bg-red-100"><i class="fas fa-trash"></i></button>` : ''}
         <button type="submit" class="flex-1 bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2.5 rounded-xl">${isEdit ? 'Enregistrer' : 'Créer la fiche'}</button>
@@ -247,6 +263,7 @@ function openProcedureForm(p = null) {
       summary: el('pf-summary').value,
       content: el('pf-content').value,
       tags: el('pf-tags').value,
+      important: el('pf-important').checked,
     }
     try {
       if (isEdit) await API.put(`/procedures/${p.id}`, payload)
