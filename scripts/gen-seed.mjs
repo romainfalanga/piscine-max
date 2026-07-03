@@ -33,8 +33,9 @@ const main = async () => {
   lines.push('DELETE FROM pools;')
   lines.push('DELETE FROM clients;')
   lines.push('DELETE FROM pro_workers;')
+  lines.push('DELETE FROM procedures;')
   lines.push('DELETE FROM users;')
-  lines.push("DELETE FROM sqlite_sequence WHERE name IN ('users','clients','pools','maintenances','maintenance_logs','pro_workers','photos','pool_seasons');")
+  lines.push("DELETE FROM sqlite_sequence WHERE name IN ('users','clients','pools','maintenances','maintenance_logs','pro_workers','photos','pool_seasons','procedures');")
   lines.push('')
 
   // ----- UTILISATEURS -----
@@ -170,6 +171,66 @@ const main = async () => {
   // Piscine 2 (maint 2) — Franck
   mkLog(2, 1, 10, 7.3, 1.5, null, 25, '', 'RAS', 30, 90)
   mkLog(2, 1, 24, 7.4, 1.2, null, 24, 'Chlore lent 1kg', 'Recharge galets', 30, 90)
+
+  lines.push('')
+
+  // ----- PROCÉDURES (bibliothèque de fiches pratiques métier) -----
+  const procedures = [
+    { id: 1, owner: 1, by: 1, title: 'Changer le préfiltre de la pompe', category: 'Filtration', summary: 'Nettoyer ou remplacer le panier du préfiltre pompe.', content: `1. Couper l'alimentation électrique de la pompe.
+2. Fermer les vannes d'aspiration si présentes.
+3. Dévisser et retirer le couvercle transparent du préfiltre.
+4. Sortir le panier, le vider et le rincer au jet.
+5. Vérifier l'état du joint torique, le graisser légèrement si besoin.
+6. Remettre le panier, refermer le couvercle, réamorcer la pompe (remplir d'eau avant de redémarrer).
+7. Rouvrir les vannes puis remettre sous tension.`, tags: 'préfiltre, pompe, filtration, panier' },
+    { id: 2, owner: 1, by: 1, title: 'Changer le sable du filtre à sable', category: 'Filtration', summary: 'Remplacement complet de la charge de sable du filtre, à faire tous les 5 à 7 ans.', content: `1. Couper la pompe et mettre la vanne multivoie sur "Fermé".
+2. Vidanger la cuve du filtre (vanne de vidange ou tuyau).
+3. Ouvrir la trappe supérieure et retirer l'ancien sable à l'aide d'une pelle/aspirateur à sable (attention à ne pas abîmer la crépine centrale).
+4. Rincer soigneusement la cuve.
+5. Verser un fond d'eau, puis remplir avec le sable neuf (granulométrie adaptée) jusqu'au niveau indiqué par le fabricant.
+6. Refermer la trappe, mettre la vanne sur "Lavage" (backwash) 2-3 minutes.
+7. Passer en "Rinçage" 30 secondes, puis repasser en "Filtration".`, tags: 'filtre à sable, backwash, filtration, entretien annuel' },
+    { id: 3, owner: 1, by: 1, title: 'Choc chlore (traitement choc)', category: "Traitement de l'eau", summary: "Procédure à appliquer en cas d'eau trouble, verte ou après une forte affluence.", content: `1. Tester le pH et le ramener entre 7.2 et 7.4 avant le choc.
+2. Calculer la dose de chlore choc selon le volume du bassin (voir dosage produit).
+3. Diluer le chlore choc dans un seau d'eau si c'est un produit en poudre/granulés.
+4. Verser progressivement au bord du bassin, filtration en marche.
+5. Laisser tourner la filtration en continu au moins 24h.
+6. Ne pas se baigner tant que le taux de chlore n'est pas redescendu sous 3 mg/L.
+7. Recontrôler pH et chlore le lendemain et ajuster.`, tags: 'chlore choc, eau trouble, eau verte, désinfection' },
+    { id: 4, owner: 1, by: 1, title: "Hivernage d'une piscine", category: 'Hivernage / Estivage', summary: "Mise en hivernage passif ou actif avant l'arrêt saisonnier.", content: `1. Nettoyer soigneusement le bassin (brossage parois + fond, aspiration).
+2. Équilibrer l'eau (pH 7.2-7.4, TAC correct) et faire un traitement choc.
+3. Ajouter un produit d'hivernage adapté au traitement (chlore, sel, brome...).
+4. Baisser le niveau d'eau sous les skimmers (hivernage passif) ou laisser tourner la filtration au ralenti (hivernage actif, climat doux).
+5. Vider les canalisations exposées au gel, poser les gizzmos/flotteurs anti-gel dans skimmers et refoulements.
+6. Démonter, vidanger et stocker au sec la pompe et le filtre si hivernage passif complet.
+7. Couvrir le bassin (bâche d'hivernage ou volet).`, tags: 'hivernage, gel, fermeture saisonnière' },
+    { id: 5, owner: 1, by: 2, title: 'Remise en route au printemps', category: 'Hivernage / Estivage', summary: "Réouverture de la piscine après hivernage.", content: `1. Retirer la bâche/volet d'hivernage, la nettoyer avant stockage.
+2. Retirer les gizzmos et remonter pompe/filtre si démontés.
+3. Remonter le niveau d'eau au-dessus des skimmers.
+4. Nettoyer le bassin (brossage, aspiration des feuilles et dépôts hivernaux).
+5. Faire un backwash complet du filtre avant remise en route.
+6. Relancer la filtration en continu 24-48h.
+7. Tester et rééquilibrer TAC, pH puis chlore ; refaire un choc si l'eau est trouble.`, tags: 'remise en route, printemps, réouverture' },
+    { id: 6, owner: 1, by: 2, title: "Pompe qui ne s'amorce plus", category: 'Dépannage matériel', summary: "Diagnostic rapide en cas de pompe qui tourne mais n'aspire pas l'eau.", content: `1. Vérifier qu'il n'y a pas de prise d'air : contrôler le joint du couvercle du préfiltre et le niveau d'eau du bassin.
+2. Nettoyer le panier du préfiltre s'il est colmaté.
+3. Vérifier que les vannes d'aspiration sont bien ouvertes.
+4. Remplir le préfiltre d'eau manuellement pour réamorcer, remettre le couvercle, redémarrer.
+5. Si toujours rien : contrôler le clapet anti-retour et la canalisation d'aspiration pour une fuite d'air.
+6. Si le souci persiste, vérifier l'état de la turbine et du moteur (bruit anormal, échauffement).`, tags: 'pompe, amorçage, panne, dépannage' },
+    { id: 7, owner: 3, by: 3, title: 'Contrôle électrolyseur au sel', category: "Traitement de l'eau", summary: "Vérification mensuelle d'une installation de traitement au sel.", content: `1. Vérifier le taux de sel avec un testeur dédié (cible générale 3 à 5 g/L, voir notice du bassin).
+2. Contrôler les cellules de l'électrolyseur : détartrer si dépôt blanchâtre visible.
+3. Vérifier l'affichage du boîtier (% de production, alarme éventuelle).
+4. Ajuster la production selon la température de l'eau et la fréquentation.
+5. Recontrôler pH et chlore générés après réglage.`, tags: 'sel, électrolyseur, cellule, détartrage' },
+    { id: 8, owner: 3, by: 3, title: "Nettoyage de la ligne d'eau", category: 'Nettoyage', summary: 'Retirer les traces de calcaire, graisses et pollens à la ligne de flottaison.', content: `1. Baisser légèrement le niveau d'eau si les traces sont importantes.
+2. Utiliser un nettoyant spécial ligne d'eau adapté au revêtement (liner, carrelage, coque).
+3. Frotter avec une éponge non abrasive ou une pierre à récurer pour le carrelage.
+4. Rincer abondamment pour ne pas polluer l'eau du bassin.
+5. Remettre le niveau d'eau au bon repère.`, tags: "ligne d'eau, calcaire, nettoyage, esthétique" },
+  ]
+  for (const p of procedures) {
+    lines.push(`INSERT INTO procedures (id, owner_id, created_by, title, category, summary, content, tags) VALUES (${p.id}, ${p.owner}, ${p.by}, '${p.title.replace(/'/g, "''")}', '${p.category.replace(/'/g, "''")}', '${p.summary.replace(/'/g, "''")}', '${p.content.replace(/'/g, "''")}', '${p.tags.replace(/'/g, "''")}');`)
+  }
 
   lines.push('')
   lines.push('-- Fin du seed démo')

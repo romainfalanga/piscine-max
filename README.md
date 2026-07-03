@@ -57,7 +57,10 @@ Résultat : deux members inscrits sur la plateforme ne voient **jamais** les don
 - **🗺️ Mode Tournée** : parcours pas-à-pas de la journée pour l'intervenant mobile (une piscine après l'autre, checklist + GPS + saisie passage), basé sur le parcours optimisé.
 - **🌤️ Météo + conseils saisonniers** : widget météo (Open-Meteo, sans clé API) géolocalisé sur la piscine, avec **conseils d'entretien adaptés** à la température et à la saison.
 
-### 🆕 Dernière itération (cycles saisonniers + fusion des rôles)
+### 🆕 Dernière itération (procédures métier)
+- **📚 Bibliothèque de procédures** : nouvel onglet **Procédures** dans le menu. Chaque pisciniste peut y **créer, répertorier et rechercher** ses modes opératoires métier (ex. changer un préfiltre, changer le sable du filtre, choc chlore, hivernage/remise en route, dépannage pompe...) : titre, catégorie, résumé, étapes détaillées, mots-clés. Recherche plein texte + filtre par catégorie. Périmètre identique à clients/pools : visible par le pisciniste et ses intervenants, modifiable/supprimable par son auteur.
+
+### 🆕 Itération précédente (cycles saisonniers + fusion des rôles)
 - **🔗 Fusion des rôles pro/intervenant en `member`** : plus aucune différence figée. Tout compte humain peut gérer ses propres clients/piscines ET intervenir pour d'autres. Corrige le fait qu'un « intervenant » ne pouvait pas créer de clients. Le filtrage « je vois ce qui m'appartient + ce qui m'est assigné » remplace l'ancien filtre basé sur le grade.
 - **🗓️ Cycles de passage saisonniers (par piscine)** : chaque piscine définit ses propres **saisons** (périodes de l'année par dates jour+mois répétables) avec **chacune sa fréquence**. Ex. Haute saison 1 juin→15 sept tous les 3 jours, Hivernage 1 nov→31 mars tous les 30 jours. L'agenda calcule automatiquement les passages selon la saison active à chaque date (gère les saisons à cheval sur l'année). Modèle type « été/hiver » fourni en 1 clic. Configuration : fiche piscine → « Cycle de passage saisonnier ».
 
@@ -122,6 +125,11 @@ Résultat : deux members inscrits sur la plateforme ne voient **jamais** les don
 | GET | `/api/weather?lat=&lng=` | member | Météo + conseils saisonniers (Open-Meteo) |
 | GET | `/api/pools/:id/seasons` | member (scoped) | Saisons d'une piscine |
 | PUT | `/api/pools/:id/seasons` | member (scoped) | Remplacer l'ensemble des saisons d'une piscine |
+| GET | `/api/procedures?q=&category=` | member | Lister / rechercher les procédures (périmètre) |
+| GET | `/api/procedures/:id` | member (scoped) | Détail d'une procédure |
+| POST | `/api/procedures` | member | Créer une procédure |
+| PUT | `/api/procedures/:id` | member (auteur) | Modifier une procédure |
+| DELETE | `/api/procedures/:id` | member (auteur) | Supprimer une procédure |
 
 ## 🗄️ Modèle de données (Cloudflare D1 / SQLite + R2)
 - **users** : `pro` / `worker` / `client` + `phone`, `company`, `created_by`, couleur
@@ -133,6 +141,7 @@ Résultat : deux members inscrits sur la plateforme ne voient **jamais** les don
 - **maintenances** : entretiens récurrents/ponctuels, attribués à un user
 - **maintenance_logs** : passages effectués + relevés d'eau + produits
 - **photos** (R2) : métadonnées en D1 (`r2_key`, `pool_id`, `log_id`, `uploaded_by`, `caption`) + fichier binaire sur le bucket R2 `piscine-max-photos` (binding `PHOTOS`)
+- **procedures** : bibliothèque de fiches pratiques métier (`owner_id`, `created_by`, `title`, `category`, `summary`, `content`, `tags`) — même périmètre que clients/pools
 
 ## 📖 Guide rapide
 1. **Inscris-toi comme pisciniste** (ou connecte-toi avec un compte démo).
@@ -145,7 +154,7 @@ Résultat : deux members inscrits sur la plateforme ne voient **jamais** les don
 ## 🚀 Développement local
 ```bash
 npm install
-npm run db:migrate:local   # schéma local (migrations 0001 → 0005)
+npm run db:migrate:local   # schéma local (migrations 0001 → 0007)
 npm run db:seed            # données de démo (ou: wrangler d1 execute piscine-max-production --local --file=./seed-demo.sql)
 npm run build
 pm2 start ecosystem.config.cjs
@@ -159,4 +168,4 @@ pm2 start ecosystem.config.cjs
 - **Bucket R2 prod** : `piscine-max-photos`, binding `PHOTOS`
 - **Migrations prod** : `npx wrangler d1 migrations apply piscine-max-production --remote`
 - **Déploiement direct** (garantit les bindings R2) : `npm run build && npx wrangler pages deploy dist --project-name piscine-max`
-- **Dernière mise à jour** : 2026-06-27 — fusion des rôles en `member` (tout compte peut gérer ses clients ET intervenir) + cycles de passage saisonniers par piscine + (itération précédente : sécurité durcie, diagnostic eau, alertes, rapport, stats, tournée, météo)
+- **Dernière mise à jour** : 2026-07-03 — bibliothèque de procédures métier (onglet Procédures : créer/répertorier/rechercher les modes opératoires) + (itération précédente : fusion des rôles en `member`, cycles de passage saisonniers, sécurité durcie, diagnostic eau, alertes, rapport, stats, tournée, météo)

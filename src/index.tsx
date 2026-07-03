@@ -1124,6 +1124,82 @@ app.get('/api/my/pools/:id/history', requireAuth, async (c) => {
   return c.json({ logs: results, photos: (photos as any[]).map(p => ({ ...p, url: `/api/photos/${p.id}` })) })
 })
 
+// ============================================================
+// PROCÉDURES (bibliothèque de fiches pratiques métier)
+// ============================================================
+// Périmètre identique à clients/pools : visible par le pro propriétaire +
+// les intervenants qui bossent pour lui (visibleProIds).
+app.get('/api/procedures', requireAuth, async (c) => {
+  const user = c.get('user')
+  const proIds = await visibleProIds(c, user)
+  const q = (c.req.query('q') || '').trim().toLowerCase()
+  const category = (c.req.query('category') || '').trim()
+  let sql = `
+    SELECT pr.*, u.name as author_name
+    FROM procedures pr
+    LEFT JOIN users u ON u.id = pr.created_by
+    WHERE pr.owner_id IN (${inClause(proIds)})
+  `
+  const binds: any[] = [...proIds]
+  if (category) { sql += ' AND pr.category = ?'; binds.push(category) }
+  if (q) {
+    sql += ' AND (LOWER(pr.title) LIKE ? OR LOWER(pr.summary) LIKE ? OR LOWER(pr.content) LIKE ? OR LOWER(pr.tags) LIKE ?)'
+    const like = `%${q}%`
+    binds.push(like, like, like, like)
+  }
+  sql += ' ORDER BY pr.updated_at DESC'
+  const { results } = await c.env.DB.prepare(sql).bind(...binds).all()
+  return c.json(results)
+})
+
+app.get('/api/procedures/:id', requireAuth, async (c) => {
+  const user = c.get('user')
+  const proIds = await visibleProIds(c, user)
+  const proc = await c.env.DB.prepare(`
+    SELECT pr.*, u.name as author_name
+    FROM procedures pr LEFT JOIN users u ON u.id = pr.created_by
+    WHERE pr.id = ? AND pr.owner_id IN (${inClause(proIds)})
+  `).bind(c.req.param('id'), ...proIds).first()
+  if (!proc) return c.json({ error: 'Procédure introuvable' }, 404)
+  return c.json(proc)
+})
+
+app.post('/api/procedures', requireAuth, requirePro, async (c) => {
+  const user = c.get('user')
+  const { title, category, summary, content, tags } = await c.req.json()
+  if (!title) return c.json({ error: 'Le titre est requis' }, 400)
+  const r = await c.env.DB.prepare(`
+    INSERT INTO procedures (owner_id, created_by, title, category, summary, content, tags)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).bind(user.uid, user.uid, title, category || null, summary || null, content || null, tags || null).run()
+  return c.json({ id: r.meta.last_row_id, title, category, summary, content, tags })
+})
+
+app.put('/api/procedures/:id', requireAuth, requirePro, async (c) => {
+  const user = c.get('user')
+  const id = c.req.param('id')
+  if (!(await procedureOwnedByPro(c, id, user.uid))) return c.json({ error: 'Action non autorisée' }, 403)
+  const { title, category, summary, content, tags } = await c.req.json()
+  if (!title) return c.json({ error: 'Le titre est requis' }, 400)
+  await c.env.DB.prepare(`
+    UPDATE procedures SET title=?, category=?, summary=?, content=?, tags=?, updated_at=CURRENT_TIMESTAMP WHERE id=?
+  `).bind(title, category || null, summary || null, content || null, tags || null, id).run()
+  return c.json({ ok: true })
+})
+
+app.delete('/api/procedures/:id', requireAuth, requirePro, async (c) => {
+  const user = c.get('user')
+  const id = c.req.param('id')
+  if (!(await procedureOwnedByPro(c, id, user.uid))) return c.json({ error: 'Action non autorisée' }, 403)
+  await c.env.DB.prepare('DELETE FROM procedures WHERE id = ?').bind(id).run()
+  return c.json({ ok: true })
+})
+
+async function procedureOwnedByPro(c: any, procId: any, proId: number): Promise<boolean> {
+  const row = await c.env.DB.prepare('SELECT owner_id FROM procedures WHERE id = ?').bind(procId).first<any>()
+  return !!row && row.owner_id === proId
+}
+
 // Favicon
 app.get('/favicon.ico', (c) => {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">💧</text></svg>`

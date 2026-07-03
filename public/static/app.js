@@ -13,7 +13,7 @@ const WEEKDAYS_SHORT = ['', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
 
 const state = {
   user: null,
-  view: 'agenda',       // home | agenda | carte | clients | pool-detail
+  view: 'agenda',       // home | agenda | carte | clients | pool-detail | procedures
   agendaScope: 'day',    // day | week
   agendaUser: 'all',     // all | userId
   selectedDate: new Date(),
@@ -176,16 +176,18 @@ function renderShell() {
   // Le client a sa propre interface (espace lecture)
   if (isClient()) return renderClientShell()
 
-  // Menu à 4 entrées (UX mobile) :
-  //  - Accueil : tableau de bord + accès Stats & Équipe
-  //  - Agenda  : calendrier (liste jour/semaine)
-  //  - Carte   : carte du jour (jour par jour, atterrissage auto sur aujourd'hui)
-  //  - Clients : clients ET leurs piscines (fusionnés)
+  // Menu à 5 entrées (UX mobile) :
+  //  - Accueil    : tableau de bord + accès Stats & Équipe
+  //  - Agenda     : calendrier (liste jour/semaine)
+  //  - Carte      : carte du jour (jour par jour, atterrissage auto sur aujourd'hui)
+  //  - Clients    : clients ET leurs piscines (fusionnés)
+  //  - Procédures : bibliothèque de fiches pratiques métier
   const navItems = [
     { id: 'home', icon: 'fa-house', label: 'Accueil' },
     { id: 'agenda', icon: 'fa-calendar-days', label: 'Agenda' },
     { id: 'carte', icon: 'fa-map-location-dot', label: 'Carte' },
     { id: 'clients', icon: 'fa-users', label: 'Clients' },
+    { id: 'procedures', icon: 'fa-book-open', label: 'Procédures' },
   ]
   // Les vues internes (pool-detail, client-detail, stats, team) restent accessibles
   // depuis l'accueil / les fiches, mais n'encombrent plus la barre de navigation.
@@ -264,6 +266,7 @@ function renderView() {
   else if (state.view === 'pool-detail') renderPoolDetail(c)
   else if (state.view === 'team') renderTeam(c)
   else if (state.view === 'stats') renderStats(c)
+  else if (state.view === 'procedures') renderProcedures(c)
 }
 
 // ============================================================
