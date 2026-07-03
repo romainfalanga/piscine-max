@@ -129,6 +129,12 @@ input[type="date"], input[type="time"], input[type="datetime-local"] {
 .pool-card { transition: transform 0.15s, box-shadow 0.15s; }
 .pool-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.08); }
 
+/* Chips de catégorie en scroll horizontal (page Pisciniste) : barre fine,
+   jamais de retour à la ligne pour rester compact sur mobile. */
+.pisc-scroll { scrollbar-width: thin; }
+.pisc-scroll::-webkit-scrollbar { height: 5px; }
+.pisc-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
 /* Onglets agenda */
 .view-toggle-btn { transition: all 0.2s; }
 
