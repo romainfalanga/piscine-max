@@ -1134,6 +1134,7 @@ app.get('/api/procedures', requireAuth, async (c) => {
   const proIds = await visibleProIds(c, user)
   const q = (c.req.query('q') || '').trim().toLowerCase()
   const category = (c.req.query('category') || '').trim()
+  const type = (c.req.query('type') || '').trim()
   let sql = `
     SELECT pr.*, u.name as author_name
     FROM procedures pr
@@ -1142,6 +1143,7 @@ app.get('/api/procedures', requireAuth, async (c) => {
   `
   const binds: any[] = [...proIds]
   if (category) { sql += ' AND pr.category = ?'; binds.push(category) }
+  if (type) { sql += ' AND pr.type = ?'; binds.push(type) }
   if (q) {
     sql += ' AND (LOWER(pr.title) LIKE ? OR LOWER(pr.summary) LIKE ? OR LOWER(pr.content) LIKE ? OR LOWER(pr.tags) LIKE ?)'
     const like = `%${q}%`
@@ -1166,24 +1168,26 @@ app.get('/api/procedures/:id', requireAuth, async (c) => {
 
 app.post('/api/procedures', requireAuth, requirePro, async (c) => {
   const user = c.get('user')
-  const { title, category, summary, content, tags } = await c.req.json()
+  const { title, category, summary, content, tags, type } = await c.req.json()
   if (!title) return c.json({ error: 'Le titre est requis' }, 400)
+  const t = type === 'information' ? 'information' : 'procedure'
   const r = await c.env.DB.prepare(`
-    INSERT INTO procedures (owner_id, created_by, title, category, summary, content, tags)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).bind(user.uid, user.uid, title, category || null, summary || null, content || null, tags || null).run()
-  return c.json({ id: r.meta.last_row_id, title, category, summary, content, tags })
+    INSERT INTO procedures (owner_id, created_by, title, category, summary, content, tags, type)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(user.uid, user.uid, title, category || null, summary || null, content || null, tags || null, t).run()
+  return c.json({ id: r.meta.last_row_id, title, category, summary, content, tags, type: t })
 })
 
 app.put('/api/procedures/:id', requireAuth, requirePro, async (c) => {
   const user = c.get('user')
   const id = c.req.param('id')
   if (!(await procedureOwnedByPro(c, id, user.uid))) return c.json({ error: 'Action non autorisée' }, 403)
-  const { title, category, summary, content, tags } = await c.req.json()
+  const { title, category, summary, content, tags, type } = await c.req.json()
   if (!title) return c.json({ error: 'Le titre est requis' }, 400)
+  const t = type === 'information' ? 'information' : 'procedure'
   await c.env.DB.prepare(`
-    UPDATE procedures SET title=?, category=?, summary=?, content=?, tags=?, updated_at=CURRENT_TIMESTAMP WHERE id=?
-  `).bind(title, category || null, summary || null, content || null, tags || null, id).run()
+    UPDATE procedures SET title=?, category=?, summary=?, content=?, tags=?, type=?, updated_at=CURRENT_TIMESTAMP WHERE id=?
+  `).bind(title, category || null, summary || null, content || null, tags || null, t, id).run()
   return c.json({ ok: true })
 })
 

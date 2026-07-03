@@ -181,13 +181,13 @@ function renderShell() {
   //  - Agenda     : calendrier (liste jour/semaine)
   //  - Carte      : carte du jour (jour par jour, atterrissage auto sur aujourd'hui)
   //  - Clients    : clients ET leurs piscines (fusionnés)
-  //  - Procédures : bibliothèque de fiches pratiques métier
+  //  - Pisciniste : bibliothèque de procédures (modes opératoires) et d'informations (connaissances de référence) métier
   const navItems = [
     { id: 'home', icon: 'fa-house', label: 'Accueil' },
     { id: 'agenda', icon: 'fa-calendar-days', label: 'Agenda' },
     { id: 'carte', icon: 'fa-map-location-dot', label: 'Carte' },
     { id: 'clients', icon: 'fa-users', label: 'Clients' },
-    { id: 'procedures', icon: 'fa-book-open', label: 'Procédures' },
+    { id: 'procedures', icon: 'fa-user-gear', label: 'Pisciniste' },
   ]
   // Les vues internes (pool-detail, client-detail, stats, team) restent accessibles
   // depuis l'accueil / les fiches, mais n'encombrent plus la barre de navigation.
