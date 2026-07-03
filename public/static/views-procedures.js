@@ -5,7 +5,7 @@
 // idéales de l'eau, formules, réglementation, glossaire...).
 // ============================================================
 const PROCEDURE_CATEGORIES = [
-  'Filtration', "Traitement de l'eau", 'Nettoyage', 'Hivernage / Estivage',
+  'Analyse & routine', 'Filtration', "Traitement de l'eau", 'Nettoyage', 'Hivernage / Estivage',
   'Dépannage matériel', 'Sécurité', 'Mise en service',
 ]
 const INFORMATION_CATEGORIES = [
@@ -23,24 +23,24 @@ async function renderProcedures(c) {
   catch { c.innerHTML = '<p class="text-red-500 p-6">Erreur de chargement.</p>'; return }
 
   c.innerHTML = `
-    <div class="flex items-center justify-between mb-4 gap-2">
+    <div class="flex items-center justify-between mb-1 gap-2">
       <h2 class="text-xl sm:text-2xl font-extrabold text-slate-800"><i class="fas fa-user-gear text-cyan-600 mr-2"></i>Pisciniste</h2>
       <button onclick="openProcedureForm()" class="bg-cyan-600 hover:bg-cyan-700 text-white font-semibold px-3 sm:px-4 py-2 rounded-xl shadow flex items-center gap-2 shrink-0">
         <i class="fas fa-plus"></i><span class="hidden sm:inline">Nouvelle fiche</span>
       </button>
     </div>
-    <p class="text-sm text-slate-400 mb-4">Le centre de connaissances du métier de pisciniste : <b>procédures</b> pas à pas (changer un fil/préfiltre, hiverner une piscine, choc chlore...) et <b>informations</b> de référence (normes, valeurs idéales de l'eau, formules, réglementation...). Crée, répertorie et recherche tout ce dont tu as besoin sur le terrain.</p>
+    <p class="text-xs sm:text-sm text-slate-400 mb-3">Le centre de connaissances du métier : <b>procédures</b> pas à pas et <b>informations</b> de référence.</p>
 
-    <div id="proc-type-tabs" class="grid grid-cols-3 gap-2 mb-4"></div>
-
-    <div class="relative mb-3">
-      <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
-      <input id="proc-search" oninput="filterProcedures(this.value)" value="${esc(procState.query)}" placeholder="Rechercher (titre, mot-clé, contenu...)" class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-cyan-500 outline-none text-sm">
+    <div id="proc-filterbar" class="mb-1">
+      <div id="proc-type-tabs" class="flex bg-white rounded-xl border border-slate-200 p-1 mb-2 shadow-sm"></div>
+      <div class="relative mb-2">
+        <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+        <input id="proc-search" oninput="filterProcedures(this.value)" value="${esc(procState.query)}" placeholder="Rechercher (titre, mot-clé, contenu...)" class="w-full pl-9 pr-4 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-cyan-500 outline-none text-sm">
+      </div>
+      <div id="proc-categories" class="flex gap-1.5 overflow-x-auto pisc-scroll pb-0.5"></div>
     </div>
 
-    <div id="proc-categories" class="flex flex-wrap gap-1.5 mb-4"></div>
-
-    <div id="procedures-list" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"></div>`
+    <div id="procedures-list" class="pt-3"></div>`
 
   renderProcedureTypeTabs()
   renderProcedureCategoryChips()
@@ -53,8 +53,8 @@ function renderProcedureTypeTabs() {
   if (!box) return
   const countFor = (t) => t ? procState.items.filter(p => (p.type || 'procedure') === t).length : procState.items.length
   const tab = (label, value, icon) => `
-    <button onclick="filterProceduresByType('${value}')" class="rounded-xl border px-3 py-3 text-sm font-bold transition flex flex-col items-center gap-1 ${procState.type === value ? 'bg-cyan-600 text-white border-cyan-600 shadow' : 'bg-white text-slate-600 border-slate-200 hover:border-cyan-300'}">
-      <i class="fas ${icon}"></i><span>${label}</span><span class="text-[11px] font-normal ${procState.type === value ? 'text-cyan-50' : 'text-slate-400'}">${countFor(value)}</span>
+    <button onclick="filterProceduresByType('${value}')" class="flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-xs sm:text-sm font-bold transition ${procState.type === value ? 'bg-cyan-600 text-white shadow' : 'text-slate-500 hover:bg-slate-50'}">
+      <i class="fas ${icon} text-[11px] sm:text-xs"></i><span>${label}</span><span class="text-[10px] font-normal ${procState.type === value ? 'text-cyan-50' : 'text-slate-400'}">${countFor(value)}</span>
     </button>`
   box.innerHTML = tab('Toutes', '', 'fa-layer-group') + tab('Procédure', 'procedure', TYPE_ICONS.procedure) + tab('Information', 'information', TYPE_ICONS.information)
 }
@@ -72,12 +72,12 @@ function renderProcedureCategoryChips() {
   const box = el('proc-categories')
   if (!box) return
   const scope = procState.type ? procState.items.filter(p => (p.type || 'procedure') === procState.type) : procState.items
-  const present = [...new Set(scope.map(p => p.category).filter(Boolean))].sort()
-  const fallback = procState.type === 'information' ? INFORMATION_CATEGORIES : procState.type === 'procedure' ? PROCEDURE_CATEGORIES : [...PROCEDURE_CATEGORIES, ...INFORMATION_CATEGORIES]
-  const cats = present.length ? present : fallback
-  const chip = (label, value) => `
-    <button onclick="filterProceduresByCategory('${value.replace(/'/g, "\\'")}')" class="text-xs font-semibold px-3 py-1.5 rounded-full border transition ${procState.category === value ? 'bg-cyan-600 text-white border-cyan-600' : 'bg-white text-slate-500 border-slate-200 hover:border-cyan-300'}">${esc(label)}</button>`
-  box.innerHTML = chip('Toutes les catégories', '') + cats.map(cat => chip(cat, cat)).join('')
+  const present = new Set(scope.map(p => p.category).filter(Boolean))
+  const orderedFallback = procState.type === 'information' ? INFORMATION_CATEGORIES : procState.type === 'procedure' ? PROCEDURE_CATEGORIES : [...PROCEDURE_CATEGORIES, ...INFORMATION_CATEGORIES]
+  const cats = orderedFallback.filter(cat => present.has(cat))
+  const chip = (label, value, count) => `
+    <button onclick="filterProceduresByCategory('${value.replace(/'/g, "\\'")}')" class="shrink-0 whitespace-nowrap text-xs font-semibold px-3 py-1.5 rounded-full border transition ${procState.category === value ? 'bg-cyan-600 text-white border-cyan-600' : 'bg-white text-slate-500 border-slate-200 hover:border-cyan-300'}">${esc(label)}${count != null ? ` <span class="opacity-60">${count}</span>` : ''}</button>`
+  box.innerHTML = chip('Toutes', '') + cats.map(cat => chip(cat, cat, scope.filter(p => p.category === cat).length)).join('')
 }
 
 function filterProceduresByCategory(cat) {
@@ -93,11 +93,26 @@ function filterProcedures(query) {
 }
 window.filterProcedures = filterProcedures
 
+function procedureCardHtml(p) {
+  const type = p.type || 'procedure'
+  const badgeColor = type === 'information' ? 'bg-indigo-50 text-indigo-700' : 'bg-cyan-50 text-cyan-700'
+  const accent = type === 'information' ? 'border-l-indigo-300' : 'border-l-cyan-300'
+  return `
+    <div class="pool-card bg-white rounded-2xl shadow-sm border border-slate-100 border-l-4 ${accent} p-4 cursor-pointer" onclick="openProcedureView(${p.id})">
+      <div class="font-bold text-slate-800 leading-tight mb-1.5"><i class="fas ${TYPE_ICONS[type]} text-xs ${type === 'information' ? 'text-indigo-400' : 'text-cyan-500'} mr-1.5"></i>${esc(p.title)}</div>
+      ${p.summary ? `<p class="text-sm text-slate-500 line-clamp-2 mb-1.5">${esc(p.summary)}</p>` : ''}
+      <div class="flex items-center justify-between text-[11px] text-slate-400">
+        <span class="${badgeColor} px-2 py-0.5 rounded-full font-semibold">${TYPE_LABELS[type]}</span>
+        <span>${p.updated_at ? new Date(p.updated_at).toLocaleDateString('fr-FR') : ''}</span>
+      </div>
+    </div>`
+}
+
 function renderProceduresList() {
   const list = el('procedures-list')
   if (!list) return
   if (!procState.items.length) {
-    list.innerHTML = `<div class="col-span-full text-center py-16 text-slate-400"><i class="fas fa-user-gear text-4xl mb-3"></i><p>Aucune fiche. Crée la première procédure ou information de ton équipe !</p></div>`
+    list.innerHTML = `<div class="text-center py-16 text-slate-400"><i class="fas fa-user-gear text-4xl mb-3"></i><p>Aucune fiche. Crée la première procédure ou information de ton équipe !</p></div>`
     return
   }
 
@@ -110,29 +125,38 @@ function renderProceduresList() {
   }
 
   if (!items.length) {
-    list.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400"><i class="fas fa-magnifying-glass text-3xl mb-2"></i><p class="text-sm">Aucun résultat</p></div>`
+    list.innerHTML = `<div class="text-center py-12 text-slate-400"><i class="fas fa-magnifying-glass text-3xl mb-2"></i><p class="text-sm">Aucun résultat</p></div>`
     return
   }
 
-  list.innerHTML = items.map(p => {
-    const type = p.type || 'procedure'
-    const badgeColor = type === 'information' ? 'bg-indigo-50 text-indigo-700' : 'bg-cyan-50 text-cyan-700'
-    return `
-    <div class="pool-card bg-white rounded-2xl shadow-sm border border-slate-100 p-4 cursor-pointer" onclick="openProcedureView(${p.id})">
-      <div class="flex items-start justify-between gap-2 mb-1.5">
-        <div class="font-bold text-slate-800 leading-tight"><i class="fas ${TYPE_ICONS[type]} text-xs ${type === 'information' ? 'text-indigo-400' : 'text-cyan-500'} mr-1.5"></i>${esc(p.title)}</div>
-      </div>
-      <div class="flex flex-wrap gap-1.5 mb-1.5">
-        <span class="text-[11px] shrink-0 ${badgeColor} px-2 py-0.5 rounded-full font-semibold whitespace-nowrap">${TYPE_LABELS[type]}</span>
-        ${p.category ? `<span class="text-[11px] shrink-0 bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-semibold whitespace-nowrap">${esc(p.category)}</span>` : ''}
-      </div>
-      ${p.summary ? `<p class="text-sm text-slate-500 line-clamp-2">${esc(p.summary)}</p>` : ''}
-      <div class="flex items-center justify-between mt-3 text-[11px] text-slate-400">
-        <span>${p.author_name ? '<i class="fas fa-user mr-1"></i>' + esc(p.author_name) : ''}</span>
-        <span>${p.updated_at ? new Date(p.updated_at).toLocaleDateString('fr-FR') : ''}</span>
-      </div>
-    </div>`
-  }).join('')
+  // Navigation libre (pas de recherche ni de catégorie choisie) : on regroupe par
+  // catégorie façon "sommaire" pour éviter le mur de fiches indifférenciées.
+  // Dès qu'une recherche ou une catégorie précise est active, la grille reste plate.
+  if (!procState.category && !procState.query) {
+    const order = procState.type === 'information' ? INFORMATION_CATEGORIES : procState.type === 'procedure' ? PROCEDURE_CATEGORIES : [...PROCEDURE_CATEGORIES, ...INFORMATION_CATEGORIES]
+    const byCat = new Map()
+    for (const p of items) {
+      const cat = p.category || 'Autre'
+      if (!byCat.has(cat)) byCat.set(cat, [])
+      byCat.get(cat).push(p)
+    }
+    const cats = [...byCat.keys()].sort((a, b) => {
+      const ia = order.indexOf(a), ib = order.indexOf(b)
+      return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib)
+    })
+    list.innerHTML = cats.map(cat => `
+      <div class="mb-5">
+        <button onclick="filterProceduresByCategory('${cat.replace(/'/g, "\\'")}')" class="flex items-center gap-2 mb-2 group">
+          <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wide group-hover:text-cyan-600">${esc(cat)}</h3>
+          <span class="text-[11px] text-slate-400">${byCat.get(cat).length}</span>
+          <i class="fas fa-chevron-right text-[9px] text-slate-300 group-hover:text-cyan-500"></i>
+        </button>
+        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">${byCat.get(cat).map(procedureCardHtml).join('')}</div>
+      </div>`).join('')
+    return
+  }
+
+  list.innerHTML = `<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">${items.map(procedureCardHtml).join('')}</div>`
 }
 
 // ---------- Lecture d'une fiche ----------
