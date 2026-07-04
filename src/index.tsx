@@ -15,6 +15,8 @@ type Bindings = {
   SESSION_SECRET?: string
   RESEND_API_KEY?: string        // Clé API Resend (secret Cloudflare)
   RESEND_FROM?: string           // Expéditeur vérifié, ex: "Piscine Max <contact@mondomaine.fr>"
+  OPENROUTER_API_KEY?: string    // Clé API OpenRouter (secret Cloudflare) — analyse photo IA dans "Mes outils"
+  OPENROUTER_MODEL?: string      // Modèle multimodal OpenRouter à utiliser (défaut: openai/gpt-4o-mini)
 }
 
 // Fallback si le secret n'est pas défini en variable d'environnement Cloudflare.
@@ -818,6 +820,127 @@ app.post('/api/diagnose', requireAuth, async (c) => {
   }
   const diag = diagnoseWater(b.reading || b, pool)
   return c.json(diag)
+})
+
+// ============================================================
+// MES OUTILS — Analyse photo par IA (OpenRouter, modèle multimodal)
+// ============================================================
+// Convertit un ArrayBuffer en base64 par blocs (évite le dépassement de pile
+// de String.fromCharCode(...bytes) sur les images volumineuses).
+function arrayBufferToBase64(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf)
+  let binary = ''
+  const chunkSize = 8192
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize))
+  }
+  return btoa(binary)
+}
+
+app.post('/api/tools/photo-diagnose', requireAuth, requirePro, async (c) => {
+  const apiKey = c.env.OPENROUTER_API_KEY
+  if (!apiKey) return c.json({ error: "Analyse photo non configurée : ajoute la variable d'environnement OPENROUTER_API_KEY dans les paramètres Cloudflare Pages (Settings → Environment variables), puis redéploie." }, 501)
+
+  const form = await c.req.formData()
+  const file = form.get('file') as File | null
+  if (!file) return c.json({ error: 'Photo manquante' }, 400)
+  if (file.size > 5 * 1024 * 1024) return c.json({ error: 'Photo trop lourde (max 5 Mo)' }, 400)
+
+  const base64 = arrayBufferToBase64(await file.arrayBuffer())
+  const dataUri = `data:${file.type || 'image/jpeg'};base64,${base64}`
+  const prompt = `Tu es un pisciniste professionnel expert. Analyse cette photo (piscine, eau ou équipement) et réponds en français, de façon concise et structurée, avec exactement ces 3 sections :
+1) Constat : ce que tu observes concrètement sur la photo (couleur/clarté de l'eau, dépôts, taches, état visible du matériel...).
+2) Diagnostic probable : identifie le problème le plus probable si tu en vois un (ex. type d'algues précis — vertes, moutarde, noires, roses —, eau trouble, tache métallique fer/cuivre/manganèse, entartrage, problème d'équipement...). Si tout semble normal, dis-le clairement.
+3) Action recommandée : la ou les actions à réaliser en priorité.
+Reste factuel et prudent : si l'image ne permet pas de conclure avec certitude, dis-le.`
+
+  try {
+    const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://piscine-max.pages.dev',
+        'X-Title': 'Piscine Max - Mes outils',
+      },
+      body: JSON.stringify({
+        model: c.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini',
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            { type: 'image_url', image_url: { url: dataUri } },
+          ],
+        }],
+        max_tokens: 700,
+      }),
+    })
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => '')
+      return c.json({ error: `Erreur du service d'analyse IA (${resp.status}). ${errText.slice(0, 200)}` }, 502)
+    }
+    const data = await resp.json<any>()
+    const analysis = data?.choices?.[0]?.message?.content
+    if (!analysis) return c.json({ error: "Réponse d'analyse vide, réessaie." }, 502)
+    return c.json({ analysis })
+  } catch (err: any) {
+    return c.json({ error: "Impossible de contacter le service d'analyse IA. " + (err?.message || '') }, 502)
+  }
+})
+
+// ============================================================
+// CODE DU PISCINISTE — jeu de questions façon "code de la route"
+// ============================================================
+// Banque de questions commune à la plateforme (pas de périmètre multi-tenant),
+// l'historique des tentatives est propre à chaque utilisateur.
+const QUIZ_SESSION_SIZE = 40
+const QUIZ_PASS_SCORE = 35
+
+app.get('/api/quiz/session', requireAuth, requirePro, async (c) => {
+  const { results } = await c.env.DB.prepare(`
+    SELECT id, category, question, option_a, option_b, option_c, option_d
+    FROM quiz_questions ORDER BY RANDOM() LIMIT ?
+  `).bind(QUIZ_SESSION_SIZE).all()
+  return c.json({ questions: results, pass_score: QUIZ_PASS_SCORE, total: QUIZ_SESSION_SIZE })
+})
+
+app.post('/api/quiz/submit', requireAuth, requirePro, async (c) => {
+  const user = c.get('user')
+  const { answers } = await c.req.json()
+  if (!Array.isArray(answers) || !answers.length) return c.json({ error: 'Réponses manquantes' }, 400)
+  const ids = answers.map((a: any) => Number(a.id)).filter((n: number) => Number.isFinite(n))
+  if (!ids.length) return c.json({ error: 'Réponses invalides' }, 400)
+  const { results } = await c.env.DB.prepare(`
+    SELECT id, correct, explanation, question, option_a, option_b, option_c, option_d
+    FROM quiz_questions WHERE id IN (${inClause(ids)})
+  `).bind(...ids).all()
+  const truth = new Map((results as any[]).map(r => [r.id, r]))
+  let score = 0
+  const details = answers.map((a: any) => {
+    const q = truth.get(Number(a.id))
+    if (!q) return null
+    const isCorrect = q.correct === a.answer
+    if (isCorrect) score++
+    return {
+      id: q.id, question: q.question,
+      options: { a: q.option_a, b: q.option_b, c: q.option_c, d: q.option_d },
+      your_answer: a.answer || null, correct_answer: q.correct, is_correct: isCorrect, explanation: q.explanation,
+    }
+  }).filter(Boolean)
+  const total = answers.length
+  const passed = score >= QUIZ_PASS_SCORE ? 1 : 0
+  await c.env.DB.prepare('INSERT INTO quiz_attempts (user_id, score, total, passed) VALUES (?, ?, ?, ?)')
+    .bind(user.uid, score, total, passed).run()
+  return c.json({ score, total, passed: !!passed, pass_score: QUIZ_PASS_SCORE, details })
+})
+
+app.get('/api/quiz/history', requireAuth, requirePro, async (c) => {
+  const user = c.get('user')
+  const { results } = await c.env.DB.prepare(`
+    SELECT id, score, total, passed, created_at FROM quiz_attempts
+    WHERE user_id = ? ORDER BY created_at DESC LIMIT 30
+  `).bind(user.uid).all()
+  return c.json(results)
 })
 
 // ============================================================
