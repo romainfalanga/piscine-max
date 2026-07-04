@@ -841,8 +841,13 @@ app.post('/api/tools/photo-diagnose', requireAuth, requirePro, async (c) => {
   const apiKey = c.env.OPENROUTER_API_KEY
   if (!apiKey) return c.json({ error: "Analyse photo non configurée : ajoute la variable d'environnement OPENROUTER_API_KEY dans les paramètres Cloudflare Pages (Settings → Environment variables), puis redéploie." }, 501)
 
-  const form = await c.req.formData()
-  const file = form.get('file') as File | null
+  let file: File | null = null
+  try {
+    const form = await c.req.formData()
+    file = form.get('file') as File | null
+  } catch {
+    return c.json({ error: 'Requête invalide : envoie la photo en multipart/form-data.' }, 400)
+  }
   if (!file) return c.json({ error: 'Photo manquante' }, 400)
   if (file.size > 5 * 1024 * 1024) return c.json({ error: 'Photo trop lourde (max 5 Mo)' }, 400)
 
