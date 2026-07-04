@@ -13,7 +13,7 @@ const WEEKDAYS_SHORT = ['', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
 
 const state = {
   user: null,
-  view: 'agenda',       // home | agenda | carte | clients | pool-detail | procedures
+  view: 'agenda',       // home | agenda | carte | clients | pool-detail | procedures | tools | quiz
   agendaScope: 'day',    // day | week
   agendaUser: 'all',     // all | userId
   selectedDate: new Date(),
@@ -192,7 +192,8 @@ function renderShell() {
   // Les vues internes (pool-detail, client-detail, stats, team) restent accessibles
   // depuis l'accueil / les fiches, mais n'encombrent plus la barre de navigation.
   const activeNav = ['client-detail', 'pool-detail'].includes(state.view) ? 'clients'
-    : ['stats', 'team'].includes(state.view) ? 'home'
+    : ['stats', 'team', 'tools'].includes(state.view) ? 'home'
+    : ['quiz'].includes(state.view) ? 'procedures'
     : state.view
 
   el('app').innerHTML = `
@@ -267,6 +268,8 @@ function renderView() {
   else if (state.view === 'team') renderTeam(c)
   else if (state.view === 'stats') renderStats(c)
   else if (state.view === 'procedures') renderProcedures(c)
+  else if (state.view === 'tools') renderTools(c)
+  else if (state.view === 'quiz') renderQuiz(c)
 }
 
 // ============================================================
@@ -347,7 +350,7 @@ function renderHome(c) {
       ${stat('fa-calendar-check', state.maintenances.length, 'Entretiens planifiés', '#f59e0b')}
     </div>
 
-    <!-- Accès rapides : Stats & Équipe (anciens onglets, désormais ici) -->
+    <!-- Accès rapides : Stats, Équipe & Outils (anciens onglets + nouveaux, désormais ici) -->
     <div class="grid grid-cols-2 gap-3 mb-5">
       <button onclick="navigate('stats')" class="bg-white hover:bg-slate-50 rounded-2xl shadow-sm border border-slate-100 p-4 flex items-center gap-3 text-left transition">
         <div class="w-11 h-11 rounded-xl flex items-center justify-center text-white bg-indigo-500"><i class="fas fa-chart-line"></i></div>
@@ -356,6 +359,10 @@ function renderHome(c) {
       <button onclick="navigate('team')" class="bg-white hover:bg-slate-50 rounded-2xl shadow-sm border border-slate-100 p-4 flex items-center gap-3 text-left transition">
         <div class="w-11 h-11 rounded-xl flex items-center justify-center text-white bg-emerald-500"><i class="fas fa-user-group"></i></div>
         <div><div class="font-bold text-slate-800 leading-tight">Mon équipe</div><div class="text-xs text-slate-400">Intervenants & employeurs</div></div>
+      </button>
+      <button onclick="navigate('tools')" class="col-span-2 bg-white hover:bg-slate-50 rounded-2xl shadow-sm border border-slate-100 p-4 flex items-center gap-3 text-left transition">
+        <div class="w-11 h-11 rounded-xl flex items-center justify-center text-white bg-sky-500"><i class="fas fa-calculator"></i></div>
+        <div><div class="font-bold text-slate-800 leading-tight">Mes outils</div><div class="text-xs text-slate-400">Calculs (volume, dosage, filtration...) et analyse photo IA</div></div>
       </button>
     </div>
 

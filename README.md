@@ -57,7 +57,17 @@ Résultat : deux members inscrits sur la plateforme ne voient **jamais** les don
 - **🗺️ Mode Tournée** : parcours pas-à-pas de la journée pour l'intervenant mobile (une piscine après l'autre, checklist + GPS + saisie passage), basé sur le parcours optimisé.
 - **🌤️ Météo + conseils saisonniers** : widget météo (Open-Meteo, sans clé API) géolocalisé sur la piscine, avec **conseils d'entretien adaptés** à la température et à la saison.
 
-### 🆕 Dernière itération (procédures métier)
+### 🆕 Dernière itération (Mes outils + Code du pisciniste + checklist)
+- **🧮 Mes outils** (bouton sur l'accueil) : calculatrices du métier pour ne plus rien faire de tête —
+  - **Volume du bassin** (rectangulaire/ronde/ovale/libre, avec le bon coefficient par forme)
+  - **Diagnostic & dosage de l'eau** (réutilise le moteur `src/water.ts` déjà utilisé lors des passages : verdict par paramètre + dose chiffrée, sans avoir besoin d'une piscine existante)
+  - **Durée de filtration** (règle température ÷ 2)
+  - **Dosage chlore choc** (formule précise selon le volume, la concentration visée et celle du produit)
+  - **Analyse photo par IA** : envoie une photo de l'eau/du bassin, un modèle multimodal (via **OpenRouter**) identifie le problème probable (type d'algue, tache métallique, eau trouble...) et suggère une action. Nécessite de renseigner la variable d'environnement Cloudflare `OPENROUTER_API_KEY` (secret) ; modèle configurable via `OPENROUTER_MODEL` (défaut `openai/gpt-4o-mini`). Sans clé configurée, l'outil affiche un message explicatif au lieu d'échouer silencieusement.
+- **🎓 Code du pisciniste** (bouton sur la page Pisciniste) : jeu de questions façon « code de la route ». Banque de **209 questions** à 4 choix (chimie de l'eau, filtration, traitement/algues, nettoyage, hivernage, dépannage, réglementation/sécurité, calculs, glossaire...). Chaque session tire **40 questions aléatoires**, objectif **35/40** pour obtenir son « code » ; historique des tentatives conservé par utilisateur.
+- **☑️ Checklist des procédures** : sur la page Pisciniste, en ouvrant une procédure à étapes numérotées, chaque étape devient une case à cocher pour suivre sa progression pendant l'intervention (persistée en local sur l'appareil, indépendant du compte).
+
+### 🆕 Itération précédente (procédures métier)
 - **📚 Onglet Pisciniste (Important / Procédure / Information)** : centre de connaissances du métier. Trois onglets compacts dès l'arrivée sur la page :
   - **⭐ Important** : onglet par défaut — un sous-ensemble curaté des fiches (procédures **et** informations mélangées) jugées essentielles : bases de l'entretien courant (tournée type, tests pH/chlore, ajustement TAC/pH, préfiltre, skimmer, pression filtre), repérage des problèmes émergents (eau qui se trouble, pompe qui se désamorce, signaux d'alerte à surveiller à chaque passage) et fondamentaux du métier (valeurs idéales de l'eau, réglementation sécurité, stockage des produits, calculs de dosage, caisse à outils). Toute fiche peut être marquée « importante » depuis son formulaire de création/édition.
   - **Procédures** : modes opératoires pas à pas (tester pH/chlore au DPD ou au photomètre, tournée hebdomadaire type, changer un préfiltre, changer le sable du filtre, choc chlore, traiter une eau brune/tachée, entretenir un robot électrique/hydraulique, hivernage/remise en route, vidange réglementaire, carnet sanitaire, dépannage pompe, sécurité, repérage des signaux d'alerte...) — 41 fiches de démo.
@@ -134,6 +144,10 @@ Résultat : deux members inscrits sur la plateforme ne voient **jamais** les don
 | POST | `/api/procedures` | member | Créer une procédure |
 | PUT | `/api/procedures/:id` | member (auteur) | Modifier une procédure |
 | DELETE | `/api/procedures/:id` | member (auteur) | Supprimer une procédure |
+| POST | `/api/tools/photo-diagnose` | member | Mes outils : analyse photo par IA (OpenRouter, multipart) |
+| GET | `/api/quiz/session` | member | Code du pisciniste : tire 40 questions aléatoires (sans la réponse) |
+| POST | `/api/quiz/submit` | member | Code du pisciniste : corrige les réponses, enregistre la tentative |
+| GET | `/api/quiz/history` | member | Code du pisciniste : historique des tentatives de l'utilisateur |
 
 ## 🗄️ Modèle de données (Cloudflare D1 / SQLite + R2)
 - **users** : `pro` / `worker` / `client` + `phone`, `company`, `created_by`, couleur
@@ -145,7 +159,9 @@ Résultat : deux members inscrits sur la plateforme ne voient **jamais** les don
 - **maintenances** : entretiens récurrents/ponctuels, attribués à un user
 - **maintenance_logs** : passages effectués + relevés d'eau + produits
 - **photos** (R2) : métadonnées en D1 (`r2_key`, `pool_id`, `log_id`, `uploaded_by`, `caption`) + fichier binaire sur le bucket R2 `piscine-max-photos` (binding `PHOTOS`)
-- **procedures** : bibliothèque de fiches pratiques métier (`owner_id`, `created_by`, `type` = `procedure`|`information`, `title`, `category`, `summary`, `content`, `tags`) — même périmètre que clients/pools
+- **procedures** : bibliothèque de fiches pratiques métier (`owner_id`, `created_by`, `type` = `procedure`|`information`, `important`, `title`, `category`, `summary`, `content`, `tags`) — même périmètre que clients/pools
+- **quiz_questions** : banque de questions du « Code du pisciniste » (`category`, `question`, `option_a..d`, `correct`, `explanation`) — commune à la plateforme, pas de périmètre multi-tenant
+- **quiz_attempts** : historique des tentatives (`user_id`, `score`, `total`, `passed`) — propre à chaque utilisateur
 
 ## 📖 Guide rapide
 1. **Inscris-toi comme pisciniste** (ou connecte-toi avec un compte démo).
@@ -158,8 +174,9 @@ Résultat : deux members inscrits sur la plateforme ne voient **jamais** les don
 ## 🚀 Développement local
 ```bash
 npm install
-npm run db:migrate:local   # schéma local (migrations 0001 → 0008)
+npm run db:migrate:local   # schéma local (migrations 0001 → 0010)
 npm run db:seed            # données de démo (ou: wrangler d1 execute piscine-max-production --local --file=./seed-demo.sql)
+npx wrangler d1 execute piscine-max-production --local --file=./seed-quiz.sql   # banque de questions du Code du pisciniste
 npm run build
 pm2 start ecosystem.config.cjs
 # → http://localhost:3000
@@ -172,4 +189,4 @@ pm2 start ecosystem.config.cjs
 - **Bucket R2 prod** : `piscine-max-photos`, binding `PHOTOS`
 - **Migrations prod** : `npx wrangler d1 migrations apply piscine-max-production --remote`
 - **Déploiement direct** (garantit les bindings R2) : `npm run build && npx wrangler pages deploy dist --project-name piscine-max`
-- **Dernière mise à jour** : 2026-07-03 — onglet **Pisciniste** : ajout de l'onglet **Important** (remplace la vue « Toutes ») qui réunit les 29 fiches jugées essentielles (bases de l'entretien, repérage des problèmes émergents, fondamentaux du métier), avec possibilité de marquer n'importe quelle fiche comme importante ; contenu métier très pratique (79 fiches de démo — analyse de l'eau sur le terrain, spécificités par type de bassin, réglementation collective/sécurité chlore...), quelques valeurs corrigées après recherche complémentaire (plage idéale du stabilisant et du TH) + refonte du design (filtres compacts, catégories en scroll horizontal, regroupement par catégorie) pour rester lisible malgré le volume + (itération précédente : distinction Procédure/Information, bibliothèque de procédures, fusion des rôles en `member`, cycles de passage saisonniers, sécurité durcie, diagnostic eau, alertes, rapport, stats, tournée, météo)
+- **Dernière mise à jour** : 2026-07-04 — **Mes outils** (volume, diagnostic/dosage, durée de filtration, chlore choc, analyse photo IA via OpenRouter), **Code du pisciniste** (jeu de 209 questions, sessions de 40, objectif 35/40, historique) et **checklist des étapes** dans les procédures + (itération précédente : onglet Pisciniste avec vue Important, distinction Procédure/Information, bibliothèque de procédures, fusion des rôles en `member`, cycles de passage saisonniers, sécurité durcie, diagnostic eau, alertes, rapport, stats, tournée, météo)

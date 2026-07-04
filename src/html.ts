@@ -31,6 +31,8 @@ export function renderApp(): string {
   <script src="/static/views-client.js"></script>
   <script src="/static/views-extra.js"></script>
   <script src="/static/views-procedures.js"></script>
+  <script src="/static/views-tools.js"></script>
+  <script src="/static/views-quiz.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>`

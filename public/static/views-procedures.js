@@ -25,9 +25,14 @@ async function renderProcedures(c) {
   c.innerHTML = `
     <div class="flex items-center justify-between mb-1 gap-2">
       <h2 class="text-xl sm:text-2xl font-extrabold text-slate-800"><i class="fas fa-user-gear text-cyan-600 mr-2"></i>Pisciniste</h2>
-      <button onclick="openProcedureForm()" class="bg-cyan-600 hover:bg-cyan-700 text-white font-semibold px-3 sm:px-4 py-2 rounded-xl shadow flex items-center gap-2 shrink-0">
-        <i class="fas fa-plus"></i><span class="hidden sm:inline">Nouvelle fiche</span>
-      </button>
+      <div class="flex items-center gap-2 shrink-0">
+        <button onclick="navigate('quiz')" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-3 sm:px-4 py-2 rounded-xl shadow flex items-center gap-2" title="Jeu du Code du pisciniste">
+          <i class="fas fa-graduation-cap"></i><span class="hidden sm:inline">Code du pisciniste</span>
+        </button>
+        <button onclick="openProcedureForm()" class="bg-cyan-600 hover:bg-cyan-700 text-white font-semibold px-3 sm:px-4 py-2 rounded-xl shadow flex items-center gap-2">
+          <i class="fas fa-plus"></i><span class="hidden sm:inline">Nouvelle fiche</span>
+        </button>
+      </div>
     </div>
     <p class="text-xs sm:text-sm text-slate-400 mb-3">Le centre de connaissances du métier : <b>procédures</b> pas à pas et <b>informations</b> de référence. <b>Important</b> réunit l'essentiel à connaître sur le terrain.</p>
 
@@ -170,12 +175,84 @@ function renderProceduresList() {
   list.innerHTML = `<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">${items.map(procedureCardHtml).join('')}</div>`
 }
 
+// ---------- Checklist des étapes (procédures uniquement) ----------
+// Persistée en localStorage : on coche au fil de l'intervention pour savoir où
+// on en est, sans backend (progression locale à l'appareil de l'utilisateur).
+const _procStepsCache = {}
+
+function parseProcedureSteps(content) {
+  if (!content) return null
+  const lines = content.split('\n').map(l => l.trim()).filter(Boolean)
+  const steps = []
+  for (const l of lines) {
+    const m = l.match(/^(\d+)\.\s+(.*)$/)
+    if (!m) return null
+    steps.push(m[2])
+  }
+  return steps.length > 1 ? steps : null
+}
+
+function checklistKey(id) { return `pisc-checklist-${id}` }
+function loadChecklist(id, count) {
+  try {
+    const arr = JSON.parse(localStorage.getItem(checklistKey(id)) || '[]')
+    return Array.from({ length: count }, (_, i) => !!arr[i])
+  } catch { return Array(count).fill(false) }
+}
+function saveChecklist(id, checked) {
+  try { localStorage.setItem(checklistKey(id), JSON.stringify(checked)) } catch {}
+}
+
+function renderProcedureChecklist(id) {
+  const steps = _procStepsCache[id]
+  if (!steps) return ''
+  const checked = loadChecklist(id, steps.length)
+  const done = checked.filter(Boolean).length
+  return `
+    <div id="pcl-wrap-${id}">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-xs font-bold text-slate-500 uppercase tracking-wide">Étapes</span>
+        <span class="text-xs font-semibold ${done === steps.length ? 'text-emerald-600' : 'text-cyan-600'}">${done}/${steps.length}${done === steps.length ? ' <i class="fas fa-circle-check"></i>' : ''}</span>
+      </div>
+      <div class="space-y-1.5">
+        ${steps.map((s, i) => `
+          <label class="flex items-start gap-2.5 p-2.5 rounded-xl border ${checked[i] ? 'bg-emerald-50 border-emerald-200' : 'border-slate-100'} cursor-pointer">
+            <input type="checkbox" class="mt-0.5 w-4 h-4 accent-cyan-600 shrink-0" ${checked[i] ? 'checked' : ''} onchange="toggleProcedureStep(${id}, ${i}, this.checked)">
+            <span class="text-sm ${checked[i] ? 'text-slate-400 line-through' : 'text-slate-700'}">${esc(s)}</span>
+          </label>`).join('')}
+      </div>
+      ${done > 0 ? `<button onclick="resetProcedureChecklist(${id})" class="text-xs text-slate-400 hover:text-red-500 mt-2"><i class="fas fa-rotate-left mr-1"></i>Réinitialiser la progression</button>` : ''}
+    </div>`
+}
+
+function toggleProcedureStep(id, idx, isChecked) {
+  const steps = _procStepsCache[id]
+  if (!steps) return
+  const checked = loadChecklist(id, steps.length)
+  checked[idx] = isChecked
+  saveChecklist(id, checked)
+  const wrap = el(`pcl-wrap-${id}`)
+  if (wrap) wrap.outerHTML = renderProcedureChecklist(id)
+}
+window.toggleProcedureStep = toggleProcedureStep
+
+function resetProcedureChecklist(id) {
+  const steps = _procStepsCache[id]
+  if (!steps) return
+  saveChecklist(id, Array(steps.length).fill(false))
+  const wrap = el(`pcl-wrap-${id}`)
+  if (wrap) wrap.outerHTML = renderProcedureChecklist(id)
+}
+window.resetProcedureChecklist = resetProcedureChecklist
+
 // ---------- Lecture d'une fiche ----------
 function openProcedureView(id) {
   const p = procState.items.find(x => x.id === id)
   if (!p) return
   const type = p.type || 'procedure'
   const canEdit = state.user && p.owner_id === state.user.id
+  const steps = type === 'procedure' ? parseProcedureSteps(p.content) : null
+  _procStepsCache[id] = steps
   openModal(esc(p.title), `
     <div class="space-y-4">
       <div class="flex flex-wrap items-center gap-2">
@@ -186,7 +263,7 @@ function openProcedureView(id) {
         ${p.updated_at ? `<span class="text-xs text-slate-400"><i class="fas fa-clock mr-1"></i>${new Date(p.updated_at).toLocaleDateString('fr-FR')}</span>` : ''}
       </div>
       ${p.summary ? `<p class="text-sm font-semibold text-slate-600">${esc(p.summary)}</p>` : ''}
-      ${p.content ? `<div class="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">${esc(p.content)}</div>` : '<p class="text-sm text-slate-400 italic">Aucun détail renseigné.</p>'}
+      ${steps ? renderProcedureChecklist(id) : (p.content ? `<div class="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">${esc(p.content)}</div>` : '<p class="text-sm text-slate-400 italic">Aucun détail renseigné.</p>')}
       ${p.tags ? `<div class="flex flex-wrap gap-1.5 pt-1">${p.tags.split(',').map(t => t.trim()).filter(Boolean).map(t => `<span class="text-[11px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">#${esc(t)}</span>`).join('')}</div>` : ''}
       ${canEdit ? `
       <div class="flex gap-2 pt-3 border-t border-slate-100">
