@@ -16,7 +16,7 @@ type Bindings = {
   RESEND_API_KEY?: string        // Clé API Resend (secret Cloudflare)
   RESEND_FROM?: string           // Expéditeur vérifié, ex: "Piscine Max <contact@mondomaine.fr>"
   OPENROUTER_API_KEY?: string    // Clé API OpenRouter (secret Cloudflare) — analyse photo IA dans "Mes outils"
-  OPENROUTER_MODEL?: string      // Modèle multimodal OpenRouter à utiliser (défaut: openai/gpt-4o-mini)
+  OPENROUTER_MODEL?: string      // Modèle multimodal OpenRouter à utiliser (défaut: google/gemini-3.5-flash)
 }
 
 // Fallback si le secret n'est pas défini en variable d'environnement Cloudflare.
@@ -864,7 +864,7 @@ Reste factuel et prudent : si l'image ne permet pas de conclure avec certitude, 
         'X-Title': 'Piscine Max - Mes outils',
       },
       body: JSON.stringify({
-        model: c.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini',
+        model: c.env.OPENROUTER_MODEL || 'google/gemini-3.5-flash',
         messages: [{
           role: 'user',
           content: [
