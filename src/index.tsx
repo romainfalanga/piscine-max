@@ -936,7 +936,7 @@ async function relevantProcedures(c: any, user: SessionUser, query: string, limi
   const proIds = await visibleProIds(c, user)
   if (!proIds.length) return []
   const { results } = await c.env.DB.prepare(
-    `SELECT title, type, category, summary, content, tags FROM procedures WHERE owner_id IN (${inClause(proIds)})`
+    `SELECT id, title, type, category, summary, content, tags FROM procedures WHERE owner_id IN (${inClause(proIds)})`
   ).bind(...proIds).all()
   const norm = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   const words = [...new Set(norm(query).split(/[^a-z0-9]+/).filter(w => w.length >= 4))]
@@ -998,11 +998,13 @@ app.post('/api/assistant/chat', requireAuth, requireMember, async (c) => {
   const user = c.get('user')
   const lastUser = [...history].reverse().find((m: any) => m?.role !== 'assistant')
   let knowledge = ''
+  let sources: any[] = []
   try {
     const fiches = await relevantProcedures(c, user, String(lastUser?.content || ''))
     if (fiches.length) {
       knowledge = '\n\nFiches internes de l\'équipe pertinentes pour cette question — ce sont tes sources de référence prioritaires (contenus vérifiés par l\'équipe, ils priment sur ta connaissance générale en cas de divergence) :\n' +
         fiches.map(f => `--- ${f.type === 'information' ? 'Information' : 'Procédure'} · ${f.title} (${f.category})\n${(f.content || f.summary || '').slice(0, 1500)}`).join('\n')
+      sources = fiches.map(f => ({ id: f.id, title: f.title, type: f.type, category: f.category }))
     }
   } catch { /* le RAG est un bonus : ne bloque jamais la réponse */ }
 
@@ -1036,9 +1038,26 @@ app.post('/api/assistant/chat', requireAuth, requireMember, async (c) => {
       else if (resp.status === 429) hint = ' Trop de requêtes, réessaie dans un instant.'
       return c.json({ error: `Erreur du service IA (${resp.status}).${hint} ${errText.slice(0, 200)}` }, 502)
     }
-    // On relaie le flux SSE d'OpenRouter tel quel : le navigateur le parse
-    // (chunks "data: {...}" + "data: [DONE]", lignes ": commentaire" à ignorer).
-    return new Response(resp.body, {
+    // On relaie le flux SSE d'OpenRouter en le préfixant d'un événement maison
+    // listant les fiches sources utilisées (le navigateur parse les chunks
+    // "data: {...}" + "data: [DONE]", et ignore les lignes ": commentaire").
+    const upstream = resp.body.getReader()
+    const encoder = new TextEncoder()
+    let sourcesSent = false
+    const stream = new ReadableStream({
+      async pull(controller) {
+        if (!sourcesSent) {
+          sourcesSent = true
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ sources })}\n\n`))
+          return
+        }
+        const { done, value } = await upstream.read()
+        if (done) controller.close()
+        else controller.enqueue(value)
+      },
+      cancel() { upstream.cancel().catch(() => {}) },
+    })
+    return new Response(stream, {
       headers: {
         'Content-Type': 'text/event-stream; charset=utf-8',
         'Cache-Control': 'no-cache',
