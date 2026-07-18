@@ -8,6 +8,7 @@ import { renderApp } from './html'
 import { diagnoseWater } from './water'
 import { renderReportEmail, reportEmailSubject, sendReportEmail, type ReportData } from './email'
 import { effectiveIntervalForDate, effectiveSeasonLabel, findSeasonOverlap, type Season } from './seasons'
+import { QUIZ_BANK } from './quiz-data'
 
 type Bindings = {
   DB: D1Database
@@ -1077,7 +1078,26 @@ app.post('/api/assistant/chat', requireAuth, requireMember, async (c) => {
 const QUIZ_SESSION_SIZE = 40
 const QUIZ_PASS_SCORE = 35
 
+// La banque de référence vit dans le code (src/quiz-data.ts, générée par
+// scripts/gen-quiz.mjs) : à chaque déploiement, si la base ne contient pas le
+// même nombre de questions, elle est resynchronisée automatiquement — aucun
+// seed manuel à lancer en production. Les inserts sont chunkés (limite de
+// statements par batch D1) : en cas d'échec partiel, le compte ne correspond
+// toujours pas et la synchro se relance au prochain accès (auto-réparant).
+async function ensureQuizBank(c: any) {
+  const row = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM quiz_questions').first<any>()
+  if (row && Number(row.n) === QUIZ_BANK.length) return
+  await c.env.DB.prepare('DELETE FROM quiz_questions').run()
+  const CHUNK = 50
+  for (let i = 0; i < QUIZ_BANK.length; i += CHUNK) {
+    await c.env.DB.batch(QUIZ_BANK.slice(i, i + CHUNK).map(q => c.env.DB.prepare(
+      'INSERT INTO quiz_questions (category, question, option_a, option_b, option_c, option_d, correct, explanation) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(q.cat, q.q, q.a, q.b, q.c, q.d, q.correct, q.exp ?? null)))
+  }
+}
+
 app.get('/api/quiz/session', requireAuth, requirePro, async (c) => {
+  try { await ensureQuizBank(c) } catch { /* on sert la banque existante si la synchro échoue */ }
   const { results } = await c.env.DB.prepare(`
     SELECT id, category, question, option_a, option_b, option_c, option_d
     FROM quiz_questions ORDER BY RANDOM() LIMIT ?
