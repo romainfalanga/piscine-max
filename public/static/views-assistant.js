@@ -170,9 +170,41 @@ function assistantMessageHtml(m, idx) {
       <div class="max-w-[90%] bg-white border border-slate-200 rounded-2xl rounded-bl-md px-4 py-2.5 text-sm text-slate-700 leading-relaxed shadow-sm">
         <div class="text-[11px] font-bold text-violet-500 mb-1"><i class="fas fa-robot mr-1"></i>Max</div>
         <div id="assist-msg-${idx}">${assistantMarkdown(m.content)}</div>
+        ${assistantSourcesHtml(m.sources)}
       </div>
     </div>`
 }
+
+// Vignettes des fiches internes sur lesquelles la réponse s'appuie : un clic
+// ouvre la fiche complète (procédure avec checklist ou information).
+function assistantSourcesHtml(sources) {
+  if (!sources || !sources.length) return ''
+  return `
+    <div class="mt-2.5 pt-2 border-t border-slate-100">
+      <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5"><i class="fas fa-book-open mr-1"></i>Fiches utilisées pour cette réponse</div>
+      <div class="flex flex-wrap gap-1.5">
+        ${sources.map(s => `
+          <button onclick="openAssistantSource(${Number(s.id)})" class="text-[11px] font-semibold px-2.5 py-1 rounded-full border transition ${s.type === 'information' ? 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100' : 'bg-cyan-50 text-cyan-700 border-cyan-200 hover:bg-cyan-100'}" title="${esc(s.category || '')}">
+            <i class="fas ${s.type === 'information' ? 'fa-circle-info' : 'fa-screwdriver-wrench'} mr-1"></i>${esc(s.title)}
+          </button>`).join('')}
+      </div>
+    </div>`
+}
+
+// Ouvre une fiche source : on la charge depuis l'API puis on réutilise la
+// visionneuse de la page Pisciniste (openProcedureView lit procState.items).
+async function openAssistantSource(id) {
+  try {
+    const { data } = await API.get(`/procedures/${id}`)
+    const existing = procState.items.findIndex(p => p.id === data.id)
+    if (existing === -1) procState.items.push(data)
+    else procState.items[existing] = data
+    openProcedureView(data.id)
+  } catch {
+    toast('Fiche introuvable (supprimée ou hors de ton périmètre)', 'error')
+  }
+}
+window.openAssistantSource = openAssistantSource
 
 function renderAssistantMessages() {
   const box = el('assist-messages')
@@ -259,6 +291,11 @@ async function sendAssistantMessage() {
         if (data === '[DONE]') continue
         try {
           const json = JSON.parse(data)
+          // Événement maison envoyé en tête de flux : les fiches sources du mini-RAG
+          if (Array.isArray(json.sources)) {
+            if (json.sources.length) assistState.messages[asstIdx].sources = json.sources
+            continue
+          }
           const delta = json.choices?.[0]?.delta?.content
           if (delta) {
             full += delta
