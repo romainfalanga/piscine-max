@@ -192,7 +192,7 @@ function renderShell() {
   // Les vues internes (pool-detail, client-detail, stats, team) restent accessibles
   // depuis l'accueil / les fiches, mais n'encombrent plus la barre de navigation.
   const activeNav = ['client-detail', 'pool-detail'].includes(state.view) ? 'clients'
-    : ['stats', 'team', 'tools'].includes(state.view) ? 'home'
+    : ['stats', 'team', 'tools', 'assistant'].includes(state.view) ? 'home'
     : ['quiz'].includes(state.view) ? 'procedures'
     : state.view
 
@@ -270,6 +270,7 @@ function renderView() {
   else if (state.view === 'procedures') renderProcedures(c)
   else if (state.view === 'tools') renderTools(c)
   else if (state.view === 'quiz') renderQuiz(c)
+  else if (state.view === 'assistant') renderAssistant(c)
 }
 
 // ============================================================
@@ -360,9 +361,13 @@ function renderHome(c) {
         <div class="w-11 h-11 rounded-xl flex items-center justify-center text-white bg-emerald-500"><i class="fas fa-user-group"></i></div>
         <div><div class="font-bold text-slate-800 leading-tight">Mon équipe</div><div class="text-xs text-slate-400">Intervenants & employeurs</div></div>
       </button>
-      <button onclick="navigate('tools')" class="col-span-2 bg-white hover:bg-slate-50 rounded-2xl shadow-sm border border-slate-100 p-4 flex items-center gap-3 text-left transition">
+      <button onclick="navigate('tools')" class="bg-white hover:bg-slate-50 rounded-2xl shadow-sm border border-slate-100 p-4 flex items-center gap-3 text-left transition">
         <div class="w-11 h-11 rounded-xl flex items-center justify-center text-white bg-sky-500"><i class="fas fa-calculator"></i></div>
         <div><div class="font-bold text-slate-800 leading-tight">Mes outils</div><div class="text-xs text-slate-400">Calculs (volume, dosage, filtration...) et analyse photo IA</div></div>
+      </button>
+      <button onclick="navigate('assistant')" class="bg-white hover:bg-slate-50 rounded-2xl shadow-sm border border-slate-100 p-4 flex items-center gap-3 text-left transition">
+        <div class="w-11 h-11 rounded-xl flex items-center justify-center text-white bg-violet-500"><i class="fas fa-robot"></i></div>
+        <div><div class="font-bold text-slate-800 leading-tight">Assistant IA</div><div class="text-xs text-slate-400">Pose une question, joins des photos : diagnostic instantané</div></div>
       </button>
     </div>
 

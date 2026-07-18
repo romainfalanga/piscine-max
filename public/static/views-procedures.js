@@ -26,6 +26,9 @@ async function renderProcedures(c) {
     <div class="flex items-center justify-between mb-1 gap-2">
       <h2 class="text-xl sm:text-2xl font-extrabold text-slate-800"><i class="fas fa-user-gear text-cyan-600 mr-2"></i>Pisciniste</h2>
       <div class="flex items-center gap-2 shrink-0">
+        <button onclick="navigate('assistant')" class="bg-violet-600 hover:bg-violet-700 text-white font-semibold px-3 sm:px-4 py-2 rounded-xl shadow flex items-center gap-2" title="Assistant IA">
+          <i class="fas fa-robot"></i><span class="hidden sm:inline">Assistant IA</span>
+        </button>
         <button onclick="navigate('quiz')" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-3 sm:px-4 py-2 rounded-xl shadow flex items-center gap-2" title="Jeu du Code du pisciniste">
           <i class="fas fa-graduation-cap"></i><span class="hidden sm:inline">Code du pisciniste</span>
         </button>

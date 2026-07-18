@@ -894,6 +894,157 @@ Reste factuel et prudent : si l'image ne permet pas de conclure avec certitude, 
 })
 
 // ============================================================
+// ASSISTANT IA — agent conversationnel multimodal (OpenRouter / Gemini)
+// ============================================================
+// L'assistant répond à toute question (métier ou non), aide à diagnostiquer
+// une problématique terrain, et "voit" les photos jointes aux messages grâce
+// à un modèle multimodal (Gemini par défaut). Il est ancré dans le métier via
+// un prompt système de pisciniste expert + les fiches procédures/informations
+// du périmètre de l'utilisateur les plus pertinentes (mini-RAG par mots-clés).
+
+const ASSISTANT_MODEL_DEFAULT = 'google/gemini-3.5-flash'
+const ASSISTANT_MAX_MESSAGES = 24        // messages d'historique max envoyés au modèle
+const ASSISTANT_MAX_TEXT = 8000          // caractères max par message
+const ASSISTANT_MAX_IMAGES = 3           // images max par message
+const ASSISTANT_MAX_IMAGE_CHARS = 7_200_000 // ~5 Mo binaire une fois encodé en base64
+
+const ASSISTANT_SYSTEM_PROMPT = `Tu es "Max", l'assistant IA expert de Piscine Max, une plateforme utilisée par des piscinistes professionnels et leurs intervenants sur le terrain.
+
+Ton rôle :
+- Tu maîtrises parfaitement le métier de pisciniste : chimie de l'eau (pH, TAC, chlore libre/combiné/total, stabilisant, sel, équilibre de Taylor/Langelier), tous les systèmes de filtration (sable, verre, zéolite, cartouche, diatomées, poche), les pompes (mono-vitesse, vitesse variable, surpresseur, NCC, pompe à chaleur), l'hydraulique (vannes, vanne multivoies 6 positions, by-pass, clapets, amorçage, prises d'air, cavitation), les traitements (chlore, brome, sel/électrolyse, oxygène actif, UV), le dépannage matériel, l'hivernage/remise en route, la réglementation française (sécurité NF P90-306 à 309, NF C15-100, ARS/carnet sanitaire, rejets de vidange) et la sécurité des produits chimiques.
+- Tu réponds aussi à toute question générale, même hors métier, du mieux possible.
+- Quand l'utilisateur joint une ou plusieurs photos, analyse-les concrètement (couleur/clarté de l'eau, algues, taches, état du matériel, lecture de manomètre ou d'étiquette de produit...) et intègre ce que tu vois dans ta réponse.
+
+Comment répondre :
+- Toujours en français, de façon claire, directe et actionnable — l'utilisateur est souvent sur le terrain, sur mobile.
+- Pour un diagnostic : commence par le constat, puis la cause la plus probable, puis les actions dans l'ordre. Si plusieurs causes sont possibles, dis comment les départager (test simple, observation).
+- Pour un dosage : demande le volume du bassin s'il n'est pas donné, et rappelle les précautions (jamais mélanger les produits, pH d'abord, filtration en marche...).
+- Sécurité avant tout : signale les gestes dangereux (mélange chlore/acide, manipulation vanne multivoies pompe en marche, électricité en local humide...) quand la question s'y prête.
+- Si tu n'es pas sûr, dis-le honnêtement plutôt que d'inventer. Si une photo ne permet pas de conclure, explique ce qu'il faudrait vérifier.
+- Utilise du Markdown léger (listes, gras) pour structurer tes réponses, sans en abuser.`
+
+// Sélectionne les fiches du périmètre les plus pertinentes pour la question
+// (score par recouvrement de mots-clés, sans dépendance externe).
+async function relevantProcedures(c: any, user: SessionUser, query: string, limit = 5): Promise<any[]> {
+  if (!query || query.length < 8) return []
+  const proIds = await visibleProIds(c, user)
+  if (!proIds.length) return []
+  const { results } = await c.env.DB.prepare(
+    `SELECT title, type, category, summary, content, tags FROM procedures WHERE owner_id IN (${inClause(proIds)})`
+  ).bind(...proIds).all()
+  const norm = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  const words = [...new Set(norm(query).split(/[^a-z0-9]+/).filter(w => w.length >= 4))]
+  if (!words.length) return []
+  const scored = (results as any[]).map(p => {
+    const hay = norm(`${p.title} ${p.tags} ${p.category} ${p.summary}`)
+    const body = norm(p.content || '')
+    let score = 0
+    for (const w of words) {
+      if (hay.includes(w)) score += 3
+      else if (body.includes(w)) score += 1
+    }
+    return { p, score }
+  }).filter(x => x.score >= 3)
+  scored.sort((a, b) => b.score - a.score)
+  return scored.slice(0, limit).map(x => x.p)
+}
+
+app.post('/api/assistant/chat', requireAuth, requireMember, async (c) => {
+  const apiKey = c.env.OPENROUTER_API_KEY
+  if (!apiKey) return c.json({ error: "Assistant IA non configuré : ajoute la variable d'environnement OPENROUTER_API_KEY dans les paramètres Cloudflare Pages (Settings → Environment variables), puis redéploie." }, 501)
+
+  let body: any
+  try { body = await c.req.json() } catch { return c.json({ error: 'Requête invalide (JSON attendu).' }, 400) }
+  const history = Array.isArray(body?.messages) ? body.messages : []
+  if (!history.length) return c.json({ error: 'Message manquant.' }, 400)
+
+  // Validation + nettoyage de l'historique (on ne fait jamais confiance au client).
+  // Les images ne sont conservées que sur le DERNIER message utilisateur : les
+  // renvoyer sur les anciens tours ferait repayer leurs tokens à chaque requête.
+  const recent = history.slice(-ASSISTANT_MAX_MESSAGES)
+  const lastUserIdx = recent.map((m: any) => m?.role !== 'assistant').lastIndexOf(true)
+  const cleaned: any[] = []
+  for (let i = 0; i < recent.length; i++) {
+    const m = recent[i]
+    const role = m?.role === 'assistant' ? 'assistant' : 'user'
+    let text = typeof m?.content === 'string' ? m.content.slice(0, ASSISTANT_MAX_TEXT) : ''
+    const hasImages = role === 'user' && Array.isArray(m?.images) && m.images.length > 0
+    const images: string[] = hasImages && i === lastUserIdx
+      ? m.images.filter((u: any) => typeof u === 'string' && u.startsWith('data:image/') && u.length <= ASSISTANT_MAX_IMAGE_CHARS).slice(0, ASSISTANT_MAX_IMAGES)
+      : []
+    if (hasImages && i !== lastUserIdx) text = `[photo jointe précédemment] ${text}`.trim()
+    if (!text && !images.length) continue
+    if (images.length) {
+      cleaned.push({
+        role,
+        content: [
+          ...(text ? [{ type: 'text', text }] : []),
+          ...images.map(u => ({ type: 'image_url', image_url: { url: u } })),
+        ],
+      })
+    } else {
+      cleaned.push({ role, content: text })
+    }
+  }
+  if (!cleaned.length) return c.json({ error: 'Message vide.' }, 400)
+
+  // Mini-RAG : fiches du périmètre pertinentes pour la dernière question
+  const user = c.get('user')
+  const lastUser = [...history].reverse().find((m: any) => m?.role !== 'assistant')
+  let knowledge = ''
+  try {
+    const fiches = await relevantProcedures(c, user, String(lastUser?.content || ''))
+    if (fiches.length) {
+      knowledge = '\n\nFiches internes de l\'équipe potentiellement pertinentes (appuie-toi dessus si utiles, elles reflètent les pratiques maison) :\n' +
+        fiches.map(f => `--- ${f.type === 'information' ? 'Information' : 'Procédure'} · ${f.title} (${f.category})\n${(f.content || f.summary || '').slice(0, 1500)}`).join('\n')
+    }
+  } catch { /* le RAG est un bonus : ne bloque jamais la réponse */ }
+
+  const payload = {
+    model: c.env.OPENROUTER_MODEL || ASSISTANT_MODEL_DEFAULT,
+    messages: [
+      { role: 'system', content: ASSISTANT_SYSTEM_PROMPT + knowledge },
+      ...cleaned,
+    ],
+    max_tokens: 1600,
+    temperature: 0.4,
+    stream: true,
+  }
+
+  try {
+    const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://piscine-max.pages.dev',
+        'X-Title': 'Piscine Max - Assistant IA',
+      },
+      body: JSON.stringify(payload),
+    })
+    if (!resp.ok || !resp.body) {
+      const errText = await resp.text().catch(() => '')
+      let hint = ''
+      if (resp.status === 401) hint = ' Clé API invalide.'
+      else if (resp.status === 402) hint = ' Crédits OpenRouter épuisés.'
+      else if (resp.status === 429) hint = ' Trop de requêtes, réessaie dans un instant.'
+      return c.json({ error: `Erreur du service IA (${resp.status}).${hint} ${errText.slice(0, 200)}` }, 502)
+    }
+    // On relaie le flux SSE d'OpenRouter tel quel : le navigateur le parse
+    // (chunks "data: {...}" + "data: [DONE]", lignes ": commentaire" à ignorer).
+    return new Response(resp.body, {
+      headers: {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache',
+        'X-Accel-Buffering': 'no',
+      },
+    })
+  } catch (err: any) {
+    return c.json({ error: "Impossible de contacter le service IA. " + (err?.message || '') }, 502)
+  }
+})
+
+// ============================================================
 // CODE DU PISCINISTE — jeu de questions façon "code de la route"
 // ============================================================
 // Banque de questions commune à la plateforme (pas de périmètre multi-tenant),
