@@ -920,8 +920,14 @@ Comment répondre :
 - Pour un diagnostic : commence par le constat, puis la cause la plus probable, puis les actions dans l'ordre. Si plusieurs causes sont possibles, dis comment les départager (test simple, observation).
 - Pour un dosage : demande le volume du bassin s'il n'est pas donné, et rappelle les précautions (jamais mélanger les produits, pH d'abord, filtration en marche...).
 - Sécurité avant tout : signale les gestes dangereux (mélange chlore/acide, manipulation vanne multivoies pompe en marche, électricité en local humide...) quand la question s'y prête.
-- Si tu n'es pas sûr, dis-le honnêtement plutôt que d'inventer. Si une photo ne permet pas de conclure, explique ce qu'il faudrait vérifier.
-- Utilise du Markdown léger (listes, gras) pour structurer tes réponses, sans en abuser.`
+- Utilise du Markdown léger (listes, gras) pour structurer tes réponses, sans en abuser.
+
+Règles de fiabilité (IMPÉRATIVES — mieux vaut une réponse incomplète qu'une réponse fausse) :
+- Quand des fiches internes de l'équipe te sont fournies dans le contexte, elles sont ta SOURCE DE RÉFÉRENCE : appuie tes réponses dessus en priorité. Si ta connaissance générale diverge d'une fiche, suis la fiche et signale explicitement la divergence à l'utilisateur.
+- N'invente JAMAIS un chiffre, une référence de norme, un texte réglementaire ou une caractéristique produit dont tu n'es pas certain. Si tu ne connais pas une valeur précise, dis-le et indique où la trouver (notice fabricant, plaque signalétique, étiquette du produit, fiche interne, texte officiel).
+- Pour les dosages : donne la formule et l'ordre de grandeur, mais renvoie TOUJOURS à l'étiquette du produit réel (les concentrations varient d'une marque à l'autre).
+- Pour la réglementation : précise que tes indications sont générales et qu'un texte officiel ou un organisme compétent (ARS, assureur, mairie...) fait foi pour un cas particulier.
+- Si tu n'es pas sûr, dis-le honnêtement plutôt que d'inventer. Si une photo ne permet pas de conclure, explique ce qu'il faudrait vérifier pour trancher (test, mesure, démontage).`
 
 // Sélectionne les fiches du périmètre les plus pertinentes pour la question
 // (score par recouvrement de mots-clés, sans dépendance externe).
@@ -995,7 +1001,7 @@ app.post('/api/assistant/chat', requireAuth, requireMember, async (c) => {
   try {
     const fiches = await relevantProcedures(c, user, String(lastUser?.content || ''))
     if (fiches.length) {
-      knowledge = '\n\nFiches internes de l\'équipe potentiellement pertinentes (appuie-toi dessus si utiles, elles reflètent les pratiques maison) :\n' +
+      knowledge = '\n\nFiches internes de l\'équipe pertinentes pour cette question — ce sont tes sources de référence prioritaires (contenus vérifiés par l\'équipe, ils priment sur ta connaissance générale en cas de divergence) :\n' +
         fiches.map(f => `--- ${f.type === 'information' ? 'Information' : 'Procédure'} · ${f.title} (${f.category})\n${(f.content || f.summary || '').slice(0, 1500)}`).join('\n')
     }
   } catch { /* le RAG est un bonus : ne bloque jamais la réponse */ }
