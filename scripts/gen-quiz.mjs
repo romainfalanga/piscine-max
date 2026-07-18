@@ -345,3 +345,16 @@ lines.push('-- Fin du seed quiz')
 
 writeFileSync(new URL('../seed-quiz.sql', import.meta.url), lines.join('\n'))
 console.log(`seed-quiz.sql généré : ${Q.length} questions, ${lines.length} lignes`)
+
+// Module TypeScript embarqué dans le worker : permet à l'application de
+// resynchroniser elle-même la banque de questions en production (déploiement
+// 100% automatique via GitHub, sans commande wrangler manuelle).
+const ts = [
+  '// FICHIER GÉNÉRÉ par scripts/gen-quiz.mjs — NE PAS ÉDITER À LA MAIN.',
+  '// Pour modifier la banque : éditer scripts/gen-quiz.mjs puis relancer `node scripts/gen-quiz.mjs`.',
+  'export type QuizQuestion = { cat: string; q: string; a: string; b: string; c: string; d: string; correct: string; exp?: string }',
+  `export const QUIZ_BANK: QuizQuestion[] = ${JSON.stringify(Q, null, 0)}`,
+  '',
+].join('\n')
+writeFileSync(new URL('../src/quiz-data.ts', import.meta.url), ts)
+console.log(`src/quiz-data.ts généré : ${Q.length} questions embarquées`)
