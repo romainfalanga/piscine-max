@@ -29,3 +29,6 @@ pids/
 *.bak
 *.tar.gz
 *.zip
+
+# Local browser, capacity fixtures and reports
+.test-artifacts/

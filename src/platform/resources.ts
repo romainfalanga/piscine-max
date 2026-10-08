@@ -1,0 +1,192 @@
+import { Hono } from "hono";
+import {
+  Env,
+  who,
+  uid,
+  now,
+  fail,
+  str,
+  number,
+  stmt,
+  row,
+  rows,
+  access,
+  requirePro,
+  limit,
+  jsonParse,
+} from "./core";
+import { QUIZ_BANK } from "../quiz-data";
+import { REFERENCE_PROCEDURES } from "../procedure-data";
+export const resources = new Hono<Env>();
+resources.get("/procedures/reference", (c) => {
+  requirePro(c);
+  return c.json({
+    items: REFERENCE_PROCEDURES.map((p, id) => ({
+      ...p,
+      id: "reference-" + id,
+    })),
+  });
+});
+resources.get("/procedures", async (c) => {
+  requirePro(c);
+  return c.json({
+    items: await rows(
+      c,
+      "SELECT * FROM procedures WHERE owner_id=? ORDER BY important DESC,title LIMIT 200",
+      who(c).id,
+    ),
+  });
+});
+resources.post("/procedures", async (c) => {
+  requirePro(c);
+  const b = await c.req.json(),
+    id = uid();
+  await stmt(
+    c,
+    "INSERT INTO procedures(id,owner_id,title,body,important) VALUES(?,?,?,?,?)",
+    id,
+    who(c).id,
+    str(b.title, 160, true),
+    str(b.body, 12000, true),
+    b.important ? 1 : 0,
+  ).run();
+  return c.json({ id }, 201);
+});
+resources.put("/procedures/:id", async (c) => {
+  requirePro(c);
+  const b = await c.req.json();
+  const r = await stmt(
+    c,
+    "UPDATE procedures SET title=?,body=?,important=? WHERE id=? AND owner_id=?",
+    str(b.title, 160, true),
+    str(b.body, 12000, true),
+    b.important ? 1 : 0,
+    c.req.param("id"),
+    who(c).id,
+  ).run();
+  if (!r.meta.changes) fail("Fiche inaccessible.", 404);
+  return c.json({ ok: true });
+});
+resources.delete("/procedures/:id", async (c) => {
+  requirePro(c);
+  await stmt(
+    c,
+    "DELETE FROM procedures WHERE id=? AND owner_id=?",
+    c.req.param("id"),
+    who(c).id,
+  ).run();
+  return c.json({ ok: true });
+});
+resources.get("/quiz", (c) => {
+  requirePro(c);
+  const samples = QUIZ_BANK.map((q, id) => ({
+    id,
+    sort: crypto.getRandomValues(new Uint32Array(1))[0],
+    category: q.cat,
+    question: q.q,
+    options: { a: q.a, b: q.b, c: q.c, d: q.d },
+  }))
+    .sort((a, b) => a.sort - b.sort)
+    .slice(0, 40)
+    .map(({ sort, ...q }) => q);
+  return c.json({ items: samples });
+});
+resources.post("/quiz", async (c) => {
+  requirePro(c);
+  const b = await c.req.json();
+  if (
+    !Array.isArray(b.answers) ||
+    b.answers.length !== 40 ||
+    new Set(b.answers.map((x: any) => x.id)).size !== 40
+  )
+    fail("Une session contient 40 questions distinctes.");
+  const results = b.answers.map((a: any) => {
+    const id = number(a.id, 0, QUIZ_BANK.length - 1)!;
+    if (!Number.isInteger(id)) fail("Question invalide.");
+    const q = QUIZ_BANK[id];
+    return {
+      id,
+      correct: q.correct,
+      success: q.correct === a.answer,
+      explanation: q.exp || "",
+    };
+  });
+  const score = results.filter((r: any) => r.success).length;
+  await stmt(
+    c,
+    "INSERT INTO quiz_attempts(id,user_id,score,total) VALUES(?,?,?,?)",
+    uid(),
+    who(c).id,
+    score,
+    40,
+  ).run();
+  return c.json({ score, total: 40, results });
+});
+resources.get("/quiz/history", async (c) => {
+  requirePro(c);
+  return c.json({
+    items: await rows(
+      c,
+      "SELECT score,total,created_at FROM quiz_attempts WHERE user_id=? ORDER BY created_at DESC LIMIT 30",
+      who(c).id,
+    ),
+  });
+});
+resources.get("/pools/:id/weather", async (c) => {
+  const p = await access(c, c.req.param("id"));
+  if (p.latitude == null) fail("Renseigne la commune de la piscine.");
+  const r = await fetch(
+    `https://api.open-meteo.com/v1/forecast?latitude=${p.latitude}&longitude=${p.longitude}&daily=temperature_2m_max,precipitation_sum&timezone=Europe%2FParis&forecast_days=3`,
+    { signal: AbortSignal.timeout(5000) },
+  );
+  if (!r.ok) fail("Météo indisponible.", 503);
+  const b: any = await r.json();
+  return c.json({ daily: b.daily, source: "Open-Meteo", city: p.city });
+});
+resources.get("/tools/config", (c) => {
+  requirePro(c);
+  return c.json({
+    assistant_available: Boolean(c.env.OPENROUTER_API_KEY),
+    daily_assistant_limit: 10,
+  });
+});
+resources.post("/assistant", async (c) => {
+  requirePro(c);
+  if (!c.env.OPENROUTER_API_KEY)
+    fail("L’assistant est temporairement indisponible.", 503);
+  await limit(c, `assistant:${who(c).id}`, 10, 86400);
+  await limit(c, "assistant:global", 100, 86400);
+  const b = await c.req.json();
+  const question = str(b.question, 3000, true);
+  const response = await fetch(
+    "https://openrouter.ai/api/v1/chat/completions",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${c.env.OPENROUTER_API_KEY}`,
+        "Content-Type": "application/json",
+        "X-Title": "Peace in Blue",
+      },
+      body: JSON.stringify({
+        model: c.env.OPENROUTER_MODEL || "google/gemini-2.5-flash",
+        messages: [
+          {
+            role: "system",
+            content:
+              "Tu es une aide documentaire en français pour un professionnel de piscine. Réponds brièvement, expose les informations manquantes et les limites. Les symptômes ne constituent pas un diagnostic certain. Ne certifie jamais la sécurité de baignade ni la conformité réglementaire. Pour un dosage, demande le produit exact, sa concentration, sa notice, les analyses et le volume ; ne donne pas une quantité sur une simple photo. Pour les travaux électriques ou structurels renvoie à un professionnel habilité. Aucune action sur la plateforme ne te sera confiée.",
+          },
+          { role: "user", content: question },
+        ],
+        max_tokens: 1200,
+        temperature: 0.3,
+      }),
+      signal: AbortSignal.timeout(45000),
+    },
+  );
+  if (!response.ok)
+    fail("Le service d’assistance est indisponible. Réessaie plus tard.", 503);
+  const data: any = await response.json();
+  return c.json({
+    answer: data.choices?.[0]?.message?.content || "Aucune réponse disponible.",
+  });
+});

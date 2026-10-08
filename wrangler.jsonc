@@ -1,20 +1,40 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
   "name": "piscine-max",
-  "compatibility_date": "2024-09-01",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "pages_build_output_dir": "./dist",
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "piscine-max-production",
-      "database_id": "d5b477c2-1899-481d-ab38-21b95ded5e10"
+      "database_name": "peaceinblue-platform",
+      "database_id": "local-peaceinblue",
+      "migrations_dir": "schema"
     }
   ],
   "r2_buckets": [
     {
       "binding": "PHOTOS",
-      "bucket_name": "piscine-max-photos"
+      "bucket_name": "peaceinblue-local-photos"
     }
-  ]
+  ],
+  "env": {
+    "preview": {
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "peaceinblue-platform-preview",
+          "database_id": "local-peaceinblue-preview",
+          "migrations_dir": "schema"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "PHOTOS",
+          "bucket_name": "peaceinblue-preview-photos"
+        }
+      ]
+    }
+  }
 }

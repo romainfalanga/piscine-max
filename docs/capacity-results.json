@@ -1,0 +1,64 @@
+{
+  "scope": "Local SQLite only; excludes network, D1 service limits, authentication CPU, R2 and concurrent users. Not evidence of public hosting capacity.",
+  "fixtures": {
+    "users": 50000,
+    "pools": 30000,
+    "records": 600000
+  },
+  "fixture_build_seconds": 6.86,
+  "database_megabytes": 197.0,
+  "queries": {
+    "authorization": {
+      "rows_returned": 1,
+      "p50_ms": 0.005,
+      "p95_ms": 0.007,
+      "p99_ms": 0.032,
+      "query_plan": [
+        "SEARCH p USING INDEX sqlite_autoindex_pools_1 (id=?)",
+        "SEARCH m USING INDEX member_user (user_id=? AND revoked_at=? AND pool_id=?)"
+      ]
+    },
+    "professional_pool_page": {
+      "rows_returned": 26,
+      "p50_ms": 0.075,
+      "p95_ms": 0.167,
+      "p99_ms": 0.271,
+      "query_plan": [
+        "SEARCH m USING INDEX member_user (user_id=? AND revoked_at=?)",
+        "SEARCH p USING INDEX sqlite_autoindex_pools_1 (id=?)",
+        "CORRELATED SCALAR SUBQUERY 1",
+        "SEARCH r USING INDEX records_pool_time (pool_id=?)",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    },
+    "history_page": {
+      "rows_returned": 20,
+      "p50_ms": 0.037,
+      "p95_ms": 0.053,
+      "p99_ms": 0.134,
+      "query_plan": [
+        "SEARCH records USING INDEX records_pool_time (pool_id=?)"
+      ]
+    },
+    "timeline_aggregate": {
+      "rows_returned": 20,
+      "p50_ms": 0.022,
+      "p95_ms": 0.028,
+      "p99_ms": 0.041,
+      "query_plan": [
+        "SEARCH records USING INDEX records_pool_time (pool_id=?)",
+        "USE TEMP B-TREE FOR GROUP BY"
+      ]
+    },
+    "schedule_page": {
+      "rows_returned": 60,
+      "p50_ms": 0.629,
+      "p95_ms": 0.869,
+      "p99_ms": 1.019,
+      "query_plan": [
+        "SEARCH m USING COVERING INDEX member_user (user_id=? AND revoked_at=?)",
+        "SEARCH s USING INDEX schedules_pro (pro_id=? AND active=? AND start_date<?)"
+      ]
+    }
+  }
+}
