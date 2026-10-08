@@ -4,9 +4,22 @@
 
 Projet Pages `piscine-max`, déploiement GitHub depuis `main`, commande `npm run build`, sortie `dist`. Le site historique est servi sur `piscine-max.pages.dev`. Son environnement de preview utilisait la même base D1 et le même bucket R2 que la production ; il ne faut pas y appliquer la refonte.
 
-Tentative de création de `peaceinblue-platform-preview` refusée : **Cloudflare API error 10000: Authentication error**. Aucune nouvelle base distante, aucune suppression et aucune bascule n'ont été effectuées. Il faut rétablir l'autorisation Cloudflare permettant de créer/gérer D1, R2 et Pages avant la suite.
+Le connecteur Cloudflare avait refusé la création de la base avec l'erreur `10000: Authentication error`. **Ce blocage est résolu via GitHub Actions**, qui utilise le secret `CLOUDFLARE_API_TOKEN` ajouté par Romain, sans lire ni exporter sa valeur dans la conversation.
 
-## Préproduction isolée
+Préproduction effective :
+- Projet Pages : `peaceinblue-recette`, https://peaceinblue-recette.pages.dev
+- Base D1 : `peaceinblue-platform-preview`, ID `b7415569-af9c-49de-a692-0feb65730962` (juridiction UE)
+- Bucket R2 privé : `peaceinblue-preview-photos`
+- Secret d'authentification propre à la recette, généré dans le runner et enregistré chiffré dans Pages. Il est conservé lors des exécutions suivantes.
+- [Exécution initiale réussie](https://github.com/romainfalanga/piscine-max/actions/runs/37774033970) : création, migration, déploiement, parcours API avec photos puis nettoyage des seuls comptes/fichiers synthétiques de cet essai.
+
+Le workflow ne dispose d'aucune opération de mutation sur `piscine-max` et ses ressources. Son fichier de configuration temporaire vise uniquement `peaceinblue-recette` ; les environnements production/preview de ce **projet de recette dédié** pointent sur les mêmes ressources de test, distinctes du projet public existant. Aucune nouvelle base de production n'est créée par ce workflow et aucun changement de plan payant n'est demandé.
+
+## Reproduction et prochaine bascule
+
+Le workflow `.github/workflows/cloudflare-preview.yml` se déclenche sur les modifications de ses scripts dans la branche `codex/peaceinblue-platform`. Il conserve les comptes présents et le secret existant. `preview-resources.json` et `preview-validation.json` sont ses seuls artefacts ; ils ne contiennent aucun jeton ni mot de passe. Les données synthétiques sont nettoyées à la fin des tests.
+
+Les étapes ci-dessous décrivent la séparation à maintenir pour préparer la production et terminer la recette :
 
 1. Créer deux nouvelles bases D1 : `peaceinblue-platform-preview` et `peaceinblue-platform`. Créer deux buckets R2 privés distincts pour les photos. Ne pas activer de domaine public R2.
 2. Remplacer les identifiants `local-*` et noms de buckets de `wrangler.jsonc` par ceux réellement retournés par Cloudflare. Vérifier que production et preview sont différentes et ne réutilisent pas les ressources historiques. Le script `deployment-preflight.mjs` arrête les builds Pages et les déploiements manuels si ces conditions minimales ne sont pas remplies.
@@ -19,7 +32,7 @@ Les builds n'exécutent aucune migration automatiquement. Le guard de build est 
 
 ## Gates avant ouverture publique
 
-- [ ] Recette du Worker réel, D1 et R2 sur préproduction, distincts de la production.
+- [x] Parcours API initial du Worker réel, D1 et R2 sur préproduction distincte : inscription, invitation, brouillon, publication, photo privée, révocation, maintien de l’historique client et rejet CSRF. La recette métier complète reste nécessaire.
 - [ ] Restauration testée : export D1 et copie/manifest des objets R2, vérification des rapports et médias restaurés dans un environnement isolé. Sauvegarder séparément le secret d'authentification.
 - [ ] Charge mixte sur D1 réel (lectures, saisies, publications, invitations, connexions), p50/p95/p99, débit et erreurs. D'abord 10 puis 50 puis 100 utilisateurs virtuels ; interrompre si saturation. Objectif initial p95 des API courantes < 500 ms et erreurs serveur < 0,5 %, puis ajuster selon les mesures.
 - [ ] Mesurer coût CPU du KDF d'authentification sur le plan Workers choisi ; revue de sécurité et essais de concurrence des changements de droits. La suite locale ne reproduit pas l'ordonnancement réseau D1/R2.

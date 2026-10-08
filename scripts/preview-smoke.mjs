@@ -145,6 +145,27 @@ try {
   }
   assert.ok(ready, "Preview health check failed");
   checks.push("Pages Worker online");
+  for (const [path, mime] of [
+    ["/", "text/html"],
+    ["/platform/app.js", "javascript"],
+    ["/platform/style.css", "text/css"],
+  ]) {
+    const response = await fetch(base + path, {
+      redirect: "error",
+      signal: AbortSignal.timeout(15000),
+    });
+    assert.equal(
+      response.status,
+      200,
+      "Frontend resource unavailable: " + path,
+    );
+    assert.ok(
+      response.headers.get("content-type")?.includes(mime),
+      "Wrong frontend MIME: " + path,
+    );
+    assert.ok((await response.text()).length > 100);
+  }
+  checks.push("HTML, JavaScript and stylesheet are served correctly");
   assert.equal((await request("/pools")).status, 401);
   checks.push("Anonymous private access denied");
   const owner = await signup("owner", "client"),

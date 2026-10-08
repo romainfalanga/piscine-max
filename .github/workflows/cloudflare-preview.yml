@@ -18,7 +18,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: 834ee251038ce2f923cba9847f973c40
       WRANGLER_SEND_METRICS: "false"
     steps:
@@ -28,6 +27,8 @@ jobs:
           node-version: "24"
           cache: npm
       - name: Verify Cloudflare access and create isolated preview resources
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: node scripts/cloudflare-preview.mjs
       - run: npm ci
       - run: npm run typecheck
@@ -36,10 +37,16 @@ jobs:
       - name: Select preview-only bindings
         run: cp preview.wrangler.jsonc wrangler.jsonc
       - name: Apply schema to preview database
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: npx wrangler d1 migrations apply peaceinblue-platform-preview --remote
       - name: Deploy isolated preview
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: npx wrangler pages deploy dist --project-name peaceinblue-recette --branch codex/peaceinblue-platform
       - name: Verify deployed API and private photos
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: node scripts/preview-smoke.mjs
       - uses: actions/upload-artifact@v4
         if: always()

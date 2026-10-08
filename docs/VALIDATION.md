@@ -26,3 +26,10 @@ npm run test:capacity
 ```
 
 Les captures et bases de tests sont générées dans `.test-artifacts/`, sans données réelles et exclues de Git. La CI relance typecheck, tests, build et parcours navigateur sur les pull requests. Son résultat distant doit être vérifié séparément : la présence du workflow ne prouve pas son exécution.
+
+
+## Vérifications réelles sur Cloudflare
+
+Le 8 octobre, le workflow [Cloudflare preview](https://github.com/romainfalanga/piscine-max/actions/runs/37774033970) a terminé avec succès : provisioning D1/R2/Pages, schéma, build et déploiement. Les neuf premiers groupes de contrôles distants passent : santé du Worker, refus anonyme, inscription client/pro et code de récupération, isolation des piscines, invitation/acceptation, confidentialité des brouillons et photos, publication, révocation avec historique conservé pour le client, refus des écritures d'une autre origine. Les comptes et photos synthétiques ont été nettoyés avec succès.
+
+Les tests GitHub `Platform checks` ont également terminé avec succès sur le premier commit livré. Cette validation confirme le fonctionnement du runtime réel pour les parcours testés ; elle ne remplace pas une épreuve de charge, un audit de sécurité ou un test de restauration.

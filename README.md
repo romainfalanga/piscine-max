@@ -2,7 +2,9 @@
 
 Plateforme de suivi partagé entre propriétaires de piscines et piscinistes. Refonte de `piscine-max`, gratuite pour tous les utilisateurs à ce stade.
 
-**État : version de développement testée localement, pas encore ouverte au public.** La création de la base Cloudflare de préproduction a été refusée par le connecteur (`10000: Authentication error`). Les identifiants de `wrangler.jsonc` sont volontairement locaux ; le build Cloudflare est bloqué tant que les environnements réels ne sont pas isolés.
+**État : préproduction déployée, pas encore ouverte au grand public.** [Tester la plateforme](https://peaceinblue-recette.pages.dev). Le jeton `CLOUDFLARE_API_TOKEN` ajouté dans GitHub Actions a permis de créer une base D1, un bucket R2 privé et un projet Pages distincts. Le workflow `Cloudflare preview` déploie cette branche dans ce projet de recette ; aucun secret n'est exporté. Le schéma et les parcours API sont vérifiés sur Cloudflare. La base et le site historiques restent en place.
+
+Les identifiants locaux de `wrangler.jsonc` restent destinés au développement. Le workflow génère sa propre configuration de recette depuis les identifiants réels vérifiés. Le déploiement de production reste bloqué jusqu'à la recette complète et la préparation de ses ressources dédiées.
 
 ## Parcours disponibles
 
