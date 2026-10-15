@@ -462,6 +462,150 @@ try {
     path: ".test-artifacts/report-mobile.png",
     fullPage: true,
   });
+
+  await page.getByRole("button", { name: "Fermer", exact: true }).click();
+  await page.setViewportSize({ width: 1440, height: 1080 });
+  const linkedContext = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    locale: "fr-FR",
+  });
+  await apiPost(linkedContext, "/auth/signup", {
+    username: "lucie-" + suffix,
+    name: "Lucie Morel",
+    password: "Browser fixture password only!",
+    role: "client",
+  });
+  const clientPage = await linkedContext.newPage();
+  clientPage.on("pageerror", (e) => errors.push(e.message));
+  await page.goto("http://127.0.0.1:8788/#clients");
+  await page
+    .getByRole("button", { name: "Ajouter un client", exact: false })
+    .first()
+    .click();
+  await page
+    .getByRole("button", {
+      name: "Créer une piscine pour un client",
+      exact: true,
+    })
+    .click();
+  await page
+    .getByLabel("Nom de la piscine", { exact: true })
+    .fill("Le bassin de Lucie");
+  await page
+    .getByLabel("Identifiant du client — facultatif", { exact: true })
+    .fill("lucie-" + suffix);
+  await page
+    .getByRole("button", { name: "Créer la piscine", exact: true })
+    .click();
+  await page
+    .getByRole("heading", { name: "Le bassin de Lucie", exact: true })
+    .waitFor();
+  await page.getByText("Client à associer.", { exact: false }).waitFor();
+  await clientPage.goto("http://127.0.0.1:8788/#home");
+  await clientPage
+    .getByRole("button", { name: "Accepter", exact: true })
+    .click();
+  await clientPage
+    .getByRole("button", { name: "Associer ma piscine", exact: true })
+    .click();
+  await clientPage
+    .getByRole("heading", { name: "Le bassin de Lucie", exact: true })
+    .waitFor();
+  await clientPage.getByRole("button", { name: "Accès", exact: true }).click();
+  await clientPage
+    .getByText("Responsable des accès", { exact: false })
+    .waitFor();
+  assert.equal(
+    await clientPage
+      .getByText("Intervenant ponctuel", { exact: false })
+      .count(),
+    0,
+  );
+  await clientPage.screenshot({
+    path: ".test-artifacts/single-professional-mobile.png",
+    fullPage: true,
+  });
+  assert.equal(
+    await clientPage.evaluate(
+      () => document.documentElement.scrollWidth > innerWidth,
+    ),
+    false,
+  );
+  await page.goto("http://127.0.0.1:8788/#clients");
+  await page
+    .getByRole("heading", { name: "Lucie Morel", exact: true })
+    .waitFor();
+  const existingPool = await apiPost(linkedContext, "/pools", {
+    name: "Le bassin déjà suivi par Lucie",
+  });
+  await page
+    .getByRole("button", { name: "Ajouter un client", exact: false })
+    .first()
+    .click();
+  await page
+    .getByRole("button", {
+      name: "Rejoindre sa piscine existante",
+      exact: true,
+    })
+    .click();
+  await page
+    .getByLabel("Identifiant du client", { exact: true })
+    .fill("lucie-" + suffix);
+  await page
+    .getByRole("button", { name: "Envoyer la demande", exact: true })
+    .click();
+  await page
+    .getByRole("heading", { name: "Demandes envoyées", exact: true })
+    .waitFor();
+  await clientPage.goto("http://127.0.0.1:8788/#home");
+  await clientPage
+    .getByRole("button", { name: "Choisir ma piscine", exact: true })
+    .click();
+  await clientPage
+    .getByLabel("Piscine à confier", { exact: true })
+    .selectOption(existingPool.id);
+  await clientPage
+    .getByRole("button", { name: "Accepter le pisciniste", exact: true })
+    .click();
+  await clientPage
+    .getByRole("heading", {
+      name: "Le bassin déjà suivi par Lucie",
+      exact: true,
+    })
+    .waitFor();
+  await page.goto("http://127.0.0.1:8788/#clients");
+  await page.reload();
+  await page
+    .getByRole("link", { name: "Le bassin déjà suivi par Lucie", exact: false })
+    .waitFor();
+  await page.screenshot({
+    path: ".test-artifacts/linked-clients-desktop.png",
+    fullPage: true,
+  });
+  const invitedPool = await apiPost(linkedContext, "/pools", {
+    name: "Bassin invité par Lucie",
+  });
+  await clientPage.goto(
+    "http://127.0.0.1:8788/#pool/" + invitedPool.id + "/access",
+  );
+  await clientPage
+    .getByRole("button", { name: "Inviter", exact: true })
+    .click();
+  await clientPage
+    .getByLabel("Identifiant exact de la personne", { exact: true })
+    .fill("camille-" + suffix);
+  await clientPage
+    .getByRole("button", { name: "Envoyer l’invitation", exact: true })
+    .click();
+  await clientPage
+    .getByRole("heading", { name: "Invitations en attente", exact: true })
+    .waitFor();
+  await page.goto("http://127.0.0.1:8788/#planning");
+  await page.getByRole("button", { name: "Accepter", exact: true }).click();
+  await page
+    .getByRole("heading", { name: "Bassin invité par Lucie", exact: true })
+    .waitFor();
+  await linkedContext.close();
   assert.deepEqual(errors, []);
   console.log(
     JSON.stringify({
@@ -482,8 +626,10 @@ try {
         "professional mobile navigation",
         "calculators, guided maintenance and quiz",
         "mobile journal and report",
+        "professional pool creation and client claim",
+        "professional request joins existing client pool",
+        "client invitation accepted by principal",
       ],
-      screenshots: 10,
       pageErrors: errors,
     }),
   );

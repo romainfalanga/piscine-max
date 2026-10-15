@@ -132,7 +132,7 @@ export function modal(title, body, submit, label = "Enregistrer") {
   const root = $("#modal");
   root.innerHTML = `<dialog><form id="mform"><div class="modal-head"><h2>${esc(title)}</h2><button type="button" class="icon-btn" data-action="close" aria-label="Fermer">${icon("close")}</button></div><div class="modal-body">${body}<p class="form-error" role="alert"></p></div>${submit ? `<div class="modal-foot"><button type="button" class="btn ghost" data-action="close">Annuler</button><button class="btn primary" type="submit">${esc(label)}</button></div>` : ""}</form></dialog>`;
   const d = $("dialog", root);
-  d.addEventListener("close", () => root.replaceChildren());
+  d.addEventListener("close", () => d.remove());
   d.showModal();
   if (submit)
     $("#mform").addEventListener("submit", async (e) => {

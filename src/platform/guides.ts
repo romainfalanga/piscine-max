@@ -36,7 +36,7 @@ async function scope(c: C) {
   const poolId = str(c.req.query("pool_id") || "", 80);
   if (poolId) {
     const p = await access(c, poolId);
-    if (!["principal", "temporary"].includes(p.membership))
+    if (p.membership !== "principal")
       fail("Accès professionnel requis pour cette piscine.", 403);
   }
   return { g: g!, poolId };

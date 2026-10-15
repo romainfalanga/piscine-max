@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import app from "../src/index";
@@ -250,19 +251,7 @@ test("Exactly one principal, no duplicate invitation acceptance, and revocation 
     { username: "quentin", kind: "principal" },
     a.token,
   );
-  assert.equal(i.status, 201);
-  assert.equal(
-    (
-      await request(
-        e,
-        "/invitations/" + i.data.id + "/respond",
-        "POST",
-        { accept: true },
-        q.token,
-      )
-    ).status,
-    409,
-  );
+  assert.equal(i.status, 409);
   const r = await request(
     e,
     "/pools/" + id + "/records",
@@ -592,21 +581,6 @@ test("Planning exceptions are isolated, deleting recurrence preserves completed 
     400,
   );
 });
-test("Expired temporary membership cannot access pool or records", async () => {
-  const e = context(),
-    a = await user(e, "alice"),
-    p = await user(e, "paul", "pro"),
-    id = await pool(e, a);
-  e.DB.db
-    .prepare(
-      "INSERT INTO pool_members(id,pool_id,user_id,kind,expires_at) VALUES(?,?,?,'temporary','2020-01-01T00:00:00Z')",
-    )
-    .run(crypto.randomUUID(), id, p.user.id);
-  assert.equal(
-    (await request(e, "/pools/" + id, "GET", undefined, p.token)).status,
-    404,
-  );
-});
 test("Season recurrence respects dates, weekday and year wrap", () => {
   const s = {
     active: 1,
@@ -635,29 +609,6 @@ test("Reject active content and malformed uploads", () => {
   assert.throws(() => cleanImage(new Uint8Array([1, 2, 3])));
 });
 
-test("A fresh invitation can renew an expired temporary membership", async () => {
-  const e = context(),
-    a = await user(e, "alice"),
-    p = await user(e, "paul", "pro"),
-    id = await pool(e, a);
-  e.DB.db
-    .prepare(
-      "INSERT INTO pool_members(id,pool_id,user_id,kind,expires_at) VALUES(?,?,?,'temporary','2020-01-01T00:00:00Z')",
-    )
-    .run(crypto.randomUUID(), id, p.user.id);
-  await invite(
-    e,
-    a,
-    p,
-    id,
-    "temporary",
-    new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10),
-  );
-  assert.equal(
-    (await request(e, "/pools/" + id, "GET", undefined, p.token)).status,
-    200,
-  );
-});
 test("Manager transfer preserves co-owner history and stops former manager changing access", async () => {
   const e = context(),
     a = await user(e, "alice"),
@@ -902,18 +853,6 @@ test("Guided checklists are personal, scoped to assigned pools, validate variant
     (await request(e, path, "GET", undefined, other.token)).status,
     404,
   );
-  await invite(
-    e,
-    owner,
-    other,
-    id,
-    "temporary",
-    new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
-  );
-  assert.equal(
-    (await request(e, path, "GET", undefined, other.token)).data.revision,
-    0,
-  );
   assert.equal(
     (
       await request(
@@ -1037,5 +976,532 @@ test("Code du pisciniste supports short themed practice and complete sessions wi
   assert.equal(
     (await request(e, "/quiz?count=100", "GET", undefined, pro.token)).status,
     400,
+  );
+});
+
+test("Professional can create a pool, invite its client and hand ownership over without losing the agenda", async () => {
+  const e = context(),
+    pro = await user(e, "paul", "pro"),
+    client = await user(e, "alice"),
+    other = await user(e, "quentin", "pro");
+  assert.equal(
+    (
+      await request(
+        e,
+        "/pools",
+        "POST",
+        { name: "Interdit", mode: "pro" },
+        client.token,
+      )
+    ).status,
+    403,
+  );
+  const created = await request(
+    e,
+    "/pools",
+    "POST",
+    { name: "Bassin créé par Paul", mode: "pro", client_username: "alice" },
+    pro.token,
+  );
+  assert.equal(created.status, 201, JSON.stringify(created.data));
+  const id = created.data.id;
+  let p = await request(e, "/pools/" + id, "GET", undefined, pro.token);
+  assert.equal(p.data.membership, "principal");
+  assert.equal(p.data.claimable, 1);
+  assert.equal(p.data.members.filter((m: any) => m.kind === "owner").length, 0);
+  assert.equal(
+    (await request(e, "/pools?mode=pro", "GET", undefined, pro.token)).data
+      .items.length,
+    1,
+  );
+  assert.equal(
+    (await request(e, "/pools?mode=client", "GET", undefined, pro.token)).data
+      .items.length,
+    0,
+  );
+  assert.equal(
+    (await request(e, "/pools/" + id, "GET", undefined, client.token)).status,
+    404,
+  );
+  assert.equal(
+    (await request(e, "/pools/" + id, "GET", undefined, other.token)).status,
+    404,
+  );
+  const ap = await request(
+    e,
+    "/pools/" + id + "/appointments",
+    "POST",
+    {
+      date: new Date().toISOString().slice(0, 10),
+      time: "09:00",
+      duration: 45,
+      title: "Entretien",
+    },
+    pro.token,
+  );
+  assert.equal(ap.status, 201, JSON.stringify(ap.data));
+  const inv = (await request(e, "/invitations", "GET", undefined, client.token))
+    .data.items[0];
+  assert.equal(inv.claim, 1);
+  assert.equal(
+    (
+      await request(
+        e,
+        "/invitations/" + inv.id + "/respond",
+        "POST",
+        { accept: true },
+        client.token,
+      )
+    ).status,
+    200,
+  );
+  p = await request(e, "/pools/" + id, "GET", undefined, client.token);
+  assert.equal(p.data.membership, "owner");
+  assert.equal(p.data.manager, 1);
+  assert.equal(
+    p.data.members.filter((m: any) => m.kind === "principal").length,
+    1,
+  );
+  assert.equal(
+    (await request(e, "/pools/" + id, "GET", undefined, pro.token)).data
+      .claimable,
+    0,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        "/pools/" + id + "/invitations",
+        "POST",
+        { username: "quentin", kind: "owner" },
+        pro.token,
+      )
+    ).status,
+    403,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        "/pools/" + id + "/invitations",
+        "POST",
+        { username: "quentin", kind: "principal" },
+        client.token,
+      )
+    ).status,
+    409,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        "/pools/" + id + "/invitations",
+        "POST",
+        { username: "quentin", kind: "temporary", until: "2099-01-01" },
+        client.token,
+      )
+    ).status,
+    400,
+  );
+  const m = p.data.members.find((m: any) => m.user_id === pro.user.id);
+  await request(
+    e,
+    "/pools/" + id + "/members/" + m.id,
+    "DELETE",
+    {},
+    client.token,
+  );
+  assert.equal(
+    (await request(e, "/pools/" + id, "GET", undefined, pro.token)).status,
+    404,
+  );
+  assert.equal(
+    (await request(e, "/pools?mode=pro", "GET", undefined, pro.token)).data
+      .items.length,
+    0,
+  );
+  await invite(e, client, other, id, "principal");
+  assert.equal(
+    (await request(e, "/pools/" + id, "GET", undefined, other.token)).status,
+    200,
+  );
+});
+test("Professional requests an existing pool; only its client manager can authorize and no duplicate is created", async () => {
+  const e = context(),
+    owner = await user(e, "alice"),
+    coowner = await user(e, "bob"),
+    pro = await user(e, "paul", "pro"),
+    other = await user(e, "quentin", "pro"),
+    id = await pool(e, owner);
+  await invite(e, owner, coowner, id, "owner");
+  const create = await request(
+    e,
+    "/connections",
+    "POST",
+    { username: "alice" },
+    pro.token,
+  );
+  assert.equal(create.status, 201);
+  const requestId = create.data.id;
+  assert.equal(
+    (await request(e, "/connections", "POST", { username: "alice" }, pro.token))
+      .status,
+    409,
+  );
+  assert.equal(
+    (await request(e, "/pools/" + id, "GET", undefined, pro.token)).status,
+    404,
+  );
+  const incoming = (
+    await request(e, "/connections", "GET", undefined, owner.token)
+  ).data.incoming;
+  assert.equal(incoming.length, 1);
+  assert.equal(incoming[0].username, "paul");
+  assert.ok(!JSON.stringify(incoming).includes(id));
+  assert.equal(
+    (
+      await request(
+        e,
+        "/connections/" + requestId + "/respond",
+        "POST",
+        { accept: true, pool_id: id },
+        coowner.token,
+      )
+    ).status,
+    404,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        "/connections/" + requestId + "/respond",
+        "POST",
+        { accept: true, pool_id: id },
+        owner.token,
+      )
+    ).status,
+    200,
+  );
+  assert.equal(e.DB.db.prepare("SELECT count(*) n FROM pools").get()!.n, 1);
+  assert.equal(
+    (await request(e, "/pools/" + id, "GET", undefined, pro.token)).data
+      .membership,
+    "principal",
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        "/connections/" + requestId + "/respond",
+        "POST",
+        { accept: true, pool_id: id },
+        owner.token,
+      )
+    ).status,
+    404,
+  );
+  const second = await request(
+    e,
+    "/connections",
+    "POST",
+    { username: "alice" },
+    other.token,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        "/connections/" + second.data.id + "/respond",
+        "POST",
+        { accept: true, pool_id: id },
+        owner.token,
+      )
+    ).status,
+    409,
+  );
+  assert.equal(
+    (await request(e, "/pools/" + id, "GET", undefined, other.token)).status,
+    404,
+  );
+  const co = await request(
+    e,
+    "/connections",
+    "POST",
+    { username: "bob" },
+    other.token,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        "/connections/" + co.data.id + "/respond",
+        "POST",
+        { accept: true, pool_id: id },
+        coowner.token,
+      )
+    ).status,
+    403,
+  );
+  await request(e, "/connections/" + second.data.id, "DELETE", {}, other.token);
+  assert.equal(
+    (
+      await request(
+        e,
+        "/connections/" + second.data.id + "/respond",
+        "POST",
+        { accept: true, pool_id: id },
+        owner.token,
+      )
+    ).status,
+    404,
+  );
+});
+test("Client can reuse an existing dossier instead of the empty pool prepared by a professional", async () => {
+  const e = context(),
+    owner = await user(e, "alice"),
+    pro = await user(e, "paul", "pro"),
+    id = await pool(e, owner);
+  const a = await request(
+    e,
+    "/pools/" + id + "/records",
+    "POST",
+    { kind: "analysis", measured_at: measured(), readings: { ph: 7.2 } },
+    owner.token,
+  );
+  await request(
+    e,
+    "/records/" + a.data.id + "/publish",
+    "POST",
+    {},
+    owner.token,
+  );
+  const created = await request(
+    e,
+    "/pools",
+    "POST",
+    { name: "Fiche préparée", mode: "pro", client_username: "alice" },
+    pro.token,
+  );
+  const inv = (await request(e, "/invitations", "GET", undefined, owner.token))
+    .data.items[0];
+  const result = await request(
+    e,
+    "/invitations/" + inv.id + "/respond",
+    "POST",
+    { accept: true, existing_pool_id: id },
+    owner.token,
+  );
+  assert.equal(result.status, 200, JSON.stringify(result.data));
+  assert.equal(result.data.pool_id, id);
+  assert.equal(
+    (await request(e, "/pools/" + id + "/records", "GET", undefined, pro.token))
+      .data.items[0].id,
+    a.data.id,
+  );
+  assert.equal(
+    (await request(e, "/pools?mode=pro", "GET", undefined, pro.token)).data
+      .items.length,
+    1,
+  );
+  assert.equal(
+    (await request(e, "/pools/" + created.data.id, "GET", undefined, pro.token))
+      .status,
+    404,
+  );
+  assert.equal(
+    (await request(e, "/pools?mode=client", "GET", undefined, owner.token)).data
+      .items.length,
+    1,
+  );
+});
+test("Existing work on a prepared pool prevents silent merging or loss of history", async () => {
+  const e = context(),
+    owner = await user(e, "alice"),
+    pro = await user(e, "paul", "pro"),
+    id = await pool(e, owner);
+  const p = await request(
+    e,
+    "/pools",
+    "POST",
+    { name: "Piscine préparée", mode: "pro", client_username: "alice" },
+    pro.token,
+  );
+  const r = await request(
+    e,
+    "/pools/" + p.data.id + "/records",
+    "POST",
+    { kind: "visit", measured_at: measured(), readings: { ph: 7.3 } },
+    pro.token,
+  );
+  assert.equal(r.status, 201);
+  const inv = (await request(e, "/invitations", "GET", undefined, owner.token))
+    .data.items[0];
+  assert.equal(
+    (
+      await request(
+        e,
+        "/invitations/" + inv.id + "/respond",
+        "POST",
+        { accept: true, existing_pool_id: id },
+        owner.token,
+      )
+    ).status,
+    409,
+  );
+  assert.equal(
+    (await request(e, "/pools/" + p.data.id, "GET", undefined, pro.token))
+      .status,
+    200,
+  );
+  assert.equal(
+    (await request(e, "/pools/" + id, "GET", undefined, pro.token)).status,
+    404,
+  );
+  assert.equal(
+    (await request(e, "/invitations", "GET", undefined, owner.token)).data.items
+      .length,
+    1,
+  );
+});
+test("Only the first accepted principal invitation succeeds and a claim expires when its creator leaves", async () => {
+  const e = context(),
+    owner = await user(e, "alice"),
+    pro = await user(e, "paul", "pro"),
+    other = await user(e, "quentin", "pro"),
+    id = await pool(e, owner);
+  const a = await request(
+    e,
+    "/pools/" + id + "/invitations",
+    "POST",
+    { username: "paul", kind: "principal" },
+    owner.token,
+  );
+  const b = await request(
+    e,
+    "/pools/" + id + "/invitations",
+    "POST",
+    { username: "quentin", kind: "principal" },
+    owner.token,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        "/invitations/" + a.data.id + "/respond",
+        "POST",
+        { accept: true },
+        pro.token,
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        "/invitations/" + b.data.id + "/respond",
+        "POST",
+        { accept: true },
+        other.token,
+      )
+    ).status,
+    409,
+  );
+  assert.equal(
+    e.DB.db
+      .prepare(
+        "SELECT count(*) n FROM pool_members WHERE pool_id=? AND kind='principal' AND revoked_at IS NULL",
+      )
+      .get(id)!.n,
+    1,
+  );
+  const prep = await request(
+    e,
+    "/pools",
+    "POST",
+    { name: "Fiche en attente", mode: "pro", client_username: "alice" },
+    other.token,
+  );
+  const claim = (
+    await request(e, "/invitations", "GET", undefined, owner.token)
+  ).data.items[0];
+  await request(
+    e,
+    "/pools/" + prep.data.id + "/archive",
+    "POST",
+    {},
+    other.token,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        "/invitations/" + claim.id + "/respond",
+        "POST",
+        { accept: true },
+        owner.token,
+      )
+    ).status,
+    404,
+  );
+});
+test("Migration revokes legacy temporary access and schedules without deleting published history", async () => {
+  const e = { ...context(), DB: new LocalD1("0002_guide_progress.sql") },
+    owner = await user(e, "alice"),
+    pro = await user(e, "paul", "pro"),
+    id = await pool(e, owner);
+  e.DB.db
+    .prepare(
+      "INSERT INTO pool_members(id,pool_id,user_id,kind,expires_at) VALUES(?,?,?,'temporary','2099-01-01T00:00:00Z')",
+    )
+    .run(crypto.randomUUID(), id, pro.user.id);
+  e.DB.db
+    .prepare(
+      "INSERT INTO schedules(id,pool_id,pro_id,start_date) VALUES('old-schedule',?,?, '2026-01-01')",
+    )
+    .run(id, pro.user.id);
+  e.DB.db
+    .prepare(
+      "INSERT INTO records(id,pool_id,author_id,author_name,kind,measured_at,published_at) VALUES('old-report',?,?,'Paul','visit',?,?)",
+    )
+    .run(id, pro.user.id, measured(), measured());
+  e.DB.db.exec(
+    readFileSync(
+      new URL("../schema/0003_single_professional.sql", import.meta.url),
+      "utf8",
+    ),
+  );
+  assert.equal(
+    (await request(e, "/pools/" + id, "GET", undefined, pro.token)).status,
+    404,
+  );
+  assert.equal(
+    (await request(e, "/pools?mode=pro", "GET", undefined, pro.token)).data
+      .items.length,
+    0,
+  );
+  assert.equal(
+    (await request(e, "/records/old-report", "GET", undefined, owner.token))
+      .status,
+    200,
+  );
+  assert.equal(
+    e.DB.db
+      .prepare("SELECT active FROM schedules WHERE id='old-schedule'")
+      .get()!.active,
+    0,
+  );
+  assert.throws(() =>
+    e.DB.db
+      .prepare(
+        "INSERT INTO pool_members(id,pool_id,user_id,kind,expires_at) VALUES(?,?,?,'temporary','2099-01-01T00:00:00Z')",
+      )
+      .run(crypto.randomUUID(), id, pro.user.id),
+  );
+  await invite(e, owner, pro, id, "principal");
+  assert.equal(
+    (await request(e, "/pools/" + id, "GET", undefined, pro.token)).data
+      .membership,
+    "principal",
   );
 });

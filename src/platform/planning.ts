@@ -111,11 +111,6 @@ planning.post("/pools/:id/schedules", async (c) => {
   const b = await c.req.json(),
     v = planBody(b),
     id = uid();
-  if (
-    p.membership === "temporary" &&
-    (!v.end || v.end > p.access_until.slice(0, 10))
-  )
-    fail("La récurrence doit se terminer avant la fin de ton accès.");
   await c.env.DB.batch([
     stmt(
       c,
@@ -167,11 +162,6 @@ planning.put("/schedules/:id", async (c) => {
   const p = await access(c, s.pool_id);
   professionalAccess(c, p);
   const v = planBody(await c.req.json());
-  if (
-    p.membership === "temporary" &&
-    (!v.end || v.end > p.access_until.slice(0, 10))
-  )
-    fail("La récurrence dépasse la fin de ton accès.");
   await c.env.DB.batch([
     stmt(
       c,
@@ -402,7 +392,7 @@ planning.get("/preparation", async (c) => {
   return c.json({
     items: await rows(
       c,
-      `SELECT n.*,p.name pool_name,p.city FROM needs n JOIN pools p ON p.id=n.pool_id JOIN pool_members m ON m.pool_id=n.pool_id WHERE m.user_id=? AND m.kind IN('principal','temporary') AND ${ACTIVE} AND p.archived_at IS NULL AND n.status IN('needed','ready') AND (n.due_date IS NULL OR n.due_date<=?) ORDER BY n.responsible,n.due_date,n.title LIMIT 300`,
+      `SELECT n.*,p.name pool_name,p.city FROM needs n JOIN pools p ON p.id=n.pool_id JOIN pool_members m ON m.pool_id=n.pool_id WHERE m.user_id=? AND m.kind='principal' AND ${ACTIVE} AND p.archived_at IS NULL AND n.status IN('needed','ready') AND (n.due_date IS NULL OR n.due_date<=?) ORDER BY n.responsible,n.due_date,n.title LIMIT 300`,
       who(c).id,
       to,
     ),

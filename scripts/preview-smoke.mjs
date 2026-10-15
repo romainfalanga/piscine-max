@@ -15,6 +15,7 @@ const prefix = "qa-" + randomBytes(5).toString("hex"),
   users = [],
   photos = [];
 let poolId;
+const poolIds = [];
 const checks = [],
   result = { url: base, checks, passed: false, cleanup: false };
 const cookie = (r) => r.headers.get("set-cookie")?.split(";")[0];
@@ -61,7 +62,7 @@ async function cleanup() {
     return;
   }
   for (const id of users) assert.match(id, /^[\da-f-]{36}$/);
-  if (poolId) assert.match(poolId, /^[\da-f-]{36}$/);
+  for (const id of poolIds) assert.match(id, /^[\da-f-]{36}$/);
   for (const key of photos) {
     assert.ok(key.startsWith("platform/" + poolId + "/"));
     execFileSync(
@@ -79,7 +80,7 @@ async function cleanup() {
   }
   const list = users.map(() => "?").join(","),
     batch = [];
-  if (poolId) {
+  for (const cleanupPoolId of poolIds) {
     for (const table of [
       "notifications",
       "private_notes",
@@ -94,11 +95,11 @@ async function cleanup() {
     ])
       batch.push({
         sql: `DELETE FROM ${table} WHERE pool_id=?`,
-        params: [poolId],
+        params: [cleanupPoolId],
       });
     batch.push({
       sql: "DELETE FROM pools WHERE id=? AND created_by IN(" + list + ")",
-      params: [poolId, ...users],
+      params: [cleanupPoolId, ...users],
     });
   }
   for (const table of ["notifications", "sessions"])
@@ -136,7 +137,7 @@ try {
   for (let i = 0; i < 20; i++) {
     try {
       const r = await request("/health");
-      if (r.status === 200 && r.data?.release === "professional-workbench-v1") {
+      if (r.status === 200 && r.data?.release === "single-professional-v2") {
         const asset = await fetch(base + "/platform/calculations.js", {
           cache: "no-store",
           signal: AbortSignal.timeout(15000),
@@ -193,6 +194,7 @@ try {
   );
   assert.equal(p.status, 201);
   poolId = p.data.id;
+  poolIds.push(poolId);
   assert.equal(
     (await request("/pools/" + poolId, "GET", undefined, outsider.cookie))
       .status,
@@ -412,6 +414,93 @@ try {
     200,
   );
   checks.push("Revocation denies former pro; owner history retained");
+  const join = await request(
+    "/connections",
+    "POST",
+    { username: owner.username },
+    pro.cookie,
+  );
+  assert.equal(join.status, 201);
+  assert.equal(
+    (
+      await request(
+        "/connections/" + join.data.id + "/respond",
+        "POST",
+        { accept: true, pool_id: poolId },
+        owner.cookie,
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (await request("/pools/" + poolId, "GET", undefined, pro.cookie)).data
+      .membership,
+    "principal",
+  );
+  const prepared = await request(
+    "/pools",
+    "POST",
+    {
+      name: "Piscine préparée de recette",
+      mode: "pro",
+      client_username: owner.username,
+    },
+    pro.cookie,
+  );
+  assert.equal(prepared.status, 201);
+  poolIds.push(prepared.data.id);
+  assert.equal(
+    (
+      await request(
+        "/pools/" + prepared.data.id,
+        "GET",
+        undefined,
+        owner.cookie,
+      )
+    ).status,
+    404,
+  );
+  const claims = (await request("/invitations", "GET", undefined, owner.cookie))
+    .data.items;
+  const claim = claims.find((i) => i.claim === 1);
+  assert.ok(claim);
+  assert.equal(
+    (
+      await request(
+        "/invitations/" + claim.id + "/respond",
+        "POST",
+        { accept: true },
+        owner.cookie,
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (
+      await request(
+        "/pools/" + prepared.data.id,
+        "GET",
+        undefined,
+        owner.cookie,
+      )
+    ).data.manager,
+    1,
+  );
+  assert.equal(
+    (
+      await request(
+        "/pools/" + prepared.data.id + "/invitations",
+        "POST",
+        { kind: "temporary", username: pro.username },
+        owner.cookie,
+      )
+    ).status,
+    400,
+  );
+  checks.push(
+    "Professional creates a pool; client claims it; requests join existing pools with one principal",
+  );
+
   const csrf = await fetch(base + "/api/pools", {
     method: "POST",
     headers: {

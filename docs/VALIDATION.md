@@ -1,16 +1,15 @@
 # Vérifications du 15 octobre 2026 — Peace in Blue App
 
-- 19 tests de calculs et d’API réussis : formules et unités des 16 outils, entrées incohérentes, droits, révocation, comptes rendus, ancien parcours de partage, suppression des routes communautaires/IA, progression des guides privée et sauvegardes concurrentes, révision courte/par thème et historique privé.
-- TypeScript et build Vite réussis. Les migrations 0001 et 0002 sont appliquées dans chaque base de test.
-- Parcours Chromium réussi sur bureau 1440 px et mobile 390 px : création client, analyse, courbes, approvisionnement, activation pro, quatre onglets et arrivée Agenda, invitation, visite publiée, carte/clients, calculateurs volume/sel, catégories de fiches, changement de type de filtre, sauvegarde/rechargement de progression, quiz corrigé et statistiques. Aucun échec JavaScript. Captures contrôlées pour le hub, le calculateur et les guides ; navigation mobile vérifiée.
-- Le workflow de recette contrôle désormais aussi sur D1 réel la nouvelle migration de progression, son isolation, le rejet d’une révision obsolète et la révocation, ainsi que le renommage et l’absence des endpoints supprimés.
+- 23 tests de calculs et d’API réussis : formules et unités des 16 outils, entrées incohérentes, droits, révocation, comptes rendus, création client/pro, demande professionnelle et invitation client, reprise d’un dossier existant sans perte d’historique, principal unique, invitations concurrentes, migration des anciens accès temporaires, suppression des routes communautaires/IA, progression des guides privée et sauvegardes concurrentes, révision courte/par thème et historique privé.
+- TypeScript et build Vite réussis. Les migrations 0001, 0002 et 0003 sont appliquées dans chaque base de test.
+- Parcours Chromium réussi sur bureau 1440 px et mobile 390 px : création client, analyse, courbes, approvisionnement, activation pro, quatre onglets et arrivée Agenda, invitation, visite publiée, carte/clients, calculateurs volume/sel, catégories de fiches, changement de type de filtre, sauvegarde/rechargement de progression, quiz corrigé et statistiques. Les nouveaux parcours vérifient la récupération mobile d’une piscine créée par le professionnel, la demande de rattachement à un dossier existant et l’invitation émise par le client. Aucun échec JavaScript. Captures contrôlées pour le hub, le calculateur et les guides ; navigation mobile vérifiée.
+- Le workflow de recette contrôle désormais aussi sur D1 réel la migration de progression, son isolation, le rejet d’une révision obsolète et la révocation, ainsi que le renommage et l’absence des endpoints supprimés. Il contrôle aussi la demande professionnelle, la récupération d’une piscine préparée et le refus des accès temporaires.
 
 Ces contrôles ne constituent pas un test de montée en charge. Les conditions d’ouverture publique restent décrites dans `DEPLOIEMENT.md`.
 
 ---
 
 ## Historique : vérifications du 8 octobre 2026
-
 
 ## Résultats locaux
 
@@ -38,7 +37,6 @@ npm run test:capacity
 ```
 
 Les captures et bases de tests sont générées dans `.test-artifacts/`, sans données réelles et exclues de Git. La CI relance typecheck, tests, build et parcours navigateur sur les pull requests. Son résultat distant doit être vérifié séparément : la présence du workflow ne prouve pas son exécution.
-
 
 ## Vérifications réelles sur Cloudflare
 

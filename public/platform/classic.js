@@ -9,6 +9,7 @@ import {
   empty,
   badge,
   fmt,
+  refresh,
 } from "./ui.js";
 
 export const classicPages = { clients, map: mapPage, stats };
@@ -55,16 +56,23 @@ function clientCards() {
     a.name.localeCompare(b.name, "fr"),
   );
   return (
-    people
+    directory
+      .filter((p) => !p.owners?.length)
       .map(
-        (c) =>
-          `<section class="card"><div class="client-header"><span class="client-avatar">${esc(c.name.slice(0, 2).toUpperCase())}</span><div><h2>${esc(c.name)}</h2><small class="muted">@${esc(c.username)}</small></div></div>${c.pools.map(poolLink).join("")}</section>`,
+        (p) =>
+          `<section class="card"><h2>Client à associer</h2><p class="small-note">Invitez le client depuis la piscine.</p>${poolLink(p)}</section>`,
       )
-      .join("") ||
+      .join("") +
+      people
+        .map(
+          (c) =>
+            `<section class="card"><div class="client-header"><span class="client-avatar">${esc(c.name.slice(0, 2).toUpperCase())}</span><div><h2>${esc(c.name)}</h2><small class="muted">@${esc(c.username)}</small></div></div>${c.pools.map(poolLink).join("")}</section>`,
+        )
+        .join("") ||
     empty(
       "Aucun client trouvé",
-      "Le client crée son compte et sa piscine, puis vous invite à la suivre.",
-      button("Comment ajouter un client ?", "invite-client", "", "secondary"),
+      "Créez une piscine ou demandez à rejoindre celle du client.",
+      button("Ajouter un client", "invite-client", "", "secondary"),
     )
   );
 }
@@ -80,6 +88,7 @@ function moreButton() {
 }
 async function clients(main) {
   await loadDirectory();
+  const pending = await api("/connections");
   main.innerHTML =
     heading(
       "Clients",
@@ -87,6 +96,9 @@ async function clients(main) {
       button(icon("plus", 16) + " Ajouter un client", "invite-client"),
     ) +
     toolbar() +
+    (pending.outgoing.length
+      ? `<section class="card" style="margin-bottom:20px"><h2>Demandes envoyées</h2>${pending.outgoing.map((r) => `<div class="row"><div class="grow"><strong>${esc(r.name)}</strong><p class="small-note">En attente du choix de sa piscine.</p></div>${button("Annuler", "cancel-connection", `data-id="${r.id}"`, "ghost small")}</div>`).join("")}</section>`
+      : "") +
     `<div id="client-cards" class="clients-grid">${clientCards()}</div><div id="directory-more" style="margin-top:20px">${moreButton()}</div>`;
   wireSearch(main, clients);
 }
@@ -176,7 +188,7 @@ function renderMapContent() {
     directory
       .map(
         (p) =>
-          `<section class="card"><h3><a href="#pool/${esc(p.id)}">${esc(p.name)}</a></h3><p>${esc((p.owners || []).map((c) => c.name).join(", "))}</p><p>${esc(p.address || "Adresse non renseignée")}${p.city ? " · " + esc(p.city) : ""}</p>${p.city || p.address ? `<a class="btn secondary small" href="${esc(routeLink(p))}" target="_blank" rel="noopener noreferrer">${icon("map", 15)} Itinéraire</a>` : ""}${p.membership === "temporary" ? badge("Mission ponctuelle") : ""}</section>`,
+          `<section class="card"><h3><a href="#pool/${esc(p.id)}">${esc(p.name)}</a></h3><p>${esc((p.owners || []).map((c) => c.name).join(", "))}</p><p>${esc(p.address || "Adresse non renseignée")}${p.city ? " · " + esc(p.city) : ""}</p>${p.city || p.address ? `<a class="btn secondary small" href="${esc(routeLink(p))}" target="_blank" rel="noopener noreferrer">${icon("map", 15)} Itinéraire</a>` : ""}</section>`,
       )
       .join("") ||
     empty("Aucune piscine suivie", "Vos piscines partagées apparaîtront ici.");

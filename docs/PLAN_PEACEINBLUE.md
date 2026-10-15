@@ -9,8 +9,8 @@ Un outil quotidien pour l’organisation du pisciniste et un carnet partagé per
 ## Décisions maintenues
 
 - Inscription autonome des clients et des professionnels, gratuite à ce stade, sans emails de suivi ni facturation.
-- Le client crée son compte et sa piscine. Plusieurs copropriétaires peuvent partager le même dossier ; un responsable gère les autorisations.
-- Un seul pisciniste principal par bassin ; invitations acceptées et accès temporaires bornés. Le professionnel n’accède plus au dossier après révocation.
+- Chacun crée son compte. La piscine peut être créée par le client ou par le pisciniste ; le rattachement est accepté par l’autre personne. Si le dossier existe, le pisciniste le rejoint. Plusieurs copropriétaires peuvent partager le même dossier ; un responsable client gère les autorisations.
+- Un seul pisciniste principal par bassin, seul professionnel autorisé. Les anciens accès temporaires sont retirés en préservant les comptes rendus. Le professionnel n’accède plus au dossier après révocation.
 - Analyses personnelles ou professionnelles, historique, courbes, photos privées, notes internes séparées, brouillons et publication explicite « Terminer et partager ».
 - Agenda, récurrences, exceptions et besoins d’approvisionnement distinguant achat client et apport professionnel.
 
@@ -25,6 +25,14 @@ Un outil quotidien pour l’organisation du pisciniste et un carnet partagé per
 7. Ajouter huit guides : entretien courant, sable/verre, préfiltre, cartouche, repérage des vannes, analyses, nettoyage, électrolyseur. L’entretien comporte préparation, inspection, niveau/appoint, analyses, nettoyage, filtration adaptée, équipements, traitement, restauration des automatismes, approvisionnement, photos et compte rendu.
 8. Enregistrer la progression personnelle avec contrôle d’accès, validation des étapes et protection contre les sauvegardes concurrentes. La checklist de travail ne valide pas automatiquement une intervention.
 9. Vérifier calculs, droits et parcours navigateur, puis déployer la même branche sur `peaceinblue-recette.pages.dev` via le workflow existant.
+
+## Ajustement : association client–pisciniste
+
+- Permettre la création professionnelle et l’invitation du premier client, y compris après la création.
+- Ajouter une demande professionnelle sans exposition des piscines du client ; celui-ci choisit le dossier à confier.
+- Réutiliser le dossier client existant lors de l’acceptation d’une fiche préparée vide. Préserver les suivis lorsqu’il existe déjà des données des deux côtés.
+- Retirer les accès professionnels temporaires, les choix d’intervenants et les formulations au pluriel. Garder les copropriétaires et le transfert de responsabilité.
+- Tester les parcours dans les deux sens, l’unicité du principal, les invitations concurrentes, la migration et la révocation, sur API puis navigateur et Cloudflare de recette.
 
 ## Principes des procédures
 

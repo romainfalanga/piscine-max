@@ -2,10 +2,10 @@ import { DatabaseSync } from "node:sqlite";
 import { readFileSync, readdirSync } from "node:fs";
 export class LocalD1 {
   db: DatabaseSync;
-  constructor() {
+  constructor(through?: string) {
     this.db = new DatabaseSync(":memory:");
     for (const file of readdirSync(new URL("../schema/", import.meta.url))
-      .filter((f) => f.endsWith(".sql"))
+      .filter((f) => f.endsWith(".sql") && (!through || f <= through))
       .sort()) {
       this.db.exec(
         readFileSync(new URL("../schema/" + file, import.meta.url), "utf8"),

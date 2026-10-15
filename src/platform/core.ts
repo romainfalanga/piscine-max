@@ -103,22 +103,26 @@ export function clock(v: unknown) {
   return s;
 }
 export const ACTIVE =
-  "m.revoked_at IS NULL AND (m.expires_at IS NULL OR m.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))";
+  "m.kind IN('owner','principal') AND m.revoked_at IS NULL AND (m.expires_at IS NULL OR m.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))";
+// The professional who created an unclaimed pool can invite its first client.
+export const CLAIMABLE =
+  "m.kind='principal' AND p.created_by=m.user_id AND NOT EXISTS(SELECT 1 FROM pool_members o WHERE o.pool_id=p.id AND o.kind='owner' AND o.revoked_at IS NULL)";
+export const MANAGES = `(m.manager=1 OR (${CLAIMABLE}))`;
 export async function access(c: C, poolId: string, manager = false) {
   const p = await row(
     c,
-    `SELECT p.*,m.kind AS membership,m.manager,m.expires_at AS access_until FROM pools p JOIN pool_members m ON m.pool_id=p.id WHERE p.id=? AND m.user_id=? AND ${ACTIVE} AND p.archived_at IS NULL`,
+    `SELECT p.*,m.kind AS membership,m.manager,m.expires_at AS access_until,(${CLAIMABLE}) claimable FROM pools p JOIN pool_members m ON m.pool_id=p.id WHERE p.id=? AND m.user_id=? AND ${ACTIVE} AND p.archived_at IS NULL`,
     poolId,
     who(c).id,
   );
   if (!p) fail("Piscine inaccessible.", 404);
-  if (manager && !p.manager)
+  if (manager && !p.manager && !p.claimable)
     fail("Seul le responsable de la piscine peut gérer cet accès.", 403);
   return p;
 }
 export function professionalAccess(c: C, p: any) {
   requirePro(c);
-  if (!["principal", "temporary"].includes(p.membership))
+  if (p.membership !== "principal")
     fail("Une autorisation professionnelle est nécessaire.", 403);
 }
 export const audit = (

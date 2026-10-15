@@ -276,12 +276,12 @@ account.post("/password", async (c) => {
 account.get("/notifications", async (c) => {
   const list = await stmt(
     c,
-    "SELECT n.* FROM notifications n WHERE n.user_id=? AND n.request_id IS NULL AND n.type NOT IN('help','offer','mission') ORDER BY n.created_at DESC,n.id DESC LIMIT 50",
+    "SELECT n.* FROM notifications n WHERE n.user_id=? AND (n.pool_id IS NULL OR EXISTS(SELECT 1 FROM pool_members m JOIN pools p ON p.id=m.pool_id WHERE m.pool_id=n.pool_id AND m.user_id=n.user_id AND m.kind IN('owner','principal') AND m.revoked_at IS NULL AND (m.expires_at IS NULL OR m.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) AND p.archived_at IS NULL)) AND n.request_id IS NULL AND n.type NOT IN('help','offer','mission') ORDER BY n.created_at DESC,n.id DESC LIMIT 50",
     who(c).id,
   ).all();
   const unread = await row<{ n: number }>(
     c,
-    "SELECT count(*) n FROM notifications WHERE user_id=? AND request_id IS NULL AND type NOT IN('help','offer','mission') AND read_at IS NULL",
+    "SELECT count(*) n FROM notifications n WHERE n.user_id=? AND (n.pool_id IS NULL OR EXISTS(SELECT 1 FROM pool_members m JOIN pools p ON p.id=m.pool_id WHERE m.pool_id=n.pool_id AND m.user_id=n.user_id AND m.kind IN('owner','principal') AND m.revoked_at IS NULL AND (m.expires_at IS NULL OR m.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) AND p.archived_at IS NULL)) AND request_id IS NULL AND type NOT IN('help','offer','mission') AND read_at IS NULL",
     who(c).id,
   );
   return c.json({ items: list.results, unread: unread?.n || 0 });

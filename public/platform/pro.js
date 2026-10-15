@@ -24,7 +24,7 @@ import {
   addDays,
   confirmAction,
 } from "./ui.js";
-import { needRow, openRecordForm } from "./pools.js";
+import { needRow, openRecordForm, invitationSection } from "./pools.js";
 export const proPages = { planning, preparation };
 let planDate = today(),
   planRange = 0;
@@ -47,7 +47,7 @@ async function planning(main) {
       "Récurrences saisonnières, visites ponctuelles et changements de dernière minute.",
       `<div class="inline wrap"><a href="#preparation" class="btn secondary">${icon("box", 16)} À préparer</a><a href="#stats" class="btn secondary">${icon("chart", 16)} Statistiques</a>${button("Planifier", "new-appointment")}</div>`,
     ) +
-    `${inv.items.length ? `<section class="card" style="margin-bottom:18px"><h2>Invitations à suivre une piscine</h2>${inv.items.map((i) => `<div class="row"><div class="grow"><h3>${esc(i.pool_name)}</h3><p>${esc(i.sender_name)}</p></div>${button("Accepter", "invitation", `data-id="${i.id}" data-accept="1"`, "primary small")}${button("Refuser", "invitation", `data-id="${i.id}" data-accept="0"`, "ghost small")}</div>`).join("")}</section>` : ""}<div class="card"><div class="inline between wrap toolbar"><div class="inline"><button class="btn secondary small" data-action="plan-prev" aria-label="Période précédente">←</button><input type="date" id="plan-date" value="${planDate}" class="search-input" aria-label="Début de période"><button class="btn secondary small" data-action="plan-next" aria-label="Période suivante">→</button></div><div class="inline">${button("Aujourd’hui", "plan-today", "", "ghost small")}<select id="plan-range" class="search-input" aria-label="Période"><option value="0" ${planRange === 0 ? "selected" : ""}>Jour</option><option value="6" ${planRange === 6 ? "selected" : ""}>Semaine</option><option value="29" ${planRange === 29 ? "selected" : ""}>Mois</option></select></div></div><div style="margin-top:20px">${
+    `${invitationSection(inv.items)}<div class="card"><div class="inline between wrap toolbar"><div class="inline"><button class="btn secondary small" data-action="plan-prev" aria-label="Période précédente">←</button><input type="date" id="plan-date" value="${planDate}" class="search-input" aria-label="Début de période"><button class="btn secondary small" data-action="plan-next" aria-label="Période suivante">→</button></div><div class="inline">${button("Aujourd’hui", "plan-today", "", "ghost small")}<select id="plan-range" class="search-input" aria-label="Période"><option value="0" ${planRange === 0 ? "selected" : ""}>Jour</option><option value="6" ${planRange === 6 ? "selected" : ""}>Semaine</option><option value="29" ${planRange === 29 ? "selected" : ""}>Mois</option></select></div></div><div style="margin-top:20px">${
       r.items.length
         ? [...new Set(r.items.map((a) => a.date))]
             .map(
@@ -116,7 +116,10 @@ async function poolSelect(preset) {
   if (preset && !r.items.some((p) => p.id === preset))
     r.items.push(await api("/pools/" + preset));
   if (!r.items.length) {
-    toast("Un client doit vous inviter à suivre sa piscine.", "error");
+    toast(
+      "Ajoutez une piscine depuis Clients, puis planifiez votre passage.",
+      "error",
+    );
     return null;
   }
   return select(

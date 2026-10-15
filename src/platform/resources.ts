@@ -24,7 +24,7 @@ export const resources = new Hono<Env>();
 // Revoking access removes a pool from these aggregates as well as from its dossier.
 resources.get("/activity-summary", async (c) => {
   requirePro(c);
-  const scope = `m.user_id=? AND ${ACTIVE} AND m.kind IN('principal','temporary') AND p.archived_at IS NULL`;
+  const scope = `m.user_id=? AND ${ACTIVE} AND m.kind='principal' AND p.archived_at IS NULL`;
   const visits = `FROM records r JOIN pools p ON p.id=r.pool_id JOIN pool_members m ON m.pool_id=p.id WHERE ${scope} AND r.author_id=? AND r.kind='visit' AND r.published_at IS NOT NULL AND NOT EXISTS(SELECT 1 FROM records correction WHERE correction.correction_of=r.id AND correction.published_at IS NOT NULL)`;
   const u = who(c).id;
   const [totals, months, busiest, portfolio] = await Promise.all([

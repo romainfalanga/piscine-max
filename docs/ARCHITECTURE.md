@@ -2,19 +2,26 @@
 
 ## Identité et propriété
 
-Une identité possède un espace client ; `is_pro` active l'espace professionnel. Ce drapeau n'autorise jamais l'accès à une piscine à lui seul. Le créateur d'une piscine devient son copropriétaire responsable. Aucun endpoint de création d'un compte client par un professionnel n'est conservé.
+Une identité possède un espace client ; `is_pro` active l'espace professionnel. Ce drapeau n'autorise jamais l'accès à une piscine à lui seul. Le client et le professionnel peuvent créer un dossier. En mode client, le créateur devient propriétaire responsable ; en mode professionnel, il devient principal, sans propriété client. Aucun compte client n'est créé à sa place.
 
-`pool_members` relie une personne à une piscine : `owner`, `principal` ou `temporary`. Les contraintes SQL imposent un seul principal actif et un seul responsable ; un temporaire a obligatoirement une échéance. La responsabilité peut être transférée à un autre copropriétaire. Les invitations ciblent un compte existant, expirent et nécessitent acceptation.
+`pool_members` autorise seulement `owner` et `principal` pour les accès actifs. Les contraintes SQL imposent un principal unique et un responsable client unique. Les anciennes lignes `temporary` sont révoquées par la migration 0003, leurs récurrences arrêtées et leurs rendez-vous futurs annulés ; les comptes rendus publiés sont conservés. Des triggers empêchent la réactivation de ces accès.
 
-| Opération | Copropriétaire | Responsable client | Principal | Temporaire | Autre pro |
-|---|---|---|---|---|---|
-| Lire journal partagé et photos | Oui | Oui | Oui | Pendant l'accès | Non |
-| Ajouter une analyse | Oui | Oui | Oui | Pendant l'accès | Non |
-| Produire un rapport d'entretien | Non | Non | Oui | Pendant l'accès | Non |
-| Modifier le dossier permanent | Oui | Oui | Oui | Non | Non |
-| Gérer les accès | Non | Oui | Non | Non | Non |
-| Notes internes personnelles | Non | Non | Ses notes | Ses notes | Non |
-| Brouillon d'un autre auteur | Non | Non | Non | Non | Non |
+Le client invite le professionnel par son identifiant ou par recherche. Le professionnel peut demander à un client de choisir sa piscine via `connection_requests`, sans voir ses dossiers avant acceptation. Il peut aussi préparer une piscine puis inviter le client à la récupérer. Tant que le dossier n'a aucun propriétaire, son professionnel créateur peut inviter le premier client et archiver sa fiche ; dès acceptation, le client gère les autorisations.
+
+Le client qui possède déjà un dossier peut le sélectionner en acceptant une fiche préparée vide : le professionnel rejoint le dossier existant, la fiche préparée est archivée. Si elle contient déjà du suivi, la redirection est refusée pour préserver les historiques ; le client peut refuser cette invitation puis inviter le professionnel depuis son dossier existant. Aucun historique n'est fusionné silencieusement.
+
+Les invitations et demandes expirent après sept jours et requièrent une acceptation explicite. Les réponses utilisent un nonce de résolution et revérifient les droits dans le batch transactionnel. Le client retire l'ancien principal avant d'en choisir un autre. La responsabilité peut être transférée à un autre copropriétaire.
+
+| Opération                       | Copropriétaire | Responsable client | Principal                                     | Autre pro |
+| ------------------------------- | -------------- | ------------------ | --------------------------------------------- | --------- |
+| Lire journal partagé et photos  | Oui            | Oui                | Oui                                           | Non       |
+| Ajouter une analyse             | Oui            | Oui                | Oui                                           | Non       |
+| Produire un rapport d'entretien | Non            | Non                | Oui                                           | Non       |
+| Modifier le dossier permanent   | Oui            | Oui                | Oui                                           | Non       |
+| Gérer les accès                 | Non            | Oui                | Premier client uniquement, avant rattachement | Non       |
+| Notes internes personnelles     | Non            | Non                | Ses notes                                     | Non       |
+| Brouillon d'un autre auteur     | Non            | Non                | Non                                           | Non       |
+
 ## Historique
 
 Un `record` appartient directement à la piscine ; un rendez-vous est facultatif. Supprimer/arrêter une récurrence n'efface donc pas le suivi. L'auteur et son nom au moment de la saisie sont conservés. La publication est explicite et les notifications sont créées dans le même batch D1. Une correction crée une version liée ; les courbes ignorent les versions remplacées publiées.
