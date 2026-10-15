@@ -6,6 +6,12 @@ on:
       - ".github/workflows/cloudflare-preview.yml"
       - "scripts/cloudflare-preview.mjs"
       - "scripts/preview-smoke.mjs"
+      - "public/**"
+      - "src/**"
+      - "tests/**"
+      - "schema/**"
+      - "package*.json"
+      - "vite.config.*"
   workflow_dispatch:
 permissions:
   contents: read
@@ -33,6 +39,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - run: npm run test:browser
       - run: npm run build
       - name: Select preview-only bindings
         run: cp preview.wrangler.jsonc wrangler.jsonc

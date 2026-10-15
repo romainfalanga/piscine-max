@@ -23,15 +23,16 @@ import {
 import { poolPages } from "./pools.js";
 import { proPages } from "./pro.js";
 import { toolPages } from "./tools.js";
-const brand = `<span class="brand-mark">${icon("water", 25)}</span><span><strong>Peace in Blue</strong><small>Le suivi, simplement.</small></span>`;
+import { classicPages } from "./classic.js";
+const brand = `<span class="brand-mark">${icon("water", 25)}</span><span><strong>Piscine Max</strong></span>`;
 let authTab = "login",
   signupRole = "client",
   renderId = 0;
 function authScreen() {
   state.user = null;
-  document.title = "Peace in Blue — Votre piscine, en confiance";
+  document.title = "Piscine Max — Gestion d’entretien";
   $("#app").innerHTML =
-    `<div class="auth"><section class="auth-story"><a href="#" class="brand">${brand}</a><div class="eyebrow" style="margin-top:65px">LE PLAISIR D’UNE PISCINE SEREINE</div><h1 style="margin-top:0">Un bassin.<br>Une histoire.<br><em>Le même suivi.</em></h1><p>Vos analyses, vos entretiens et les bonnes personnes, réunis au même endroit.</p><div class="water-art" aria-hidden="true"></div><div class="auth-bottom"><span>01 &nbsp; Un carnet qui reste</span><span>02 &nbsp; Des accès choisis</span><span>03 &nbsp; L’entraide métier</span></div></section><section class="auth-form"><div><div class="eyebrow">BIENVENUE CHEZ VOUS</div><h2>${authTab === "login" ? "Ravi de vous retrouver." : "Votre piscine commence ici."}</h2><p class="subtitle">${authTab === "login" ? "Retrouvez votre espace et votre suivi." : "Un compte gratuit pour prendre soin de votre piscine."}</p><div class="auth-switch"><button data-action="auth-tab" data-tab="login" class="${authTab === "login" ? "active" : ""}">Se connecter</button><button data-action="auth-tab" data-tab="signup" class="${authTab === "signup" ? "active" : ""}">Créer mon compte</button></div><form id="auth-form">${authTab === "signup" ? `${field("Votre nom", "name", "", "text", 'required maxlength="80" autocomplete="name"')}<div class="auth-switch"><button type="button" data-action="signup-role" data-role="client" class="${signupRole === "client" ? "active" : ""}">J’ai une piscine</button><button type="button" data-action="signup-role" data-role="pro" class="${signupRole === "pro" ? "active" : ""}">Je suis pisciniste</button></div>` : ""}${field("Identifiant", "username", "", "text", 'required minlength="3" maxlength="40" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="ex. camille.martin"')}${field("Mot de passe", "password", "", "password", `required ${authTab === "signup" ? 'minlength="12" autocomplete="new-password"' : 'autocomplete="current-password"'} maxlength="128"`)}${authTab === "signup" ? '<p class="small-note">12 caractères minimum. Aucun email demandé. Un code personnel vous permettra de récupérer votre compte.</p>' : ""}<p class="form-error" role="alert"></p><button class="btn primary full" type="submit">${authTab === "login" ? "Entrer dans mon espace" : "Créer mon compte gratuit"} ${icon("arrow", 17)}</button></form><button class="text-btn" data-action="recover">Mot de passe oublié ?</button><div class="divider"></div><p class="small-note">Vos piscines restent privées. Vous choisissez les personnes qui peuvent consulter leur dossier.</p></div></section></div>`;
+    `<div class="classic-auth"><section class="classic-login"><div class="login-brand"><span class="brand-mark">${icon("water", 32)}</span><h1>Piscine Max</h1><p>Gestion d’entretien de piscines</p></div><div class="auth-switch"><button data-action="auth-tab" data-tab="login" class="${authTab === "login" ? "active" : ""}">Se connecter</button><button data-action="auth-tab" data-tab="signup" class="${authTab === "signup" ? "active" : ""}">Créer mon compte</button></div><form id="auth-form">${authTab === "signup" ? `${field("Votre nom", "name", "", "text", 'required maxlength="80" autocomplete="name"')}<div class="auth-switch"><button type="button" data-action="signup-role" data-role="client" class="${signupRole === "client" ? "active" : ""}">J’ai une piscine</button><button type="button" data-action="signup-role" data-role="pro" class="${signupRole === "pro" ? "active" : ""}">Je suis pisciniste</button></div>` : ""}${field("Identifiant", "username", "", "text", 'required minlength="3" maxlength="40" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="ex. camille.martin"')}${field("Mot de passe", "password", "", "password", `required ${authTab === "signup" ? 'minlength="12" autocomplete="new-password"' : 'autocomplete="current-password"'} maxlength="128"`)}${authTab === "signup" ? '<p class="small-note">12 caractères minimum. Aucun email demandé. Un code personnel vous permettra de récupérer votre compte.</p>' : ""}<p class="form-error" role="alert"></p><button class="btn primary full" type="submit">${authTab === "login" ? "Entrer dans mon espace" : "Créer mon compte gratuit"} ${icon("arrow", 17)}</button></form><button class="text-btn" data-action="recover">Mot de passe oublié ?</button><div class="divider"></div><p class="small-note">Vos piscines restent privées. Vous choisissez les personnes qui peuvent consulter leur dossier.</p></section></div>`;
   $("#auth-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const form = e.target,
@@ -98,7 +99,8 @@ async function start(user) {
     (user.is_pro ? "pro" : "client");
   if (!user.is_pro) state.mode = "client";
   shell();
-  if (!location.hash || location.hash === "#") location.hash = "home";
+  if (!location.hash || location.hash === "#")
+    location.hash = state.mode === "pro" ? "planning" : "home";
   else await route();
   updateUnread();
 }
@@ -106,20 +108,27 @@ function shell() {
   const pro = state.mode === "pro";
   const nav = pro
     ? [
-        ["home", "home", "Aujourd’hui"],
-        ["planning", "calendar", "Planning"],
-        ["pools", "pool", "Piscines"],
-        ["help", "help", "Entraide"],
-        ["tools", "book", "Ressources"],
+        ["home", "home", "Accueil"],
+        ["planning", "calendar", "Agenda"],
+        ["map", "map", "Carte"],
+        ["clients", "users", "Clients"],
+        ["tools", "book", "Pisciniste"],
       ]
     : [
         ["home", "pool", "Mes piscines"],
         ["help", "help", "Mes demandes"],
         ["settings", "settings", "Mon compte"],
       ];
+  const links = nav
+    .map(
+      ([route, i, label]) =>
+        `<a href="#${route}" data-nav="${route}">${icon(i)}<span>${label}</span></a>`,
+    )
+    .join("");
   $("#app").innerHTML =
-    `<div class="app-shell"><aside class="sidebar"><a class="brand" href="#home">${brand}</a>${state.user.is_pro ? `<div class="mode-switch"><button data-action="mode" data-mode="client" class="${pro ? "" : "active"}">Personnel</button><button data-action="mode" data-mode="pro" class="${pro ? "active" : ""}">Professionnel</button></div>` : ""}<nav class="nav" aria-label="Navigation principale">${nav.map(([route, i, label]) => `<a href="#${route}" data-nav="${route}">${icon(i)}<span>${label}</span></a>`).join("")}</nav><div class="side-bottom"><div class="free-label">${icon("check", 14)} &nbsp; Votre espace est gratuit<span>Le suivi et l’entraide, accessibles à tous.</span></div><a href="#settings" class="account-mini" style="text-decoration:none"><span class="avatar">${esc(state.user.name.slice(0, 2).toUpperCase())}</span><span>${esc(state.user.name)}<small style="display:block;margin-top:4px;color:#93b6bb">${pro ? "Espace pisciniste" : "Espace personnel"}</small></span></a><button class="icon-btn" data-action="logout" style="font-size:11px;color:#93b6bb">${icon("logout", 17)} Se déconnecter</button></div></aside><div class="workspace"><header class="topbar"><span class="crumb">Votre espace <strong>${pro ? "professionnel" : "personnel"}</strong></span><a href="#home" class="brand mobile-brand"><span class="brand-mark">${icon("water", 22)}</span><strong>Peace in Blue</strong></a><div class="topbar-right"><span class="profile-name">${esc(state.user.name)}</span><button class="icon-btn" data-action="notifications" aria-label="Notifications">${icon("bell")}<span id="unread"></span></button><a class="icon-btn" href="#settings" aria-label="Mon compte">${icon("settings")}</a></div></header><main id="main" class="main"></main></div></div>`;
+    `<div class="classic-shell"><header class="classic-header"><div class="classic-header-inner"><a class="brand" href="#home" aria-label="Piscine Max, accueil">${brand}</a><div class="classic-account"><a class="classic-profile" href="#settings"><span class="profile-dot"></span><span class="profile-name">${esc(state.user.name)}</span>${badge(pro ? "Pro" : "Client", "teal")}</a>${pro ? `<a class="icon-btn" href="#help" aria-label="Entraide" title="Entraide">${icon("help")}</a>` : ""}<button class="icon-btn" data-action="notifications" aria-label="Notifications" title="Notifications">${icon("bell")}<span id="unread"></span></button><a class="icon-btn" href="#settings" aria-label="Mon compte" title="Mon compte">${icon("settings")}</a><button class="icon-btn" data-action="logout" aria-label="Se déconnecter" title="Se déconnecter">${icon("logout")}</button></div></div><nav class="classic-nav" aria-label="Navigation principale"><div>${links}</div></nav></header><main id="main" class="main"></main><nav class="classic-mobile-nav" aria-label="Navigation mobile">${links}</nav></div>`;
 }
+
 on("mode", async (d) => {
   state.mode = d.mode;
   localStorage.setItem("pib-mode:" + state.user.id, d.mode);
@@ -177,7 +186,7 @@ on("notice-open", (d) => {
   go(d.pool ? "pool/" + d.pool : "request/" + d.request);
 });
 async function settings(main) {
-  main.innerHTML = `<div class="page-heading"><div><div class="eyebrow">VOTRE ESPACE</div><h1>Les bons réglages.</h1><p>Votre profil, votre zone et la sécurité de votre compte.</p></div></div><div class="grid two"><section class="card"><h2>Votre profil</h2><form id="settings-form">${field("Nom", "name", state.user.name, "text", 'required maxlength="80"')}${field("Identifiant", "username", state.user.username, "text", "disabled")}${
+  main.innerHTML = `<div class="page-heading"><div><div class="eyebrow">VOTRE ESPACE</div><h1>Mon compte</h1><p>Votre profil, votre zone et la sécurité de votre compte.</p></div></div><div class="grid two"><section class="card"><h2>Votre profil</h2><form id="settings-form">${field("Nom", "name", state.user.name, "text", 'required maxlength="80"')}${field("Identifiant", "username", state.user.username, "text", "disabled")}${
     state.user.is_pro
       ? `${field("Nom professionnel", "company", state.user.company, "text", 'maxlength="100"')}${cityField(state.user.city_code, state.user.city)}${field("Rayon d’intervention (km)", "radius_km", state.user.radius_km, "number", 'min="5" max="150" required')}<div class="field"><span>Vos prestations</span><div class="inline wrap">${Object.entries(
           specs,
@@ -251,6 +260,13 @@ async function route() {
   const current = ++renderId;
   const parts = location.hash.slice(1).split("/"),
     name = parts[0] || "home";
+  if (
+    state.mode !== "pro" &&
+    ["clients", "map", "planning", "tools", "stats"].includes(name)
+  ) {
+    go("home");
+    return;
+  }
   state.route = name;
   const main = $("#main");
   if (!main) return;
@@ -258,12 +274,26 @@ async function route() {
     a.classList.toggle(
       "active",
       a.dataset.nav ===
-        (name === "pool" ? "pools" : name === "request" ? "help" : name),
+        (name === "pool" || name === "pools"
+          ? state.mode === "pro"
+            ? "clients"
+            : "home"
+          : name === "request"
+            ? "help"
+            : name === "stats"
+              ? "home"
+              : name),
     ),
   );
   main.innerHTML = '<div class="loading">Votre espace se prépare…</div>';
   try {
-    const pages = { ...poolPages, ...proPages, ...toolPages, settings };
+    const pages = {
+      ...poolPages,
+      ...proPages,
+      ...toolPages,
+      ...classicPages,
+      settings,
+    };
     if (name === "home") {
       if (state.mode === "pro") await proPages.dashboard(main);
       else await poolPages.pools(main);
@@ -271,7 +301,7 @@ async function route() {
     else go("home");
     if (current === renderId)
       document.title =
-        "Peace in Blue — " +
+        "Piscine Max — " +
         (name === "pool"
           ? state.pool?.name || "Piscine"
           : state.mode === "pro"

@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import {
   Env,
+  ACTIVE,
   who,
   uid,
   now,
@@ -18,6 +19,40 @@ import {
 import { QUIZ_BANK } from "../quiz-data";
 import { REFERENCE_PROCEDURES } from "../procedure-data";
 export const resources = new Hono<Env>();
+// Only current assignments and the professional's own published visits contribute.
+// Revoking access removes a pool from these aggregates as well as from its dossier.
+resources.get("/activity-summary", async (c) => {
+  requirePro(c);
+  const scope = `m.user_id=? AND ${ACTIVE} AND m.kind IN('principal','temporary') AND p.archived_at IS NULL`;
+  const visits = `FROM records r JOIN pools p ON p.id=r.pool_id JOIN pool_members m ON m.pool_id=p.id WHERE ${scope} AND r.author_id=? AND r.kind='visit' AND r.published_at IS NOT NULL AND NOT EXISTS(SELECT 1 FROM records correction WHERE correction.correction_of=r.id AND correction.published_at IS NOT NULL)`;
+  const u = who(c).id;
+  const [totals, months, busiest, portfolio] = await Promise.all([
+    row(
+      c,
+      `SELECT count(*) visits,coalesce(sum(r.duration),0) minutes ${visits}`,
+      u,
+      u,
+    ),
+    rows(
+      c,
+      `SELECT substr(r.measured_at,1,7) month,count(*) visits,coalesce(sum(r.duration),0) minutes ${visits} GROUP BY month ORDER BY month DESC LIMIT 12`,
+      u,
+      u,
+    ),
+    rows(
+      c,
+      `SELECT p.id,p.name,count(*) visits,coalesce(sum(r.duration),0) minutes ${visits} GROUP BY p.id ORDER BY visits DESC,p.name LIMIT 10`,
+      u,
+      u,
+    ),
+    row(
+      c,
+      `SELECT count(DISTINCT p.id) pools,count(DISTINCT owners.user_id) clients FROM pools p JOIN pool_members m ON m.pool_id=p.id LEFT JOIN pool_members owners ON owners.pool_id=p.id AND owners.kind='owner' AND owners.revoked_at IS NULL AND (owners.expires_at IS NULL OR owners.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) WHERE ${scope}`,
+      u,
+    ),
+  ]);
+  return c.json({ ...totals, ...portfolio, months, busiest });
+});
 resources.get("/procedures/reference", (c) => {
   requirePro(c);
   return c.json({

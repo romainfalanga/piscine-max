@@ -149,6 +149,9 @@ try {
     ["/", "text/html"],
     ["/platform/app.js", "javascript"],
     ["/platform/style.css", "text/css"],
+    ["/platform/classic.css", "text/css"],
+    ["/platform/classic.js", "javascript"],
+    ["/platform/leaflet.js", "javascript"],
   ]) {
     const response = await fetch(base + path, {
       redirect: "error",

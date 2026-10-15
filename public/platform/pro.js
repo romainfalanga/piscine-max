@@ -28,7 +28,7 @@ import {
 import { needRow, openRecordForm } from "./pools.js";
 export const proPages = { dashboard, planning, help, request };
 let planDate = today(),
-  planRange = 6,
+  planRange = 0,
   feedOwn = false,
   feedCursor = null,
   currentRequest = null;
@@ -52,10 +52,10 @@ async function dashboard(main) {
     heading(
       fmt(day, { weekday: "long", year: "numeric" }).toUpperCase(),
       "Bonjour " + esc(state.user.name.split(" ")[0]) + ".",
-      "Une tournée bien préparée, des piscines bien suivies.",
+      "Retrouvez vos entretiens et préparez votre tournée.",
       button(icon("plus", 16) + " Planifier un passage", "new-appointment"),
     ) +
-    `${!state.user.city_code ? `<div class="note" style="margin-bottom:22px">${icon("map", 17)} &nbsp; Renseignez votre commune et vos prestations pour voir les demandes d’intervention proches de vous. <a href="#settings"><strong>Compléter mon profil</strong></a></div>` : ""}${inv.items.length ? `<section class="card" style="margin-bottom:23px"><h2>${inv.items.length} invitation(s) à rejoindre une piscine</h2>${inv.items.map((i) => `<div class="row"><div class="grow"><h3>${esc(i.pool_name)}</h3><p>${esc(i.sender_name)}</p></div>${button("Accepter", "invitation", `data-id="${i.id}" data-accept="1"`, "primary small")}${button("Refuser", "invitation", `data-id="${i.id}" data-accept="0"`, "ghost small")}</div>`).join("")}</section>` : ""}<div class="grid three" style="margin-bottom:26px"><div class="stat"><span>PASSAGES AUJOURD’HUI</span><strong>${r.items.filter((a) => a.status !== "cancelled").length}</strong><small>${done} effectué${done > 1 ? "s" : ""}</small></div><div class="stat"><span>ENCORE À VISITER</span><strong>${pending.length}</strong><small>${pending.reduce((n, a) => n + a.duration, 0)} minutes prévues sur place</small></div><div class="stat"><span>À PRÉPARER CETTE SEMAINE</span><strong>${prep.items.filter((n) => n.responsible === "pro" && n.status === "needed").length}</strong><small>produits ou matériels à emporter</small></div></div><div class="split"><section><div class="section-heading"><h2>Votre journée, au fil de l’eau.</h2><a href="#planning" class="text-btn">Tout le planning →</a></div><div class="card">${r.items.length ? r.items.map(appointmentRow).join("") : empty("Une journée encore libre", "Planifiez un passage ou profitez-en pour préparer vos prochaines visites.", button("Voir mes piscines", "home-pools", "", "secondary"))}</div><div class="section-heading"><h2>À préparer avant de partir</h2></div><div class="card">${
+    `${!state.user.city_code ? `<div class="note" style="margin-bottom:22px">${icon("map", 17)} &nbsp; Renseignez votre commune et vos prestations pour voir les demandes d’intervention proches de vous. <a href="#settings"><strong>Compléter mon profil</strong></a></div>` : ""}${inv.items.length ? `<section class="card" style="margin-bottom:23px"><h2>${inv.items.length} invitation(s) à rejoindre une piscine</h2>${inv.items.map((i) => `<div class="row"><div class="grow"><h3>${esc(i.pool_name)}</h3><p>${esc(i.sender_name)}</p></div>${button("Accepter", "invitation", `data-id="${i.id}" data-accept="1"`, "primary small")}${button("Refuser", "invitation", `data-id="${i.id}" data-accept="0"`, "ghost small")}</div>`).join("")}</section>` : ""}<div class="grid three" style="margin-bottom:26px"><div class="stat"><span>PASSAGES AUJOURD’HUI</span><strong>${r.items.filter((a) => a.status !== "cancelled").length}</strong><small>${done} effectué${done > 1 ? "s" : ""}</small></div><div class="stat"><span>ENCORE À VISITER</span><strong>${pending.length}</strong><small>${pending.reduce((n, a) => n + a.duration, 0)} minutes prévues sur place</small></div><div class="stat"><span>À PRÉPARER CETTE SEMAINE</span><strong>${prep.items.filter((n) => n.responsible === "pro" && n.status === "needed").length}</strong><small>produits ou matériels à emporter</small></div></div><div class="classic-shortcuts"><a href="#stats" class="shortcut"><span class="shortcut-icon violet">${icon("chart")}</span><span><strong>Statistiques</strong><small>Passages et temps d’intervention</small></span></a><a href="#help" class="shortcut"><span class="shortcut-icon green">${icon("users")}</span><span><strong>Entraide</strong><small>Conseils et missions à transmettre</small></span></a><button data-action="calculator" class="shortcut"><span class="shortcut-icon sky">${icon("settings")}</span><span><strong>Mes outils</strong><small>Calculer le volume d’un bassin</small></span></button><button data-action="assistant" class="shortcut"><span class="shortcut-icon purple">${icon("help")}</span><span><strong>Assistant IA</strong><small>Poser une question métier</small></span></button></div><div class="split"><section><div class="section-heading"><h2>Au programme aujourd’hui</h2><a href="#planning" class="text-btn">Voir l’agenda →</a></div><div class="card">${r.items.length ? r.items.map(appointmentRow).join("") : empty("Une journée encore libre", "Planifiez un passage ou profitez-en pour préparer vos prochaines visites.", button("Voir mes piscines", "home-pools", "", "secondary"))}</div><div class="section-heading"><h2>À préparer avant de partir</h2></div><div class="card">${
       prep.items.filter((n) => n.responsible === "pro").length
         ? prep.items
             .filter((n) => n.responsible === "pro")
@@ -65,7 +65,7 @@ async function dashboard(main) {
             "La préparation est à jour",
             "Les besoins saisis au fil de vos passages se regrouperont ici.",
           )
-    }</div></section><aside class="stack"><section class="welcome" style="display:block;margin-top:27px"><div class="eyebrow">LE MÉTIER SE PARTAGE</div><h2>Un coup de main fait la différence.</h2><p>Un avis, un renfort ou une mission à transmettre : échangez avec d’autres piscinistes.</p><a href="#help" class="btn secondary" style="margin-top:20px">Ouvrir l’entraide ${icon("arrow", 15)}</a></section><section class="card"><h3>Achats côté clients</h3><p class="small-note">Les demandes d’achat restent visibles pour que rien ne manque au prochain passage.</p>${
+    }</div></section><aside class="stack"><section class="welcome" style="display:block;margin-top:27px"><h2>Besoin d’un coup de main ?</h2><p>Un avis, un renfort ou une mission à transmettre : échangez avec d’autres piscinistes.</p><a href="#help" class="btn secondary" style="margin-top:20px">Ouvrir l’entraide ${icon("arrow", 15)}</a></section><section class="card"><h3>Achats côté clients</h3><p class="small-note">Les demandes d’achat restent visibles pour que rien ne manque au prochain passage.</p>${
       prep.items
         .filter((n) => n.responsible === "client")
         .slice(0, 6)
@@ -76,7 +76,7 @@ async function dashboard(main) {
         .join("") || '<p class="small-note">Aucun achat client en attente.</p>'
     }</section></aside></div>`;
 }
-on("home-pools", () => go("pools"));
+on("home-pools", () => go("clients"));
 async function planning(main) {
   const to = addDays(planDate, planRange),
     r = await api("/planning?from=" + planDate + "&to=" + to);
@@ -84,7 +84,7 @@ async function planning(main) {
   main.innerHTML =
     heading(
       "VOTRE ORGANISATION",
-      "Les bons passages, au bon moment.",
+      "Agenda",
       "Récurrences saisonnières, visites ponctuelles et changements de dernière minute.",
       button("Planifier", "new-appointment"),
     ) +
@@ -100,7 +100,7 @@ async function planning(main) {
             )
             .join("")
         : empty(
-            "Votre planning respire",
+            "Aucun passage prévu",
             "Ajoutez un passage ponctuel ou une récurrence depuis la fiche d’une piscine.",
           )
     }</div></div>`;
@@ -239,7 +239,7 @@ async function help(main) {
     heading(
       pro ? "ENTRE PROFESSIONNELS" : "VOS DEMANDES",
       pro
-        ? "Le métier gagne à se partager."
+        ? "Entraide entre piscinistes"
         : "Un problème ? Vous êtes accompagné.",
       pro
         ? "Des avis utiles, des renforts et des missions près de vous."

@@ -880,3 +880,112 @@ test("Manager transfer preserves co-owner history and stops former manager chang
     200,
   );
 });
+
+test("Classic clients, map and activity stats only expose current assignments and active co-owners", async () => {
+  const e = context(),
+    owner = await user(e, "elise"),
+    coowner = await user(e, "marie"),
+    pro = await user(e, "benoit", "pro"),
+    stranger = await user(e, "arthur", "pro"),
+    id = await pool(e, owner, "Les Pins");
+  await invite(e, owner, coowner, id, "owner");
+  await invite(e, owner, pro, id, "principal");
+  const list = await request(
+    e,
+    "/pools?mode=pro&q=marie",
+    "GET",
+    undefined,
+    pro.token,
+  );
+  assert.equal(list.status, 200);
+  assert.equal(list.data.items.length, 1);
+  assert.equal(list.data.items[0].address, "Adresse strictement privée");
+  assert.equal(list.data.items[0].latitude, 43.14);
+  assert.deepEqual(
+    list.data.items[0].owners.map((u: any) => u.username).sort(),
+    ["elise", "marie"],
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        "/pools?mode=pro&q=marie",
+        "GET",
+        undefined,
+        stranger.token,
+      )
+    ).data.items.length,
+    0,
+  );
+  assert.equal(
+    (await request(e, "/activity-summary", "GET", undefined, owner.token))
+      .status,
+    403,
+  );
+  const draft = await request(
+    e,
+    `/pools/${id}/records`,
+    "POST",
+    {
+      kind: "visit",
+      measured_at: measured(),
+      duration: 45,
+      readings: { ph: 7.2 },
+    },
+    pro.token,
+  );
+  assert.equal(draft.status, 201);
+  assert.equal(
+    (await request(e, "/activity-summary", "GET", undefined, pro.token)).data
+      .visits,
+    0,
+  );
+  await request(e, `/records/${draft.data.id}/publish`, "POST", {}, pro.token);
+  const stats = (
+    await request(e, "/activity-summary", "GET", undefined, pro.token)
+  ).data;
+  assert.equal(stats.pools, 1);
+  assert.equal(stats.clients, 2);
+  assert.equal(stats.visits, 1);
+  assert.equal(stats.minutes, 45);
+  assert.equal(stats.months[0].visits, 1);
+  assert.equal(
+    (await request(e, "/activity-summary", "GET", undefined, stranger.token))
+      .data.visits,
+    0,
+  );
+  const detail = await request(
+    e,
+    `/pools/${id}`,
+    "GET",
+    undefined,
+    owner.token,
+  );
+  const member = detail.data.members.find(
+    (m: any) => m.user_id === pro.user.id,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        `/pools/${id}/members/${member.id}`,
+        "DELETE",
+        {},
+        owner.token,
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (await request(e, "/pools?mode=pro", "GET", undefined, pro.token)).data
+      .items.length,
+    0,
+  );
+  const after = (
+    await request(e, "/activity-summary", "GET", undefined, pro.token)
+  ).data;
+  assert.equal(after.pools, 0);
+  assert.equal(after.clients, 0);
+  assert.equal(after.visits, 0);
+  assert.equal(after.busiest.length, 0);
+});

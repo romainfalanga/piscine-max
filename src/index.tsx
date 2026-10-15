@@ -21,7 +21,7 @@ app.use("*", async (c, next) => {
   );
   c.header(
     "Content-Security-Policy",
-    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: https://tile.openstreetmap.org; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
   );
   await next();
 });
@@ -71,7 +71,7 @@ app.use("/platform/*", serveStatic({ root: "./public" }));
 app.get("/favicon.svg", serveStatic({ path: "./public/platform/favicon.svg" }));
 app.get("*", (c) =>
   c.html(
-    `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#082c3c"><meta name="description" content="Le carnet de votre piscine et le quotidien de votre pisciniste, réunis."><title>Peace in Blue — Votre piscine, en confiance</title><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/platform/style.css"><script type="module" src="/platform/app.js"></script></head><body><div id="app"><div class="loading">Peace in Blue · Chargement…</div></div><div id="modal"></div><div id="toast" role="status" aria-live="polite"></div></body></html>`,
+    `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0891b2"><meta name="description" content="Le carnet de votre piscine et le quotidien de votre pisciniste, réunis."><title>Piscine Max — Gestion d’entretien</title><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/platform/style.css"><link rel="stylesheet" href="/platform/classic.css"><script type="module" src="/platform/app.js"></script></head><body><div id="app"><div class="loading">Piscine Max · Chargement…</div></div><div id="modal"></div><div id="toast" role="status" aria-live="polite"></div></body></html>`,
   ),
 );
 app.onError((err, c) => {

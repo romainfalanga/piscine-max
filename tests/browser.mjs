@@ -30,6 +30,10 @@ page.setDefaultTimeout(10000);
 page.on("pageerror", (e) => errors.push(e.message));
 try {
   await page.goto("http://127.0.0.1:8788/");
+  await page.screenshot({
+    path: ".test-artifacts/login-desktop.png",
+    fullPage: true,
+  });
   await page
     .getByRole("button", { name: "Créer mon compte", exact: true })
     .click();
@@ -133,6 +137,118 @@ try {
   await page
     .getByRole("heading", { name: "Bonjour Camille.", exact: true })
     .waitFor();
+  // A second, independently registered client grants access to the professional.
+  const ownerContext = await browser.newContext();
+  const apiPost = async (ctx, path, body) => {
+    const response = await ctx.request.post(
+      "http://127.0.0.1:8788/api" + path,
+      {
+        data: body,
+        headers: {
+          Origin: "http://127.0.0.1:8788",
+          Cookie: (await ctx.cookies())
+            .map((c) => `${c.name}=${c.value}`)
+            .join("; "),
+        },
+      },
+    );
+    assert.ok(response.ok(), await response.text());
+    return response.json();
+  };
+  await apiPost(ownerContext, "/auth/signup", {
+    username: "olivier-" + suffix,
+    name: "Olivier Laurent",
+    password: "Browser fixture password only!",
+    role: "client",
+  });
+  const assigned = await apiPost(ownerContext, "/pools", {
+    name: "Le bassin des Pins",
+    city_code: "83009",
+    address: "Adresse de démonstration",
+    volume: 54,
+    treatment: "salt",
+  });
+  const invitation = await apiPost(
+    ownerContext,
+    `/pools/${assigned.id}/invitations`,
+    { username: "camille-" + suffix, kind: "principal" },
+  );
+  await apiPost(context, `/invitations/${invitation.id}/respond`, {
+    accept: true,
+  });
+  await ownerContext.close();
+  const nav = page.getByRole("navigation", {
+    name: "Navigation principale",
+    exact: true,
+  });
+  assert.deepEqual(await nav.locator("a").allTextContents(), [
+    "Accueil",
+    "Agenda",
+    "Carte",
+    "Clients",
+    "Pisciniste",
+  ]);
+  await nav.getByRole("link", { name: "Agenda", exact: true }).click();
+  await page.getByRole("heading", { name: "Agenda", exact: true }).waitFor();
+  assert.equal(
+    await page.getByLabel("Période", { exact: true }).inputValue(),
+    "0",
+  );
+  await page.getByRole("button", { name: "Planifier", exact: true }).click();
+  await page.getByLabel("Piscine", { exact: true }).selectOption(assigned.id);
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Planifier", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Commencer", exact: true }).waitFor();
+  await page.screenshot({
+    path: ".test-artifacts/pro-agenda-desktop.png",
+    fullPage: true,
+  });
+  await page.getByRole("button", { name: "Commencer", exact: true }).click();
+  await page.getByLabel("pH", { exact: true }).fill("7.2");
+  await page
+    .getByRole("button", { name: "Terminer et partager", exact: true })
+    .click();
+  await page.getByText("Partagé", { exact: true }).waitFor();
+  await nav.getByRole("link", { name: "Agenda", exact: true }).click();
+  await page.getByText("Effectué", { exact: true }).waitFor();
+  await nav.getByRole("link", { name: "Clients", exact: true }).click();
+  await page
+    .getByRole("heading", { name: "Olivier Laurent", exact: true })
+    .waitFor();
+  await page.screenshot({
+    path: ".test-artifacts/pro-clients-desktop.png",
+    fullPage: true,
+  });
+  await nav.getByRole("link", { name: "Carte", exact: true }).click();
+  await page.locator(".classic-map-marker").waitFor();
+  assert.equal(
+    await page.getByRole("link", { name: "Itinéraire", exact: true }).count(),
+    1,
+  );
+  assert.ok(
+    (
+      await page
+        .getByRole("link", { name: "Itinéraire", exact: true })
+        .getAttribute("href")
+    ).includes("Adresse%20de%20d%C3%A9monstration"),
+  );
+  await nav.getByRole("link", { name: "Pisciniste", exact: true }).click();
+  await page.getByLabel("Catégorie de fiche").waitFor();
+  assert.ok((await page.locator("#reference-list article").count()) > 90);
+  await nav.getByRole("link", { name: "Accueil", exact: true }).click();
+  await page.getByRole("link", { name: "Statistiques", exact: false }).click();
+  await page
+    .getByRole("heading", { name: "Statistiques", exact: true })
+    .waitFor();
+  assert.equal(await page.locator(".stat strong").first().textContent(), "1");
+  await page
+    .getByRole("link", { name: "Retour à l’accueil", exact: true })
+    .click();
+  await page
+    .getByRole("heading", { name: "Bonjour Camille.", exact: true })
+    .waitFor();
   await page.screenshot({
     path: ".test-artifacts/pro-dashboard-desktop.png",
     fullPage: true,
@@ -140,7 +256,7 @@ try {
   await page.getByRole("link", { name: "Entraide", exact: true }).click();
   await page
     .getByRole("heading", {
-      name: "Le métier gagne à se partager.",
+      name: "Entraide entre piscinistes",
       exact: true,
     })
     .waitFor();
@@ -190,6 +306,27 @@ try {
     fullPage: true,
   });
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("http://127.0.0.1:8788/#home");
+  await page
+    .getByRole("heading", { name: "Bonjour Camille.", exact: true })
+    .waitFor();
+  const mobileNav = page.getByRole("navigation", {
+    name: "Navigation mobile",
+    exact: true,
+  });
+  await mobileNav.getByRole("link", { name: "Agenda", exact: true }).click();
+  await page.getByRole("heading", { name: "Agenda", exact: true }).waitFor();
+  await page.screenshot({
+    path: ".test-artifacts/pro-agenda-mobile.png",
+    fullPage: true,
+  });
+  assert.equal(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > innerWidth,
+    ),
+    false,
+    "Pro agenda mobile overflow",
+  );
   await page.goto("http://127.0.0.1:8788/#pool/" + poolId);
   await page
     .getByRole("heading", { name: "La piscine des Oliviers", exact: true })
@@ -227,11 +364,16 @@ try {
         "supplies",
         "members",
         "enable pro profile",
-        "dashboard",
+        "dashboard and five original tabs",
+        "client directory and map after explicit invitation",
+        "plan, perform and publish a visit",
+        "private activity statistics",
+        "reference procedures",
+        "professional mobile navigation",
         "professional help and reply",
         "mobile journal and report",
       ],
-      screenshots: 6,
+      screenshots: 10,
       pageErrors: errors,
     }),
   );

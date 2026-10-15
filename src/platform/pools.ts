@@ -56,7 +56,7 @@ pools.get("/pools", async (c) => {
     ["client", "pro"] as const,
     "client",
   );
-  let q = `SELECT p.id,p.name,p.kind,p.city,p.treatment,p.volume,p.winterized,m.kind membership,m.manager,(SELECT max(r.measured_at) FROM records r WHERE r.pool_id=p.id AND r.published_at IS NOT NULL) last_reading FROM pools p JOIN pool_members m ON m.pool_id=p.id WHERE m.user_id=? AND ${ACTIVE} AND p.archived_at IS NULL AND ${mode === "client" ? "m.kind='owner'" : "m.kind IN('principal','temporary')"}`;
+  let q = `SELECT p.id,p.name,p.kind,p.city,p.city_code,p.address,p.latitude,p.longitude,p.treatment,p.volume,p.winterized,m.kind membership,m.manager,(SELECT json_group_array(json_object('id',u.id,'name',u.name,'username',u.username)) FROM pool_members o JOIN users u ON u.id=o.user_id WHERE o.pool_id=p.id AND o.kind='owner' AND o.revoked_at IS NULL AND (o.expires_at IS NULL OR o.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))) owners_json,(SELECT max(r.measured_at) FROM records r WHERE r.pool_id=p.id AND r.published_at IS NOT NULL) last_reading FROM pools p JOIN pool_members m ON m.pool_id=p.id WHERE m.user_id=? AND ${ACTIVE} AND p.archived_at IS NULL AND ${mode === "client" ? "m.kind='owner'" : "m.kind IN('principal','temporary')"}`;
   const binds: any[] = [who(c).id];
   if (after) {
     q += " AND p.id>?";
@@ -64,15 +64,18 @@ pools.get("/pools", async (c) => {
   }
   const search = str(c.req.query("q"), 100);
   if (search) {
-    q += " AND (p.name LIKE ? OR p.city LIKE ?)";
-    binds.push(
-      `%${search.replace(/[%_]/g, "")}%`,
-      `%${search.replace(/[%_]/g, "")}%`,
-    );
+    q +=
+      " AND (p.name LIKE ? OR p.city LIKE ? OR EXISTS(SELECT 1 FROM pool_members o JOIN users u ON u.id=o.user_id WHERE o.pool_id=p.id AND o.kind='owner' AND o.revoked_at IS NULL AND (o.expires_at IS NULL OR o.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) AND (u.name LIKE ? OR u.username LIKE ?)))";
+    binds.push(...Array(4).fill(`%${search.replace(/[%_]/g, "")}%`));
   }
   q += " ORDER BY p.id LIMIT ?";
   binds.push(limit + 1);
-  return c.json(page(await rows(c, q, ...binds), limit));
+  const result = page(await rows(c, q, ...binds), limit);
+  result.items = result.items.map(({ owners_json, ...p }: any) => ({
+    ...p,
+    owners: jsonParse(owners_json, []),
+  }));
+  return c.json(result);
 });
 pools.post("/pools", async (c) => {
   const b = await c.req.json(),
