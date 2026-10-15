@@ -151,6 +151,8 @@ try {
     ["/platform/style.css", "text/css"],
     ["/platform/classic.css", "text/css"],
     ["/platform/classic.js", "javascript"],
+    ["/platform/calculations.js", "javascript"],
+    ["/platform/tools.js", "javascript"],
     ["/platform/leaflet.js", "javascript"],
   ]) {
     const response = await fetch(base + path, {
@@ -216,6 +218,55 @@ try {
     200,
   );
   checks.push("Invitation and explicit professional access work");
+  assert.equal(
+    (await request("/health")).data.application,
+    "Peace in Blue App",
+  );
+  for (const path of ["/help", "/tools/config", "/assistant"])
+    assert.equal(
+      (await request(path, "GET", undefined, pro.cookie)).status,
+      404,
+    );
+  const progressPath = "/guides/entretien/progress?pool_id=" + poolId;
+  assert.equal(
+    (await request("/guides", "GET", undefined, owner.cookie)).status,
+    403,
+  );
+  assert.equal(
+    (await request("/guides", "GET", undefined, pro.cookie)).data.items.length,
+    8,
+  );
+  const progress = {
+    revision: 0,
+    variant: "sand",
+    checks: { arrival: "done" },
+  };
+  assert.equal(
+    (await request(progressPath, "PUT", progress, pro.cookie)).status,
+    200,
+  );
+  assert.equal(
+    (await request(progressPath, "GET", undefined, pro.cookie)).data.checks
+      .arrival,
+    "done",
+  );
+  assert.equal(
+    (await request(progressPath, "PUT", progress, pro.cookie)).status,
+    409,
+  );
+  assert.equal(
+    (await request(progressPath, "GET", undefined, outsider.cookie)).status,
+    403,
+  );
+  assert.equal(
+    (await request("/quiz?count=10", "GET", undefined, pro.cookie)).data.items
+      .length,
+    10,
+  );
+  checks.push(
+    "Renamed app, removed routes and private guided progress work on D1",
+  );
+
   const record = await request(
     "/pools/" + poolId + "/records",
     "POST",
@@ -326,6 +377,10 @@ try {
       )
     ).status,
     200,
+  );
+  assert.equal(
+    (await request(progressPath, "GET", undefined, pro.cookie)).status,
+    404,
   );
   assert.equal(
     (await request("/records/" + record.data.id, "GET", undefined, pro.cookie))

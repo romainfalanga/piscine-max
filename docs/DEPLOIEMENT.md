@@ -24,8 +24,8 @@ Les étapes ci-dessous décrivent la séparation à maintenir pour préparer la 
 1. Créer deux nouvelles bases D1 : `peaceinblue-platform-preview` et `peaceinblue-platform`. Créer deux buckets R2 privés distincts pour les photos. Ne pas activer de domaine public R2.
 2. Remplacer les identifiants `local-*` et noms de buckets de `wrangler.jsonc` par ceux réellement retournés par Cloudflare. Vérifier que production et preview sont différentes et ne réutilisent pas les ressources historiques. Le script `deployment-preflight.mjs` arrête les builds Pages et les déploiements manuels si ces conditions minimales ne sont pas remplies.
 3. Configurer des `SESSION_SECRET` différents (aléatoires, au moins 32 caractères), sauvegardés dans un coffre, dans Pages production/preview. Définir `ADMIN_USER_ID` après avoir créé et vérifié le compte de Romain ; aucun administrateur n'est désigné automatiquement.
-4. `OPENROUTER_API_KEY` est facultatif ; sans clé, l'assistant affiche son indisponibilité sans bloquer les autres fonctions. Définir un modèle disponible via `OPENROUTER_MODEL` et un budget fournisseur. L'application limite l'assistant à 10 requêtes par utilisateur/jour et 100 globales/jour ; cela ne garantit pas un coût nul.
-5. Appliquer `schema/0001_platform.sql` via `npm run db:migrate:preview` sur la base neuve, puis déployer la branche de recette. Contrôler les bindings réellement utilisés par le déploiement, les cookies HTTPS, une photo privée et les refus entre deux comptes.
+4. L’assistant IA a été retiré le 15 octobre. Aucune clé OpenRouter n’est requise ni consommée.
+5. Appliquer les migrations ordonnées de `schema/` via `npm run db:migrate:preview` sur la base neuve, puis déployer la branche de recette. Contrôler les bindings réellement utilisés par le déploiement, les cookies HTTPS, une photo privée et les refus entre deux comptes.
 6. Créer uniquement des comptes de recette, effectuer les parcours client/pro/second propriétaire/transfert/révocation, puis faire essayer à Romain sur téléphone. Ne pas envoyer de vrais clients vers cette préproduction.
 
 Les builds n'exécutent aucune migration automatiquement. Le guard de build est une protection contre une configuration connue dangereuse, pas une vérification exhaustive des secrets ou des permissions Cloudflare.
@@ -51,6 +51,6 @@ Avant la bascule, conserver l'identifiant du dernier déploiement valide et les 
 
 ## Gratuité
 
-Aucun utilisateur n'est facturé et aucun abonnement n'est implémenté. Cela ne signifie pas que l'hébergement, le stockage, l'IA ou la montée en charge seront gratuits pour l'exploitant. Les dépenses et éventuels changements de plan fournisseur restent à décider sur des mesures réelles.
+Aucun utilisateur n'est facturé et aucun abonnement n'est implémenté. Cela ne signifie pas que l'hébergement, le stockage ou la montée en charge seront gratuits pour l'exploitant. Les dépenses et éventuels changements de plan fournisseur restent à décider sur des mesures réelles.
 
 Le lot de parité décrit dans `PLAN_PEACEINBLUE.md` reste également nécessaire avant de remplacer définitivement l'outil métier existant. La branche est livrée en pull request brouillon pour cette raison et pour les gates d'infrastructure ci-dessus.

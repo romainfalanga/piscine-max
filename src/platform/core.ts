@@ -20,8 +20,6 @@ export type Env = {
     PHOTOS: R2Bucket;
     SESSION_SECRET?: string;
     ADMIN_USER_ID?: string;
-    OPENROUTER_API_KEY?: string;
-    OPENROUTER_MODEL?: string;
   };
   Variables: { user: User; sessionHash: string; requestId: string };
 };

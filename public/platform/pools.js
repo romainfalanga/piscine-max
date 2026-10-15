@@ -154,7 +154,7 @@ async function renderTab() {
     const latest = state.records.find(
       (r) => r.published_at && !r.superseded_by,
     );
-    el.innerHTML = `<div class="split"><section>${state.records.length ? state.records.map(recordCard).join("") : empty("La première page de votre carnet", "Ajoutez une analyse, même sans rendez-vous avec un pisciniste.", button("Ajouter une analyse", "new-analysis", `data-pool="${p.id}"`))}<div id="record-more">${poolCursor ? button("Voir les passages précédents", "more-records", "", "secondary") : ""}</div></section><aside class="stack"><section class="card"><div class="eyebrow">LE DERNIER POINT</div><h2>${latest ? "Un suivi qui se construit." : "À votre rythme."}</h2><p class="muted" style="font-size:13px">${latest ? "Dernières mesures partagées le " + fmt(latest.measured_at) + ". Les valeurs décrivent cet instant et les seuls paramètres renseignés." : "Vos analyses et celles de votre pisciniste apparaissent dans un même journal."}</p>${p.client_advice ? `<div class="divider"></div><h3>Entre deux passages</h3><p class="prose">${esc(p.client_advice)}</p>` : ""}</section><section class="card"><h3>Une question sur ce bassin ?</h3><p class="muted" style="font-size:13px">Demandez un avis ou trouvez un professionnel pour une intervention.</p>${button("Demander de l’aide", "new-help", `data-pool="${p.id}"`, "secondary")}</section></aside></div>`;
+    el.innerHTML = `<div class="split"><section>${state.records.length ? state.records.map(recordCard).join("") : empty("La première page de votre carnet", "Ajoutez une analyse, même sans rendez-vous avec un pisciniste.", button("Ajouter une analyse", "new-analysis", `data-pool="${p.id}"`))}<div id="record-more">${poolCursor ? button("Voir les passages précédents", "more-records", "", "secondary") : ""}</div></section><aside class="stack"><section class="card"><div class="eyebrow">LE DERNIER POINT</div><h2>${latest ? "Un suivi qui se construit." : "À votre rythme."}</h2><p class="muted" style="font-size:13px">${latest ? "Dernières mesures partagées le " + fmt(latest.measured_at) + ". Les valeurs décrivent cet instant et les seuls paramètres renseignés." : "Vos analyses et celles de votre pisciniste apparaissent dans un même journal."}</p>${p.client_advice ? `<div class="divider"></div><h3>Entre deux passages</h3><p class="prose">${esc(p.client_advice)}</p>` : ""}</section></aside></div>`;
   } else if (activeTab === "charts") {
     el.innerHTML = `<div class="card"><div class="inline between wrap"><div><h2>L’évolution de votre eau</h2><p class="small-note">Moyennes quotidiennes des analyses partagées. Les corrections remplacent les anciennes valeurs dans les courbes.</p></div><select id="chart-days" class="search-input" style="width:auto" aria-label="Période"><option value="30">30 jours</option><option value="180" selected>6 mois</option><option value="365">1 an</option><option value="1825">5 ans</option></select></div><div id="chart-content"></div></div>`;
     $("#chart-days").addEventListener("change", loadCharts);
@@ -239,17 +239,14 @@ async function loadCharts() {
       );
 }
 async function accessTab(el) {
-  const p = state.pool,
-    approvals = p.manager
-      ? (await api("/pools/" + p.id + "/approvals")).items
-      : [];
-  el.innerHTML = `<div class="section-heading"><div><h2>Les bonnes personnes, les bons accès.</h2><p class="small-note">Un seul pisciniste principal. Les interventions ponctuelles ont une date de fin.</p></div>${p.manager ? button("Inviter une personne", "invite-member") : ""}</div><section class="card">${p.members.map((m) => `<div class="row"><span class="avatar">${esc(m.name.slice(0, 2).toUpperCase())}</span><div class="grow"><h3>${esc(m.name)} ${m.user_id === state.user.id ? "(vous)" : ""}</h3><p>${managerKinds[m.kind]}${m.manager ? " · Responsable des accès" : ""}${m.expires_at ? " · jusqu’au " + fmt(m.expires_at) : ""}</p></div><div class="actions">${p.manager && m.kind === "owner" && !m.manager ? button("Transférer la responsabilité", "transfer-manager", `data-id="${m.id}" data-name="${esc(m.name)}"`, "ghost small") : ""}${!m.manager && (p.manager || m.user_id === state.user.id) ? button(m.user_id === state.user.id ? "Quitter" : "Retirer l’accès", "remove-member", `data-id="${m.id}" data-name="${esc(m.name)}"`, "ghost small") : ""}</div></div>`).join("")}</section>${p.invitations.length ? `<div class="section-heading"><h2>Invitations en attente</h2></div><section class="card">${p.invitations.map((i) => `<div class="row"><div class="grow"><h3>${esc(i.name)}</h3><p>${managerKinds[i.kind]} · expire le ${fmt(i.expires_at)}</p></div>${button("Annuler", "cancel-invite", `data-id="${i.id}"`, "ghost small")}</div>`).join("")}</section>` : ""}${approvals.length ? `<div class="section-heading"><h2>Interventions à autoriser ou à clôturer</h2></div><section class="card">${approvals.map((o) => `<div class="row"><div class="grow"><h3>${esc(o.company || o.name)}</h3><p>${o.kind === "transfer" ? "Changement de pisciniste principal" : "Intervention ponctuelle jusqu’au " + fmt(o.until_date)} · ${o.status === "accepted" ? "Active" : "Votre accord est attendu"}</p></div><div class="actions">${o.status === "awaiting_owner" ? button("Autoriser", "approve-offer", `data-id="${o.id}" data-accept="1" data-transfer="${o.kind === "transfer" ? "1" : "0"}"`, "primary small") + button("Refuser", "approve-offer", `data-id="${o.id}" data-accept="0"`, "ghost small") : button("Clôturer la mission", "finish-offer", `data-id="${o.id}"`, "secondary small")}</div></div>`).join("")}</section>` : ""}<div class="note" style="margin-top:22px">La suppression d’un accès empêche la consultation du dossier et de ses photos. Votre historique reste attaché à la piscine.</div>`;
+  const p = state.pool;
+  el.innerHTML = `<div class="section-heading"><div><h2>Les bonnes personnes, les bons accès.</h2><p class="small-note">Un seul pisciniste principal. Les interventions ponctuelles ont une date de fin.</p></div>${p.manager ? button("Inviter une personne", "invite-member") : ""}</div><section class="card">${p.members.map((m) => `<div class="row"><span class="avatar">${esc(m.name.slice(0, 2).toUpperCase())}</span><div class="grow"><h3>${esc(m.name)} ${m.user_id === state.user.id ? "(vous)" : ""}</h3><p>${managerKinds[m.kind]}${m.manager ? " · Responsable des accès" : ""}${m.expires_at ? " · jusqu’au " + fmt(m.expires_at) : ""}</p></div><div class="actions">${p.manager && m.kind === "owner" && !m.manager ? button("Transférer la responsabilité", "transfer-manager", `data-id="${m.id}" data-name="${esc(m.name)}"`, "ghost small") : ""}${!m.manager && (p.manager || m.user_id === state.user.id) ? button(m.user_id === state.user.id ? "Quitter" : "Retirer l’accès", "remove-member", `data-id="${m.id}" data-name="${esc(m.name)}"`, "ghost small") : ""}</div></div>`).join("")}</section>${p.invitations.length ? `<div class="section-heading"><h2>Invitations en attente</h2></div><section class="card">${p.invitations.map((i) => `<div class="row"><div class="grow"><h3>${esc(i.name)}</h3><p>${managerKinds[i.kind]} · expire le ${fmt(i.expires_at)}</p></div>${button("Annuler", "cancel-invite", `data-id="${i.id}"`, "ghost small")}</div>`).join("")}</section>` : ""}<div class="note" style="margin-top:22px">La suppression d’un accès empêche la consultation du dossier et de ses photos. Votre historique reste attaché à la piscine.</div>`;
 }
 on("invite-member", () => {
   const p = state.pool;
   modal(
     "Partager cette piscine",
-    `${select("Accès à proposer", "kind", { owner: "Copropriétaire", principal: "Pisciniste principal", temporary: "Intervenant ponctuel" }, "owner")}${field("Identifiant exact de la personne", "username", "", "text", 'required maxlength="40" autocomplete="off" autocapitalize="none"')}<div class="inline" style="margin-bottom:16px"><input id="pro-search" class="search-input" placeholder="Trouver un pisciniste par nom" aria-label="Trouver un pisciniste"><button type="button" class="btn secondary" data-action="find-pro">Rechercher</button></div><div id="pro-results"></div>${field("Fin d’accès — uniquement pour un intervenant ponctuel", "until", addDays(today(), 14), "date", `min="${today()}" max="${addDays(today(), 90)}"`)}<p class="small-note">La personne doit avoir créé son compte et accepter l’invitation. Pour changer de pisciniste principal, retirez d’abord l’ancien accès ou utilisez une transmission de suivi.</p>`,
+    `${select("Accès à proposer", "kind", { owner: "Copropriétaire", principal: "Pisciniste principal", temporary: "Intervenant ponctuel" }, "owner")}${field("Identifiant exact de la personne", "username", "", "text", 'required maxlength="40" autocomplete="off" autocapitalize="none"')}<div class="inline" style="margin-bottom:16px"><input id="pro-search" class="search-input" placeholder="Trouver un pisciniste par nom" aria-label="Trouver un pisciniste"><button type="button" class="btn secondary" data-action="find-pro">Rechercher</button></div><div id="pro-results"></div>${field("Fin d’accès — uniquement pour un intervenant ponctuel", "until", addDays(today(), 14), "date", `min="${today()}" max="${addDays(today(), 90)}"`)}<p class="small-note">La personne doit avoir créé son compte et accepter l’invitation. Pour changer de pisciniste principal, retirez d’abord l’ancien accès puis invitez le nouveau professionnel.</p>`,
     async (b) => {
       await api("/pools/" + p.id + "/invitations", "POST", b);
       closeModal();
@@ -297,28 +294,6 @@ on("cancel-invite", async (d) => {
   await api("/pools/" + state.pool.id + "/invitations/" + d.id, "DELETE", {});
   refresh();
 });
-on("approve-offer", (d) =>
-  confirmAction(
-    d.accept === "1"
-      ? "Autoriser cette intervention"
-      : "Refuser cette intervention",
-    d.accept !== "1"
-      ? "Le professionnel ne recevra aucun accès."
-      : d.transfer === "1"
-        ? "Le professionnel remplacera le pisciniste principal. L’ancien accès sera immédiatement retiré."
-        : "Le professionnel pourra consulter le dossier et publier ses passages pendant la période indiquée.",
-    () =>
-      api("/offers/" + d.id + "/approve", "POST", { accept: d.accept === "1" }),
-  ),
-);
-on("finish-offer", (d) =>
-  confirmAction(
-    "Clôturer la mission",
-    "L’accès ponctuel sera retiré. Pour une transmission de suivi, le nouveau pisciniste principal restera en place.",
-    () => api("/offers/" + d.id + "/finish", "POST", {}),
-    "Clôturer",
-  ),
-);
 on("edit-pool", () => {
   const p = state.pool;
   modal(
@@ -438,7 +413,7 @@ export async function openRecordForm(
     ? record.checklist
     : (
         p.routine ||
-        "Nettoyage du bassin\nContrôle de la filtration\nContrôle visuel des équipements"
+        "Niveau d’eau contrôlé et appoint arrêté\nContrôle visuel de l’eau et des algues\nAnalyses effectuées et consignées\nSurface et fond nettoyés\nLigne d’eau nettoyée\nParois et marches brossées\nPaniers de skimmer nettoyés\nPréfiltre de pompe nettoyé si présent\nPression et état du filtre contrôlés\nLavage et rinçage effectués si nécessaires (sable/verre)\nCartouche nettoyée si nécessaire (filtre compatible)\nPompe et électrolyseur contrôlés\nVannes remises en position de service\nFiltration et automatismes rétablis\nProduits et matériel du prochain passage vérifiés\nPhotos et compte rendu partagés"
       )
         .split("\n")
         .filter(Boolean)
@@ -446,9 +421,7 @@ export async function openRecordForm(
   const draftKey =
     "pib-draft:" + state.user.id + ":" + poolId + ":" + actualKind;
   modal(
-    actualKind === "visit"
-      ? "Votre passage, en quelques gestes"
-      : "Ajouter une analyse",
+    actualKind === "visit" ? "Compte rendu d’entretien" : "Ajouter une analyse",
     `${record?.correction_of ? '<div class="note">Cette correction conservera la version originale dans le journal.</div>' : ""}${field("Date et heure de la mesure", "measured_at", value, "datetime-local", "required")}<div class="eyebrow">MESURES RELEVÉES</div><div class="grid two form-two">${Object.entries(
       metrics,
     )
@@ -464,7 +437,7 @@ export async function openRecordForm(
       )
       .join(
         "",
-      )}</div>${field("Méthode de mesure — facultatif", "method", record?.method || "", "text", 'maxlength="100" placeholder="Bandelette, photomètre…"')}${actualKind === "visit" ? `<div class="eyebrow">LES GESTES EFFECTUÉS</div>${checklist.map((c, i) => `<label class="check"><input type="checkbox" name="check_${i}" ${c.done ? "checked" : ""}>${esc(c.label)}</label>`).join("")}${field("Durée du passage (minutes)", "duration", record?.duration || "", "number", 'min="1" max="1440"')}` : ""}${area("Produits effectivement ajoutés dans l’eau", "products", record?.products || "", 'maxlength="2000" placeholder="Produit exact, quantité et unité"')}${area("Observations partagées avec les personnes autorisées", "notes", record?.notes || "", 'maxlength="4000"')}<label class="field"><span>Photos du bassin (maximum 6 · 4 Mo chacune)</span><input type="file" name="photos" multiple accept="image/jpeg,image/png,image/webp"></label>${record?.photos?.length ? `<p class="small-note">${record.photos.length} photo(s) déjà attachée(s).</p>` : ""}<p class="small-note">Les champs non renseignés restent « non mesurés ». Les observations sont partagées ; utilisez les notes internes du dossier pour vos notes privées.</p><label class="check"><input type="checkbox" name="draft"> Conserver un brouillon, sans partager pour le moment</label>`,
+      )}</div>${field("Méthode de mesure — facultatif", "method", record?.method || "", "text", 'maxlength="100" placeholder="Bandelette, photomètre…"')}${actualKind === "visit" ? `<div class="note" style="margin-bottom:16px"><a href="#guide/entretien/${p.id}" target="_blank" rel="noopener">Ouvrir la procédure d’entretien complète ↗</a><br><small>Le guide s’ouvre séparément pour conserver votre saisie. Cochez seulement les gestes effectivement réalisés.</small></div><div class="eyebrow">LES GESTES EFFECTUÉS</div>${checklist.map((c, i) => `<label class="check"><input type="checkbox" name="check_${i}" ${c.done ? "checked" : ""}>${esc(c.label)}</label>`).join("")}${field("Durée du passage (minutes)", "duration", record?.duration || "", "number", 'min="1" max="1440"')}` : ""}${area("Produits effectivement ajoutés dans l’eau", "products", record?.products || "", 'maxlength="2000" placeholder="Produit exact, quantité et unité"')}${area("Observations partagées avec les personnes autorisées", "notes", record?.notes || "", 'maxlength="4000"')}<label class="field"><span>Photos du bassin (maximum 6 · 4 Mo chacune)</span><input type="file" name="photos" multiple accept="image/jpeg,image/png,image/webp"></label>${record?.photos?.length ? `<p class="small-note">${record.photos.length} photo(s) déjà attachée(s).</p>` : ""}<p class="small-note">Les champs non renseignés restent « non mesurés ». Les observations sont partagées ; utilisez les notes internes du dossier pour vos notes privées.</p><label class="check"><input type="checkbox" name="draft"> Conserver un brouillon, sans partager pour le moment</label>`,
     async (b, form) => {
       const values = {};
       for (const k of Object.keys(metrics)) if (b[k] !== "") values[k] = b[k];

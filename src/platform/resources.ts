@@ -18,6 +18,7 @@ import {
 } from "./core";
 import { QUIZ_BANK } from "../quiz-data";
 import { REFERENCE_PROCEDURES } from "../procedure-data";
+import { REFERENCE_GUIDES } from "../maintenance-guides";
 export const resources = new Hono<Env>();
 // Only current assignments and the professional's own published visits contribute.
 // Revoking access removes a pool from these aggregates as well as from its dossier.
@@ -59,6 +60,7 @@ resources.get("/procedures/reference", (c) => {
     items: REFERENCE_PROCEDURES.map((p, id) => ({
       ...p,
       id: "reference-" + id,
+      guide_id: REFERENCE_GUIDES[id] || null,
     })),
   });
 });
@@ -114,6 +116,11 @@ resources.delete("/procedures/:id", async (c) => {
 });
 resources.get("/quiz", (c) => {
   requirePro(c);
+  const count = Number(c.req.query("count") || 40);
+  if (![10, 40].includes(count)) fail("Choisissez 10 ou 40 questions.");
+  const category = c.req.query("category") || "";
+  if (category && !QUIZ_BANK.some((q) => q.cat === category))
+    fail("Catégorie inconnue.");
   const samples = QUIZ_BANK.map((q, id) => ({
     id,
     sort: crypto.getRandomValues(new Uint32Array(1))[0],
@@ -121,23 +128,30 @@ resources.get("/quiz", (c) => {
     question: q.q,
     options: { a: q.a, b: q.b, c: q.c, d: q.d },
   }))
+    .filter((q) => !category || q.category === category)
     .sort((a, b) => a.sort - b.sort)
-    .slice(0, 40)
+    .slice(0, count)
     .map(({ sort, ...q }) => q);
-  return c.json({ items: samples });
+  return c.json({
+    items: samples,
+    categories: [...new Set(QUIZ_BANK.map((q) => q.cat))],
+  });
 });
 resources.post("/quiz", async (c) => {
   requirePro(c);
   const b = await c.req.json();
   if (
     !Array.isArray(b.answers) ||
-    b.answers.length !== 40 ||
-    new Set(b.answers.map((x: any) => x.id)).size !== 40
+    b.answers.length < 1 ||
+    b.answers.length > 40 ||
+    new Set(b.answers.map((x: any) => x.id)).size !== b.answers.length
   )
-    fail("Une session contient 40 questions distinctes.");
+    fail("Une session contient de 1 à 40 questions distinctes.");
   const results = b.answers.map((a: any) => {
+    if (typeof a.id !== "number") fail("Question invalide.");
     const id = number(a.id, 0, QUIZ_BANK.length - 1)!;
     if (!Number.isInteger(id)) fail("Question invalide.");
+    if (!["a", "b", "c", "d"].includes(a.answer)) fail("Réponse invalide.");
     const q = QUIZ_BANK[id];
     return {
       id,
@@ -153,9 +167,9 @@ resources.post("/quiz", async (c) => {
     uid(),
     who(c).id,
     score,
-    40,
+    b.answers.length,
   ).run();
-  return c.json({ score, total: 40, results });
+  return c.json({ score, total: b.answers.length, results });
 });
 resources.get("/quiz/history", async (c) => {
   requirePro(c);
@@ -177,51 +191,4 @@ resources.get("/pools/:id/weather", async (c) => {
   if (!r.ok) fail("Météo indisponible.", 503);
   const b: any = await r.json();
   return c.json({ daily: b.daily, source: "Open-Meteo", city: p.city });
-});
-resources.get("/tools/config", (c) => {
-  requirePro(c);
-  return c.json({
-    assistant_available: Boolean(c.env.OPENROUTER_API_KEY),
-    daily_assistant_limit: 10,
-  });
-});
-resources.post("/assistant", async (c) => {
-  requirePro(c);
-  if (!c.env.OPENROUTER_API_KEY)
-    fail("L’assistant est temporairement indisponible.", 503);
-  await limit(c, `assistant:${who(c).id}`, 10, 86400);
-  await limit(c, "assistant:global", 100, 86400);
-  const b = await c.req.json();
-  const question = str(b.question, 3000, true);
-  const response = await fetch(
-    "https://openrouter.ai/api/v1/chat/completions",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${c.env.OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json",
-        "X-Title": "Peace in Blue",
-      },
-      body: JSON.stringify({
-        model: c.env.OPENROUTER_MODEL || "google/gemini-2.5-flash",
-        messages: [
-          {
-            role: "system",
-            content:
-              "Tu es une aide documentaire en français pour un professionnel de piscine. Réponds brièvement, expose les informations manquantes et les limites. Les symptômes ne constituent pas un diagnostic certain. Ne certifie jamais la sécurité de baignade ni la conformité réglementaire. Pour un dosage, demande le produit exact, sa concentration, sa notice, les analyses et le volume ; ne donne pas une quantité sur une simple photo. Pour les travaux électriques ou structurels renvoie à un professionnel habilité. Aucune action sur la plateforme ne te sera confiée.",
-          },
-          { role: "user", content: question },
-        ],
-        max_tokens: 1200,
-        temperature: 0.3,
-      }),
-      signal: AbortSignal.timeout(45000),
-    },
-  );
-  if (!response.ok)
-    fail("Le service d’assistance est indisponible. Réessaie plus tard.", 503);
-  const data: any = await response.json();
-  return c.json({
-    answer: data.choices?.[0]?.message?.content || "Aucune réponse disponible.",
-  });
 });

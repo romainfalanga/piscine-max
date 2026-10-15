@@ -592,158 +592,6 @@ test("Planning exceptions are isolated, deleting recurrence preserves completed 
     400,
   );
 });
-test("Community permissions, no pool/address/coordinates in feed, offer needs owner approval", async () => {
-  const e = context(),
-    a = await user(e, "alice"),
-    b = await user(e, "bob"),
-    p = await user(e, "paul", "pro"),
-    q = await user(e, "quentin", "pro"),
-    id = await pool(e, a);
-  await invite(e, a, p, id, "principal");
-  await request(
-    e,
-    "/me",
-    "PUT",
-    { name: "Quentin", city_code: "83009", radius_km: 30 },
-    q.token,
-  );
-  const h = await request(
-    e,
-    "/help",
-    "POST",
-    {
-      pool_id: id,
-      as_pro: true,
-      kind: "repair",
-      title: "Filtration à diagnostiquer",
-      body: "Bruit intermittent, demande de spécialiste",
-      city_code: "83009",
-    },
-    p.token,
-  );
-  assert.equal(h.status, 201, JSON.stringify(h.data));
-  assert.equal(
-    (await request(e, "/help/" + h.data.id, "GET", undefined, a.token)).status,
-    403,
-  );
-  assert.equal(
-    (await request(e, "/help", "GET", undefined, b.token)).status,
-    403,
-  );
-  const feed = await request(e, "/help", "GET", undefined, q.token);
-  assert.equal(feed.status, 200, JSON.stringify(feed.data));
-  assert.equal(feed.data.items.length, 1);
-  const raw = JSON.stringify(feed.data);
-  assert.ok(!raw.includes(id));
-  assert.ok(!raw.includes("Adresse strictement privée"));
-  assert.ok(!raw.includes("latitude"));
-  assert.ok(!raw.includes("author_id"));
-  const until = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
-  const o = await request(
-    e,
-    "/help/" + h.data.id + "/offers",
-    "POST",
-    { message: "Je peux diagnostiquer la filtration", until_date: until },
-    q.token,
-  );
-  assert.equal(o.status, 201, JSON.stringify(o.data));
-  assert.equal(
-    (await request(e, "/pools/" + id, "GET", undefined, q.token)).status,
-    404,
-  );
-  await request(e, "/offers/" + o.data.id + "/select", "POST", {}, p.token);
-  assert.equal(
-    (await request(e, "/pools/" + id, "GET", undefined, q.token)).status,
-    404,
-  );
-  const approvals = await request(
-    e,
-    "/pools/" + id + "/approvals",
-    "GET",
-    undefined,
-    a.token,
-  );
-  assert.equal(approvals.data.items.length, 1);
-  assert.ok(!JSON.stringify(approvals.data).includes("Bruit intermittent"));
-  assert.equal(
-    (
-      await request(
-        e,
-        "/offers/" + o.data.id + "/approve",
-        "POST",
-        { accept: true },
-        a.token,
-      )
-    ).status,
-    200,
-  );
-  assert.equal(
-    (await request(e, "/pools/" + id, "GET", undefined, q.token)).status,
-    200,
-  );
-  assert.equal(
-    (await request(e, "/offers/" + o.data.id + "/finish", "POST", {}, q.token))
-      .status,
-    200,
-  );
-  assert.equal(
-    (await request(e, "/pools/" + id, "GET", undefined, q.token)).status,
-    404,
-  );
-});
-test("Client sees own help and replies but never other clients requests", async () => {
-  const e = context(),
-    a = await user(e, "alice"),
-    b = await user(e, "bob"),
-    p = await user(e, "paul", "pro"),
-    id = await pool(e, a);
-  const h = await request(
-    e,
-    "/help",
-    "POST",
-    {
-      pool_id: id,
-      kind: "advice",
-      title: "Question eau",
-      body: "Quels paramètres faut-il mesurer ?",
-      scope: "national",
-    },
-    a.token,
-  );
-  assert.equal(h.status, 201);
-  assert.equal(
-    (await request(e, "/help/" + h.data.id, "GET", undefined, b.token)).status,
-    403,
-  );
-  assert.equal(
-    (
-      await request(
-        e,
-        "/help/" + h.data.id + "/replies",
-        "POST",
-        {
-          body: "Commencer par préciser le traitement et les mesures disponibles.",
-        },
-        p.token,
-      )
-    ).status,
-    201,
-  );
-  const own = await request(e, "/help/" + h.data.id, "GET", undefined, a.token);
-  assert.equal(own.data.replies.length, 1);
-  assert.equal(
-    (
-      await request(
-        e,
-        "/help/" + h.data.id + "/replies",
-        "POST",
-        { body: "Contactez test@example.com" },
-        p.token,
-      )
-    ).status,
-    400,
-  );
-});
 test("Expired temporary membership cannot access pool or records", async () => {
   const e = context(),
     a = await user(e, "alice"),
@@ -808,37 +656,6 @@ test("A fresh invitation can renew an expired temporary membership", async () =>
   assert.equal(
     (await request(e, "/pools/" + id, "GET", undefined, p.token)).status,
     200,
-  );
-});
-test("Local community visibility applies to direct URLs and cannot be bypassed with scope=all", async () => {
-  const e = context(),
-    a = await user(e, "alice"),
-    p = await user(e, "paul", "pro"),
-    id = await pool(e, a);
-  const h = await request(
-    e,
-    "/help",
-    "POST",
-    {
-      pool_id: id,
-      kind: "repair",
-      title: "Filtration",
-      body: "Recherche de dépannage à proximité",
-    },
-    a.token,
-  );
-  assert.equal(h.status, 201);
-  e.DB.db
-    .prepare("UPDATE users SET latitude=48.85,longitude=2.35,city=? WHERE id=?")
-    .run("Paris", p.user.id);
-  assert.equal(
-    (await request(e, "/help?scope=all", "GET", undefined, p.token)).data.items
-      .length,
-    0,
-  );
-  assert.equal(
-    (await request(e, "/help/" + h.data.id, "GET", undefined, p.token)).status,
-    404,
   );
 });
 test("Manager transfer preserves co-owner history and stops former manager changing access", async () => {
@@ -988,4 +805,237 @@ test("Classic clients, map and activity stats only expose current assignments an
   assert.equal(after.clients, 0);
   assert.equal(after.visits, 0);
   assert.equal(after.busiest.length, 0);
+});
+
+test("Removed community and AI routes are unavailable to clients and professionals", async () => {
+  const e = context(),
+    client = await user(e, "alice"),
+    pro = await user(e, "paul", "pro");
+  for (const u of [client, pro])
+    for (const path of [
+      "/help",
+      "/help/anything",
+      "/offers/anything",
+      "/admin/flags",
+      "/assistant",
+      "/tools/config",
+    ]) {
+      assert.equal(
+        (await request(e, path, "GET", undefined, u.token)).status,
+        404,
+        path,
+      );
+      assert.equal(
+        (await request(e, path, "POST", {}, u.token)).status,
+        404,
+        path,
+      );
+    }
+  const health = await request(e, "/health");
+  assert.equal(health.data.application, "Peace in Blue App");
+});
+test("Guided checklists are personal, scoped to assigned pools, validate variants and reject stale saves", async () => {
+  const e = context(),
+    owner = await user(e, "alice"),
+    pro = await user(e, "paul", "pro"),
+    other = await user(e, "quentin", "pro"),
+    id = await pool(e, owner);
+  assert.equal(
+    (await request(e, "/guides", "GET", undefined, owner.token)).status,
+    403,
+  );
+  const guides = await request(e, "/guides", "GET", undefined, pro.token);
+  assert.equal(guides.data.items.length, 8);
+  const path = "/guides/entretien/progress?pool_id=" + id;
+  assert.equal(
+    (await request(e, path, "GET", undefined, pro.token)).status,
+    404,
+  );
+  await invite(e, owner, pro, id, "principal");
+  const body = {
+    revision: 0,
+    variant: "sand",
+    checks: { arrival: "done", "sand-wash": "na" },
+  };
+  let saved = await request(e, path, "PUT", body, pro.token);
+  assert.equal(saved.status, 200, JSON.stringify(saved.data));
+  assert.equal(saved.data.revision, 1);
+  assert.equal((await request(e, path, "PUT", body, pro.token)).status, 409);
+  assert.equal(
+    (
+      await request(
+        e,
+        path,
+        "PUT",
+        { ...body, revision: 1, checks: { "cartridge-safe": "done" } },
+        pro.token,
+      )
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        path,
+        "PUT",
+        { ...body, revision: 1, variant: "unknown" },
+        pro.token,
+      )
+    ).status,
+    400,
+  );
+  saved = await request(
+    e,
+    path,
+    "PUT",
+    { ...body, revision: 1, checks: { arrival: "done", analysis: "done" } },
+    pro.token,
+  );
+  assert.equal(saved.status, 200);
+  assert.equal(saved.data.revision, 2);
+  assert.equal(
+    (await request(e, path, "GET", undefined, pro.token)).data.checks.analysis,
+    "done",
+  );
+  assert.equal(
+    (await request(e, path, "GET", undefined, other.token)).status,
+    404,
+  );
+  await invite(
+    e,
+    owner,
+    other,
+    id,
+    "temporary",
+    new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
+  );
+  assert.equal(
+    (await request(e, path, "GET", undefined, other.token)).data.revision,
+    0,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        "/guides/entretien/progress",
+        "GET",
+        undefined,
+        pro.token,
+      )
+    ).data.revision,
+    0,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        "/pools/" + id + "/records",
+        "GET",
+        undefined,
+        owner.token,
+      )
+    ).data.items.length,
+    0,
+    "Checklist never publishes a report",
+  );
+  e.DB.db
+    .prepare(
+      "UPDATE pool_members SET revoked_at=? WHERE pool_id=? AND user_id=?",
+    )
+    .run(new Date().toISOString(), id, pro.user.id);
+  assert.equal(
+    (await request(e, path, "GET", undefined, pro.token)).status,
+    404,
+  );
+  assert.equal(
+    (await request(e, path, "PUT", { ...body, revision: 2 }, pro.token)).status,
+    404,
+  );
+});
+test("Code du pisciniste supports short themed practice and complete sessions with private history", async () => {
+  const e = context(),
+    pro = await user(e, "paul", "pro"),
+    other = await user(e, "quentin", "pro");
+  const short = await request(
+    e,
+    "/quiz?count=10&category=" + encodeURIComponent("Analyse & routine"),
+    "GET",
+    undefined,
+    pro.token,
+  );
+  assert.ok(short.data.items.length > 0 && short.data.items.length <= 10);
+  assert.ok(
+    short.data.items.every(
+      (q: any) => q.category === "Analyse & routine" && !("correct" in q),
+    ),
+  );
+  const full = await request(e, "/quiz?count=40", "GET", undefined, pro.token);
+  assert.equal(full.data.items.length, 40);
+  const answers = short.data.items.map((q: any) => ({ id: q.id, answer: "a" }));
+  const r = await request(e, "/quiz", "POST", { answers }, pro.token);
+  assert.equal(r.status, 200);
+  assert.equal(r.data.total, answers.length);
+  assert.equal(
+    (await request(e, "/quiz/history", "GET", undefined, pro.token)).data.items
+      .length,
+    1,
+  );
+  assert.equal(
+    (await request(e, "/quiz/history", "GET", undefined, other.token)).data
+      .items.length,
+    0,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        "/quiz",
+        "POST",
+        { answers: [answers[0], answers[0]] },
+        pro.token,
+      )
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        "/quiz",
+        "POST",
+        { answers: [{ id: String(answers[0].id), answer: "a" }] },
+        pro.token,
+      )
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        "/quiz",
+        "POST",
+        { answers: [{ id: answers[0].id, answer: "bad" }] },
+        pro.token,
+      )
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        "/quiz?count=10&category=invalid",
+        "GET",
+        undefined,
+        pro.token,
+      )
+    ).status,
+    400,
+  );
+  assert.equal(
+    (await request(e, "/quiz?count=100", "GET", undefined, pro.token)).status,
+    400,
+  );
 });

@@ -1,66 +1,39 @@
-# Peace in Blue — plateforme partagée
+# Peace in Blue App — plan courant au 15 octobre 2026
 
-Décisions validées avec Romain le 8 octobre 2026. Tous les parcours sont gratuits.
+Ce document remplace les orientations communautaires précédentes, conformément à la dernière demande de Romain. L’application évolue dans le dépôt et sur la branche existants ; le nom exact est **Peace in Blue App**.
 
-## Produit
-- Tous types de bassins (particulier, location, copropriété, hôtel, camping, autre). Les repères techniques ne sont pas une certification sanitaire/réglementaire.
-- Le client crée son compte puis sa piscine. Plusieurs clients peuvent être copropriétaires. Le créateur est responsable des invitations et changements de prestataire ; transfert de cette responsabilité possible à un copropriétaire.
-- Une identité peut activer un profil professionnel et conserver son espace personnel. Aucun compte salarié/entreprise complexe.
-- Un seul professionnel principal par piscine. Intervenants ponctuels avec mission et échéance. Fin de collaboration = révocation de l'accès au dossier et au suivi, y compris aux photos et aux futurs événements.
-- Inscription professionnelle libre, sans badge vérifié. La déclaration professionnelle n'atteste pas d'une qualification. Aucun dossier de piscine accessible sur ce seul statut.
-- Pas d'email : identifiant + mot de passe, code de récupération secret renouvelé à l'utilisation. Notifications exclusivement dans l'application ; pas de promesse de livraison hors connexion sans push configuré.
-- Remise à zéro des anciennes données autorisée ; aucune reprise obligatoire. Créer et valider une nouvelle base avant la bascule. Pas de destruction pendant les essais.
+## Objectif
 
-## Parcours prioritaires
-1. Inscription, conservation du code de récupération, création de piscine (informations inconnues acceptées), invitation d'un copropriétaire.
-2. Invitation d'un pro existant, acceptation du client/pro, accès vérifié côté serveur à chaque opération. Aucun annuaire de piscines privées.
-3. Analyse autonome sans rendez-vous ; suivi commun avec auteur, date, unités, méthode et version de correction.
-4. Agenda, interventions récurrentes et saisonnières, report isolé, préparation de tournée, compte rendu brouillon puis « Terminer et partager ».
-5. Besoin produit/matériel : responsable client ou professionnel ; quantités/unités ; statut à acheter/à préparer, prêt, livré. Notifications de demande, préparation et livraison distinctes. Ne pas confondre une livraison avec un ajout de produit dans l'eau.
-6. Entraide : avis national possible ; renfort/remplacement/dépannage/transmission locale. Client voit uniquement ses demandes et les réponses destinées à lui ; pro voit les demandes éligibles, jamais les dossiers liés sans autorisation.
-7. Proposition de mission -> accord du demandeur -> autorisation du responsable client -> accès borné -> intervention -> clôture/révocation. Les discussions entre pros restent internes même si le client autorise la mission.
+Un outil quotidien pour l’organisation du pisciniste et un carnet partagé permettant au client de suivre ses piscines. Conserver l’interface cyan/slate et la navigation de l’application originale en la simplifiant.
 
-## Données et permissions
-Entités séparées : utilisateurs, sessions révocables, profils pro, piscines, membres, invitations, accès professionnels, récurrences, rendez-vous, rapports, relevés, photos privées, besoins, notifications, demandes d'entraide, réponses, propositions, signalements, blocages, journal d'audit.
+## Décisions maintenues
 
-- Le partage s'applique à une piscine, une personne, des droits et une durée.
-- Le client conserve l'historique ; modifier/supprimer une récurrence n'efface pas les passages.
-- Rapports pros : brouillon visible à l'auteur ; publication visible aux copropriétaires et pros autorisés. Notes internes séparées, jamais exportées dans le dossier client.
-- Une analyse publiée ne s'efface pas silencieusement : correction liée à la version originale.
-- Invitation liée à un identifiant, acceptation obligatoire et expiration. Pas de création de compte pour autrui.
-- Retrait d'un accès invalide l'accès API aux données et aux photos ; aucun cache public pour les ressources privées.
-- Publication entraide = données dédiées, zone approximative stable (centre communal), aucun pool_id, adresse, code portail ou coordonnées exactes dans les réponses réseau du fil.
-- Photos de piscine privées ; médias d'entraide seulement après traitement et contrôle de confidentialité. Ne jamais réutiliser directement une photo privée dans un fil.
-- Le dernier responsable ne peut pas quitter une piscine sans transférer sa responsabilité ou archiver.
+- Inscription autonome des clients et des professionnels, gratuite à ce stade, sans emails de suivi ni facturation.
+- Le client crée son compte et sa piscine. Plusieurs copropriétaires peuvent partager le même dossier ; un responsable gère les autorisations.
+- Un seul pisciniste principal par bassin ; invitations acceptées et accès temporaires bornés. Le professionnel n’accède plus au dossier après révocation.
+- Analyses personnelles ou professionnelles, historique, courbes, photos privées, notes internes séparées, brouillons et publication explicite « Terminer et partager ».
+- Agenda, récurrences, exceptions et besoins d’approvisionnement distinguant achat client et apport professionnel.
 
-## Expérience
-Client : Mes piscines, Suivi, Demandes. Pro : Aujourd'hui, Planning, Piscines, Entraide. Cloche commune. Outils/formations dans un espace secondaire. Interface mobile, contrastée, utilisable au clavier, libellés explicites, données inconnues distinctes de zéro. Reprise de saisie après erreur réseau, sans annoncer une sauvegarde serveur avant confirmation.
+## Plan d’implémentation du présent lot
 
-## Architecture et mise en œuvre
-1. Base neuve, clés étrangères, contraintes d'unicité (un pro principal actif), indexes par droits, piscine/date et statut. API Hono modulaire et même origine. Fermeture des anciens endpoints.
-2. Sessions opaques hachées côté base, cookies HttpOnly/Secure/SameSite ; CSRF par vérification d'origine ; secrets requis sans valeur de secours ; validation serveur ; limites de taille et de fréquence.
-3. Journal lié directement à la piscine. Pagination et courbes bornées, chargement du planning par période. Écritures répétées idempotentes et changements sensibles atomiques.
-4. Notifications transactionnelles, champs de visibilité explicites, approvisionnement et suivi des tâches.
-5. Entraide structurée, acceptations explicites, droits temporaires, signalements/blocages. Admin via configuration sûre et identité vérifiée hors parcours public, jamais « premier inscrit = admin ».
-6. Tests d'isolation clients/pros, invitations concurrentes, révocation, confidentialité des brouillons et notes, médias, récupération, doublons et changement de pro. Tests UI sur mobile et bureau.
-7. Préproduction distincte (base/stockage/secrets), déploiement GitHub -> Cloudflare, vérifications puis bascule. Sauvegarde/restauration et retour arrière documentés.
+1. Renommer l’interface et ses métadonnées. Retirer l’Accueil professionnel et ouvrir directement l’Agenda. Quatre onglets : Agenda, Carte, Clients, Pisciniste. Déplacer les invitations, la préparation et l’accès aux statistiques vers l’Agenda.
+2. Supprimer les écrans et endpoints communautaires et l’assistant IA. Rediriger les anciens liens d’interface, masquer les notifications anciennes associées. Conserver les tables inutilisées pour un retour arrière sans destruction.
+3. Construire le hub Pisciniste avec trois entrées : Code du pisciniste, Outils de calcul, Bibliothèque métier.
+4. Exposer les types et catégories des fiches existantes, conserver les fiches personnelles et remplacer les fiches courantes couvertes par les nouveaux guides par leur version guidée.
+5. Ajouter 16 calculateurs : volume, dose notice, correction pH/TAC par palier fabricant, sel, masse de chlore disponible, chlore combiné, dilution, appoint, remplissage, renouvellement hydraulique, débit, vitesse de filtration, écart de pression, coût d’énergie, chauffage théorique, charge de tournée. Aucun dosage universel de produit ni durée automatique fondée sur la seule température.
+6. Proposer des entraînements courts ou de 40 questions, par thème, avec correction, historique privé et reprise dans le même onglet.
+7. Ajouter huit guides : entretien courant, sable/verre, préfiltre, cartouche, repérage des vannes, analyses, nettoyage, électrolyseur. L’entretien comporte préparation, inspection, niveau/appoint, analyses, nettoyage, filtration adaptée, équipements, traitement, restauration des automatismes, approvisionnement, photos et compte rendu.
+8. Enregistrer la progression personnelle avec contrôle d’accès, validation des étapes et protection contre les sauvegardes concurrentes. La checklist de travail ne valide pas automatiquement une intervention.
+9. Vérifier calculs, droits et parcours navigateur, puis déployer la même branche sur `peaceinblue-recette.pages.dev` via le workflow existant.
 
-## Capacité et ouverture
-Objectif initial de dimensionnement : 50 000 comptes, 30 000 piscines, historique paginé, photos hors base. Il s'agit d'un scénario de test, pas d'une capacité démontrée.
+## Principes des procédures
 
-- Tests reproductibles sur données synthétiques, lectures mixtes et écritures concurrentes ; mesure p50/p95/p99, erreurs, débit, lignes D1 lues et écrites et coût.
-- Objectifs de recette : aucune fuite entre utilisateurs ; aucune perte/duplication d'intervention ; p95 API courante < 500 ms sous charge cible, erreurs serveur < 0,5 % hors saturation volontaire. Charge cible à mesurer sur hébergement de préproduction, pas extrapolée des tests locaux.
-- D1 : stockage et débit par base bornés ; indexes et EXPLAIN QUERY PLAN avant ouverture ; surveiller saturation et taille. Prévoir évolution vers PostgreSQL ou partitionnement si les mesures le justifient.
-- Quotas de fichiers, protection antispam, nettoyage des sessions/limiteurs expirés, suivi erreurs sans secrets. Budgets d'hébergement distincts de la gratuité pour les utilisateurs.
-- Ouverture progressive : Romain + comptes de recette, cercle de clients/pros pilotes, puis public. Ne pas annoncer « prêt pour des dizaines de milliers » avant essais représentatifs et restauration validée.
+Les opérations de vanne, d’ouverture et d’amorçage sont liées à la notice et au montage réel. Aucun schéma universel de positions de vannes. Arrêt de pompe avant chaque changement de vanne multivoies ; prévention du redémarrage et dépressurisation avant ouverture ; retour en service contrôlé. Le filtre à cartouche utilise une procédure distincte. Le lavage sable/verre dépend du besoin constaté et du modèle, pas systématiquement du passage.
 
-## Hors périmètre du lancement
-Abonnements/paiements, salariés, comptabilité, gestion d'entrepôt, objets connectés, notation publique et fil social généraliste. Prévoir une couche de droits fonctionnels pour la future offre gratuite/payante sans déployer de facturation. L'entraide restera accessible à l'offre gratuite.
+Références fabricant : [Hayward filtre à sable](https://cdn.hayward.fr/production/media/3/4/6/6/6b626c.pdf), [Pentair Maestro](https://www.pentairpooleurope.com/sites/default/files/2023-07/im-maestro-full-fr.pdf), [Pentair sécurité cartouche](https://www.pentair.com/en-us/pool-spa/education-support/homeowner-support/pool-filter-product-safety-help-center/clean-clear-rp-product-support.html), [BAYROL entretien du filtre](https://www.bayrol.fr/conseils/filtration-piscine-entretien-du-filtre), [Hanna analyse piscine](https://www.hannainstruments.fr/applications/photometre-piscine-alcalinite-acide-cyanurique-chlore-et-ph-en-mallette-avec-reactifs-hi971044r/), [Zodiac assistance](https://www.zodiac-poolcare.fr/assistance/assistance-en-ligne). Les guides contiennent les liens utiles à chaque procédure. Les autres fiches historiques ne sont pas présentées comme toutes nouvellement auditées.
 
-## Parité avec Piscine Max avant remplacement définitif
+## Suite et limites
 
-Cette branche est une refonte en cours de recette. La bibliothèque métier et la banque de questions existantes sont conservées, avec sessions de 40 questions. La création de comptes pour autrui, la lecture seule imposée aux clients et les emails sont remplacés conformément aux décisions de Romain.
+L’optimisation automatique de tournée et un centre d’alertes avancé restent des évolutions possibles. L’assistant IA et l’entraide sont désormais hors périmètre par décision explicite, et non des fonctions en attente de restauration.
 
-Les fonctions suivantes de l'ancienne interface ne sont pas encore reportées à l'identique et doivent faire l'objet d'un lot de parité avant remplacement définitif : assistant multimodal en conversation/streaming et contexte des fiches, carte et optimisation de tournée, statistiques d'activité détaillées, centre d'alertes consolidé, outils de filtration et dosage. Pour les dosages, ne pas reprendre une quantité générique de correcteur pH sans produit/concentration/notice connus ; conserver la valeur métier avec un calcul fondé sur la notice réelle.
-
-Ces écarts ne bloquent pas la recette des nouveaux parcours comptes/piscines/entraide, mais interdisent de présenter la branche comme un remplacement intégral finalisé ou de fusionner automatiquement sur la production existante.
+La préproduction ne démontre pas la capacité à accueillir des dizaines de milliers de connexions simultanées. Avant ouverture large : essais de charge sur Cloudflare réel, restauration testée, budget/observabilité, audit de sécurité, politique de conservation et suppression de compte, adaptation des listes encore plafonnées. Voir `DEPLOIEMENT.md`.

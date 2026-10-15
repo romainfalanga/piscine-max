@@ -1,4 +1,4 @@
-/* Piscine Max: preserve the original horizontal navigation, system type and cyan/slate palette. */
+/* Peace in Blue App: preserve the original horizontal navigation, system type and cyan/slate palette. */
 :root {
   font-family:
     -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -681,4 +681,352 @@ h3 {
   font-size: 9px;
   border: 2px solid white;
   background: #0891b2;
+}
+
+/* Professional workbench: keep the original cyan/slate interface. */
+[hidden] {
+  display: none !important;
+}
+.tool-hub {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+.tool-hub a,
+.calculator-tile {
+  text-decoration: none;
+}
+.tool-feature {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 24px;
+  padding: 32px;
+  background: linear-gradient(115deg, #ecfeff, white 85%);
+  border-color: #a5e5ee;
+}
+.tool-feature h2 {
+  font-size: 26px;
+  margin: 8px 0;
+}
+.tool-feature p {
+  max-width: 680px;
+  line-height: 1.7;
+  color: #475569;
+}
+.tool-feature .pool-symbol,
+.routine-feature .pool-symbol {
+  flex-shrink: 0;
+}
+.tool-entry h2 {
+  margin: 18px 0 10px;
+}
+.tool-entry p {
+  line-height: 1.7;
+  color: #64748b;
+}
+.tool-entry:hover,
+.calculator-tile:hover {
+  border-color: #0891b2;
+  box-shadow: 0 3px 12px #0e749010;
+}
+.tool-hub a:focus-visible,
+.calculator-tile:focus-visible {
+  outline: 3px solid #0891b2;
+  outline-offset: 3px;
+}
+.calculator-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.calculation-result {
+  background: #ecfeff;
+  border-color: #a5e5ee;
+}
+.calculation-value {
+  display: block;
+  font-size: 36px;
+  line-height: 1.4;
+  color: #0e7490;
+  margin-top: 12px;
+  overflow-wrap: anywhere;
+}
+.calculation-value small {
+  font-size: 20px;
+}
+.calculation-notice {
+  margin-top: 16px;
+}
+.calculation-notice p {
+  font-size: 13px;
+  line-height: 1.75;
+  color: #475569;
+}
+.calculation-extra {
+  display: flex;
+  justify-content: space-between;
+  gap: 15px;
+  padding: 12px 0;
+  border-top: 1px solid #a5e5ee;
+  font-size: 13px;
+}
+.calculator-tile h3 {
+  font-size: 16px;
+}
+.calculator-tile p {
+  min-height: 42px;
+}
+.routine-feature {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  text-decoration: none;
+  background: #ecfeff;
+  border-color: #a5e5ee;
+  margin-bottom: 24px;
+}
+.routine-feature p {
+  margin: 6px 0 0;
+  color: #475569;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.routine-feature .btn {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+.library-filters {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr 1fr;
+  gap: 16px;
+}
+.library-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+.library-tile h3 {
+  font-size: 16px;
+  margin: 0;
+}
+.library-tile p {
+  flex: 1;
+  margin: 0 0 8px;
+}
+.library-tile .eyebrow {
+  margin: 0;
+}
+.guide-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.guide-toolbar .field {
+  margin: 0;
+}
+.guide-progress {
+  flex: 1;
+  min-width: 200px;
+  font-size: 13px;
+}
+.guide-progress span {
+  display: block;
+  color: #64748b;
+}
+progress {
+  width: 100%;
+  height: 8px;
+  border: 0;
+  border-radius: 6px;
+  accent-color: #0891b2;
+  background: #e2e8f0;
+  margin: 12px 0;
+}
+progress::-webkit-progress-bar {
+  background: #e2e8f0;
+  border-radius: 6px;
+}
+progress::-webkit-progress-value {
+  background: #0891b2;
+  border-radius: 6px;
+}
+.guide-section {
+  margin-top: 18px;
+}
+.guide-section > h2 {
+  margin-bottom: 10px;
+  color: #0e7490;
+}
+.guide-step {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  padding: 20px 0;
+  border-top: 1px solid #e2e8f0;
+}
+.guide-step h3 {
+  font-size: 15px;
+  margin: 0 0 7px;
+}
+.guide-step p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.75;
+  color: #475569;
+  max-width: 850px;
+}
+.guide-step .step-status {
+  width: 160px;
+  flex-shrink: 0;
+  margin: 0;
+}
+.guide-step.checked h3 {
+  color: #0e7490;
+}
+.guide-step.checked select {
+  background: #ecfeff;
+  border-color: #a5e5ee;
+}
+.guide-sources {
+  margin-top: 20px;
+}
+.guide-sources a {
+  display: block;
+  margin: 12px 0;
+  font-size: 13px;
+  color: #0e7490;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+.quiz-question {
+  max-width: 850px;
+  margin: auto;
+  padding: 32px;
+}
+.quiz-question h2 {
+  font-size: 22px;
+  line-height: 1.5;
+  margin: 14px 0 24px;
+}
+.quiz-options {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+.quiz-options .check {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 18px;
+  margin: 0;
+  cursor: pointer;
+}
+.quiz-options .check:has(input:checked) {
+  background: #ecfeff;
+  border-color: #0891b2;
+}
+.quiz-correction {
+  margin-bottom: 16px;
+}
+#quiz-start + .btn {
+  margin-top: 12px;
+}
+@media (max-width: 760px) {
+  .brand strong {
+    font-size: 16px;
+  }
+  .brand {
+    gap: 8px;
+  }
+  .brand-mark {
+    width: 30px;
+    height: 30px;
+  }
+  .tool-hub,
+  .calculator-layout,
+  .library-filters {
+    grid-template-columns: 1fr;
+  }
+  .tool-feature {
+    padding: 22px;
+    gap: 14px;
+  }
+  .tool-feature h2 {
+    font-size: 22px;
+  }
+  .tool-feature .pool-symbol {
+    display: none;
+  }
+  .routine-feature {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .routine-feature .pool-symbol {
+    display: none;
+  }
+  .routine-feature .btn {
+    margin: 0;
+  }
+  .guide-step {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .guide-step .step-status {
+    width: 100%;
+  }
+  .guide-toolbar {
+    align-items: stretch;
+  }
+  .guide-toolbar .field,
+  .guide-toolbar .actions {
+    width: 100%;
+  }
+  .quiz-question {
+    padding: 20px;
+  }
+  .quiz-question h2 {
+    font-size: 19px;
+  }
+  .calculation-value {
+    font-size: 30px;
+  }
+}
+.tool-hub .pool-symbol {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+}
+.back-link {
+  display: inline-flex;
+  margin-bottom: 14px;
+  font-size: 13px;
+  color: #64748b;
+  text-decoration: none;
+}
+.back-link:hover {
+  color: #0891b2;
+}
+.guide-bottom {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+.guide-toolbar .actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }

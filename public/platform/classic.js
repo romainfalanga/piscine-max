@@ -196,7 +196,7 @@ async function stats(main) {
     heading(
       "Statistiques",
       "Vos comptes rendus publiés pour les piscines que vous suivez actuellement.",
-      '<a href="#home" class="btn secondary">Retour à l’accueil</a>',
+      '<a href="#planning" class="btn secondary">Retour à l’agenda</a>',
     ) +
     `<div class="grid three"><div class="stat"><span>PASSAGES EFFECTUÉS</span><strong>${r.visits}</strong><small>${hours(r.minutes)} d’intervention enregistrées</small></div><div class="stat"><span>PISCINES SUIVIES</span><strong>${r.pools}</strong><small>Accès actifs uniquement</small></div><div class="stat"><span>CLIENTS</span><strong>${r.clients}</strong><small>Chaque copropriétaire est compté une fois</small></div></div><div class="grid two" style="margin-top:20px"><section class="card"><h2>Activité par mois</h2>${r.months.length ? `<table class="stats-table"><thead><tr><th>Mois</th><th>Passages</th><th>Durée</th></tr></thead><tbody>${r.months.map((m) => `<tr><td>${fmt(m.month + "-01", { month: "long", year: "numeric", day: undefined })}</td><td>${m.visits}</td><td>${hours(m.minutes)}</td></tr>`).join("")}</tbody></table>` : empty("Pas encore de passage publié", "Les statistiques se remplissent en terminant vos entretiens.")}</section><section class="card"><h2>Piscines les plus visitées</h2>${r.busiest.map((p) => `<a href="#pool/${esc(p.id)}" class="client-pool"><strong>${esc(p.name)}</strong><span>${p.visits} passage${p.visits > 1 ? "s" : ""} · ${hours(p.minutes)}</span></a>`).join("") || '<p class="small-note">Les visites terminées apparaîtront ici.</p>'}</section></div>`;
 }

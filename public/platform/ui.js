@@ -14,7 +14,6 @@ export const state = {
   route: "",
   pool: null,
   records: [],
-  requests: [],
   appointments: [],
   notices: [],
   needs: [],
@@ -221,13 +220,6 @@ export const metrics = {
     max: 2000,
     color: "#587580",
   },
-};
-export const helpKinds = {
-  advice: "Avis technique",
-  repair: "Dépannage",
-  reinforcement: "Renfort ponctuel",
-  replacement: "Remplacement",
-  transfer: "Transmission de suivi",
 };
 export const refresh = () =>
   window.dispatchEvent(new HashChangeEvent("hashchange"));

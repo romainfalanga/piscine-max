@@ -134,9 +134,7 @@ try {
   await page
     .getByRole("button", { name: "Mon espace pisciniste", exact: true })
     .click();
-  await page
-    .getByRole("heading", { name: "Bonjour Camille.", exact: true })
-    .waitFor();
+  await page.getByRole("heading", { name: "Agenda", exact: true }).waitFor();
   // A second, independently registered client grants access to the professional.
   const ownerContext = await browser.newContext();
   const apiPost = async (ctx, path, body) => {
@@ -182,7 +180,6 @@ try {
     exact: true,
   });
   assert.deepEqual(await nav.locator("a").allTextContents(), [
-    "Accueil",
     "Agenda",
     "Carte",
     "Clients",
@@ -235,81 +232,171 @@ try {
     ).includes("Adresse%20de%20d%C3%A9monstration"),
   );
   await nav.getByRole("link", { name: "Pisciniste", exact: true }).click();
+
+  await page
+    .getByRole("link", { name: "Code du pisciniste", exact: false })
+    .waitFor();
+  await page.screenshot({
+    path: ".test-artifacts/pro-workbench-desktop.png",
+    fullPage: true,
+  });
+  assert.equal(
+    await page.getByText("Assistant documentaire", { exact: true }).count(),
+    0,
+  );
+  assert.equal(
+    await page.getByRole("link", { name: "Entraide", exact: true }).count(),
+    0,
+  );
+  await page
+    .getByRole("link", { name: "Outils de calcul", exact: false })
+    .click();
+  await page.locator(".calculator-tile").first().waitFor();
+  assert.equal(await page.locator(".calculator-tile").count(), 16);
+  await page
+    .getByRole("link", { name: "Volume du bassin", exact: false })
+    .click();
+  await page.getByLabel("Longueur ou diamètre (m)", { exact: true }).fill("8");
+  await page.getByLabel("Largeur (m)", { exact: true }).fill("4");
+  await page
+    .getByLabel("Profondeur moyenne réelle (m)", { exact: true })
+    .fill("1.5");
+  await page.getByRole("button", { name: "Calculer", exact: true }).click();
+  assert.equal(
+    (await page.locator(".calculation-value").textContent()).trim(),
+    "48 m³",
+  );
+  await page.getByLabel("Forme", { exact: true }).selectOption("round");
+  assert.equal(
+    await page.getByLabel("Largeur (m)", { exact: true }).isVisible(),
+    false,
+  );
+  await page.goto("http://127.0.0.1:8788/#calculators/salt");
+  await page.getByLabel("Volume du bassin (m³)", { exact: true }).fill("50");
+  await page.getByLabel("Salinité mesurée (g/L)", { exact: true }).fill("3");
+  await page.getByLabel("Consigne fabricant (g/L)", { exact: true }).fill("4");
+  await page.getByRole("button", { name: "Calculer", exact: true }).click();
+  assert.equal(
+    (await page.locator(".calculation-value").textContent()).trim(),
+    "50 kg",
+  );
+  await page.screenshot({
+    path: ".test-artifacts/calculator-desktop.png",
+    fullPage: true,
+  });
+  await page.goto("http://127.0.0.1:8788/#library");
   await page.getByLabel("Catégorie de fiche").waitFor();
   assert.ok((await page.locator("#reference-list article").count()) > 90);
-  await nav.getByRole("link", { name: "Accueil", exact: true }).click();
+  await page
+    .getByLabel("Type de fiche", { exact: true })
+    .selectOption("information");
+  assert.ok((await page.locator("#reference-list article").count()) > 0);
+  assert.equal(
+    await page
+      .locator("#reference-list")
+      .getByText("Procédure", { exact: true })
+      .count(),
+    0,
+  );
+  await page
+    .getByRole("link", { name: "Entretien courant · pas à pas", exact: false })
+    .click();
+  await page.getByLabel("Type de filtre", { exact: true }).selectOption("sand");
+  assert.equal(
+    await page
+      .getByRole("heading", { name: "Laver à contre-courant", exact: true })
+      .count(),
+    1,
+  );
+  assert.equal(
+    await page
+      .getByRole("heading", { name: "Rincer entre les plis", exact: true })
+      .count(),
+    0,
+  );
+  await page
+    .getByLabel("État : Lire le dossier avant d’agir", { exact: true })
+    .selectOption("done");
+  await page
+    .getByRole("button", { name: "Enregistrer la progression", exact: true })
+    .first()
+    .click();
+  await page
+    .locator("#guide-status")
+    .getByText("Progression enregistrée.", { exact: true })
+    .waitFor();
+  await page.reload();
+  await page.getByLabel("Type de filtre", { exact: true }).waitFor();
+  assert.equal(
+    await page
+      .getByLabel("État : Lire le dossier avant d’agir", { exact: true })
+      .inputValue(),
+    "done",
+  );
+  await page
+    .getByLabel("Type de filtre", { exact: true })
+    .selectOption("cartridge");
+  assert.equal(
+    await page
+      .getByRole("heading", { name: "Laver à contre-courant", exact: true })
+      .count(),
+    0,
+  );
+  assert.equal(
+    await page
+      .getByRole("heading", { name: "Rincer entre les plis", exact: true })
+      .count(),
+    1,
+  );
+  await page
+    .getByRole("button", { name: "Enregistrer la progression", exact: true })
+    .first()
+    .click();
+  await page
+    .locator("#guide-status")
+    .getByText("Progression enregistrée.", { exact: true })
+    .waitFor();
+  await page.screenshot({
+    path: ".test-artifacts/maintenance-desktop.png",
+    fullPage: false,
+  });
+  await page.goto("http://127.0.0.1:8788/#code");
+  await page
+    .getByRole("button", { name: "Commencer la révision", exact: true })
+    .click();
+  for (let i = 0; i < 10; i++) {
+    await page.locator("input[name=quiz-answer]").first().check();
+    await page
+      .getByRole("button", {
+        name: i === 9 ? "Voir ma correction" : "Suivante",
+        exact: true,
+      })
+      .click();
+  }
+  await page.getByRole("heading", { name: /Votre résultat :/ }).waitFor();
+  assert.equal(await page.locator(".quiz-correction").count(), 10);
+  await page
+    .getByRole("link", { name: "Retour au Code du pisciniste", exact: false })
+    .click();
+  await page
+    .getByRole("heading", { name: "Vos derniers résultats", exact: true })
+    .waitFor();
+  await page.screenshot({
+    path: ".test-artifacts/code-desktop.png",
+    fullPage: true,
+  });
+  await nav.getByRole("link", { name: "Agenda", exact: true }).click();
   await page.getByRole("link", { name: "Statistiques", exact: false }).click();
   await page
     .getByRole("heading", { name: "Statistiques", exact: true })
     .waitFor();
   assert.equal(await page.locator(".stat strong").first().textContent(), "1");
   await page
-    .getByRole("link", { name: "Retour à l’accueil", exact: true })
+    .getByRole("link", { name: "Retour à l’agenda", exact: true })
     .click();
-  await page
-    .getByRole("heading", { name: "Bonjour Camille.", exact: true })
-    .waitFor();
-  await page.screenshot({
-    path: ".test-artifacts/pro-dashboard-desktop.png",
-    fullPage: true,
-  });
-  await page.getByRole("link", { name: "Entraide", exact: true }).click();
-  await page
-    .getByRole("heading", {
-      name: "Entraide entre piscinistes",
-      exact: true,
-    })
-    .waitFor();
-  await page
-    .getByRole("button", { name: "Nouvelle demande", exact: false })
-    .click();
-  await page
-    .getByLabel("En quelques mots", { exact: true })
-    .fill("Filtration : vérifier un bruit intermittent");
-  await page
-    .getByLabel("Décrivez le problème", { exact: false })
-    .fill(
-      "Le panier est propre. Quels contrôles visuels conseillez-vous avant une intervention spécialisée ?",
-    );
-  await page.locator("#city-search").fill("Bandol");
-  await page
-    .getByRole("button", { name: "Rechercher", exact: true })
-    .last()
-    .click();
-  await page.locator("[name=city_code]").selectOption("83009");
-  await page
-    .getByLabel("Portée de l’avis technique", { exact: true })
-    .selectOption("national");
-  await page
-    .getByRole("button", { name: "Publier ma demande", exact: true })
-    .click();
-  await page
-    .getByRole("heading", {
-      name: "Filtration : vérifier un bruit intermittent",
-      exact: true,
-    })
-    .waitFor();
-  await page
-    .getByLabel("Votre réponse", { exact: true })
-    .fill("Précision : le bruit apparaît uniquement après plusieurs minutes.");
-  await page
-    .getByRole("button", { name: "Publier ma réponse", exact: true })
-    .click();
-  await page
-    .getByText(
-      "Précision : le bruit apparaît uniquement après plusieurs minutes.",
-      { exact: true },
-    )
-    .waitFor();
-  await page.screenshot({
-    path: ".test-artifacts/help-desktop.png",
-    fullPage: true,
-  });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("http://127.0.0.1:8788/#home");
-  await page
-    .getByRole("heading", { name: "Bonjour Camille.", exact: true })
-    .waitFor();
+  await page.getByRole("heading", { name: "Agenda", exact: true }).waitFor();
   const mobileNav = page.getByRole("navigation", {
     name: "Navigation mobile",
     exact: true,
@@ -326,6 +413,29 @@ try {
     ),
     false,
     "Pro agenda mobile overflow",
+  );
+  await mobileNav
+    .getByRole("link", { name: "Pisciniste", exact: true })
+    .click();
+  await page
+    .getByRole("heading", { name: "Pisciniste", exact: true })
+    .waitFor();
+  await page.screenshot({
+    path: ".test-artifacts/pro-workbench-mobile.png",
+    fullPage: true,
+  });
+  await page.goto("http://127.0.0.1:8788/#guide/entretien/" + assigned.id);
+  await page.getByLabel("Type de filtre", { exact: true }).waitFor();
+  await page.screenshot({
+    path: ".test-artifacts/maintenance-mobile.png",
+    fullPage: false,
+  });
+  assert.equal(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > innerWidth,
+    ),
+    false,
+    "Guide mobile overflow",
   );
   await page.goto("http://127.0.0.1:8788/#pool/" + poolId);
   await page
@@ -364,13 +474,13 @@ try {
         "supplies",
         "members",
         "enable pro profile",
-        "dashboard and five original tabs",
+        "agenda default and four professional tabs",
         "client directory and map after explicit invitation",
         "plan, perform and publish a visit",
         "private activity statistics",
         "reference procedures",
         "professional mobile navigation",
-        "professional help and reply",
+        "calculators, guided maintenance and quiz",
         "mobile journal and report",
       ],
       screenshots: 10,
@@ -378,6 +488,7 @@ try {
     }),
   );
 } catch (error) {
+  console.error("Browser errors:", errors);
   await page.screenshot({
     path: ".test-artifacts/failure.png",
     fullPage: true,

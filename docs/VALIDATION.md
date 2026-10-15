@@ -1,4 +1,16 @@
-# Vérifications du 8 octobre 2026
+# Vérifications du 15 octobre 2026 — Peace in Blue App
+
+- 19 tests de calculs et d’API réussis : formules et unités des 16 outils, entrées incohérentes, droits, révocation, comptes rendus, ancien parcours de partage, suppression des routes communautaires/IA, progression des guides privée et sauvegardes concurrentes, révision courte/par thème et historique privé.
+- TypeScript et build Vite réussis. Les migrations 0001 et 0002 sont appliquées dans chaque base de test.
+- Parcours Chromium réussi sur bureau 1440 px et mobile 390 px : création client, analyse, courbes, approvisionnement, activation pro, quatre onglets et arrivée Agenda, invitation, visite publiée, carte/clients, calculateurs volume/sel, catégories de fiches, changement de type de filtre, sauvegarde/rechargement de progression, quiz corrigé et statistiques. Aucun échec JavaScript. Captures contrôlées pour le hub, le calculateur et les guides ; navigation mobile vérifiée.
+- Le workflow de recette contrôle désormais aussi sur D1 réel la nouvelle migration de progression, son isolation, le rejet d’une révision obsolète et la révocation, ainsi que le renommage et l’absence des endpoints supprimés.
+
+Ces contrôles ne constituent pas un test de montée en charge. Les conditions d’ouverture publique restent décrites dans `DEPLOIEMENT.md`.
+
+---
+
+## Historique : vérifications du 8 octobre 2026
+
 
 ## Résultats locaux
 

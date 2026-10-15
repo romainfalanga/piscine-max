@@ -1,7 +1,7 @@
 {
-  "name": "peaceinblue-app",
+  "name": "peace-in-blue-app",
   "version": "2.0.0",
-  "description": "Suivi partag\u00e9 de piscines et entraide entre piscinistes",
+  "description": "Organisation des piscinistes et suivi partagé des piscines",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,7 +12,7 @@
     "cf-typegen": "wrangler types --env-interface CloudflareBindings",
     "db:migrate:local": "wrangler d1 migrations apply peaceinblue-platform --local",
     "db:migrate:prod": "wrangler d1 migrations apply peaceinblue-platform --remote",
-    "test": "node --import tsx --test tests/platform.test.ts",
+    "test": "node --import tsx --test tests/platform.test.ts tests/calculations.test.mjs",
     "typecheck": "tsc --noEmit",
     "db:migrate:preview": "wrangler d1 migrations apply peaceinblue-platform-preview --remote --env preview",
     "test:capacity": "python3 scripts/capacity.py",

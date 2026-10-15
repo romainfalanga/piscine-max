@@ -276,12 +276,12 @@ account.post("/password", async (c) => {
 account.get("/notifications", async (c) => {
   const list = await stmt(
     c,
-    "SELECT n.* FROM notifications n WHERE n.user_id=? ORDER BY n.created_at DESC,n.id DESC LIMIT 50",
+    "SELECT n.* FROM notifications n WHERE n.user_id=? AND n.request_id IS NULL AND n.type NOT IN('help','offer','mission') ORDER BY n.created_at DESC,n.id DESC LIMIT 50",
     who(c).id,
   ).all();
   const unread = await row<{ n: number }>(
     c,
-    "SELECT count(*) n FROM notifications WHERE user_id=? AND read_at IS NULL",
+    "SELECT count(*) n FROM notifications WHERE user_id=? AND request_id IS NULL AND type NOT IN('help','offer','mission') AND read_at IS NULL",
     who(c).id,
   );
   return c.json({ items: list.results, unread: unread?.n || 0 });
@@ -289,7 +289,7 @@ account.get("/notifications", async (c) => {
 account.post("/notifications/read", async (c) => {
   await stmt(
     c,
-    "UPDATE notifications SET read_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE user_id=? AND read_at IS NULL",
+    "UPDATE notifications SET read_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE user_id=? AND request_id IS NULL AND type NOT IN('help','offer','mission') AND read_at IS NULL",
     who(c).id,
   ).run();
   return c.json({ ok: true });

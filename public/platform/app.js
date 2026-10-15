@@ -24,15 +24,15 @@ import { poolPages } from "./pools.js";
 import { proPages } from "./pro.js";
 import { toolPages } from "./tools.js";
 import { classicPages } from "./classic.js";
-const brand = `<span class="brand-mark">${icon("water", 25)}</span><span><strong>Piscine Max</strong></span>`;
+const brand = `<span class="brand-mark">${icon("water", 25)}</span><span><strong>Peace in Blue App</strong></span>`;
 let authTab = "login",
   signupRole = "client",
   renderId = 0;
 function authScreen() {
   state.user = null;
-  document.title = "Piscine Max — Gestion d’entretien";
+  document.title = "Peace in Blue App — Gestion d’entretien";
   $("#app").innerHTML =
-    `<div class="classic-auth"><section class="classic-login"><div class="login-brand"><span class="brand-mark">${icon("water", 32)}</span><h1>Piscine Max</h1><p>Gestion d’entretien de piscines</p></div><div class="auth-switch"><button data-action="auth-tab" data-tab="login" class="${authTab === "login" ? "active" : ""}">Se connecter</button><button data-action="auth-tab" data-tab="signup" class="${authTab === "signup" ? "active" : ""}">Créer mon compte</button></div><form id="auth-form">${authTab === "signup" ? `${field("Votre nom", "name", "", "text", 'required maxlength="80" autocomplete="name"')}<div class="auth-switch"><button type="button" data-action="signup-role" data-role="client" class="${signupRole === "client" ? "active" : ""}">J’ai une piscine</button><button type="button" data-action="signup-role" data-role="pro" class="${signupRole === "pro" ? "active" : ""}">Je suis pisciniste</button></div>` : ""}${field("Identifiant", "username", "", "text", 'required minlength="3" maxlength="40" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="ex. camille.martin"')}${field("Mot de passe", "password", "", "password", `required ${authTab === "signup" ? 'minlength="12" autocomplete="new-password"' : 'autocomplete="current-password"'} maxlength="128"`)}${authTab === "signup" ? '<p class="small-note">12 caractères minimum. Aucun email demandé. Un code personnel vous permettra de récupérer votre compte.</p>' : ""}<p class="form-error" role="alert"></p><button class="btn primary full" type="submit">${authTab === "login" ? "Entrer dans mon espace" : "Créer mon compte gratuit"} ${icon("arrow", 17)}</button></form><button class="text-btn" data-action="recover">Mot de passe oublié ?</button><div class="divider"></div><p class="small-note">Vos piscines restent privées. Vous choisissez les personnes qui peuvent consulter leur dossier.</p></section></div>`;
+    `<div class="classic-auth"><section class="classic-login"><div class="login-brand"><span class="brand-mark">${icon("water", 32)}</span><h1>Peace in Blue App</h1><p>Gestion d’entretien de piscines</p></div><div class="auth-switch"><button data-action="auth-tab" data-tab="login" class="${authTab === "login" ? "active" : ""}">Se connecter</button><button data-action="auth-tab" data-tab="signup" class="${authTab === "signup" ? "active" : ""}">Créer mon compte</button></div><form id="auth-form">${authTab === "signup" ? `${field("Votre nom", "name", "", "text", 'required maxlength="80" autocomplete="name"')}<div class="auth-switch"><button type="button" data-action="signup-role" data-role="client" class="${signupRole === "client" ? "active" : ""}">J’ai une piscine</button><button type="button" data-action="signup-role" data-role="pro" class="${signupRole === "pro" ? "active" : ""}">Je suis pisciniste</button></div>` : ""}${field("Identifiant", "username", "", "text", 'required minlength="3" maxlength="40" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="ex. camille.martin"')}${field("Mot de passe", "password", "", "password", `required ${authTab === "signup" ? 'minlength="12" autocomplete="new-password"' : 'autocomplete="current-password"'} maxlength="128"`)}${authTab === "signup" ? '<p class="small-note">12 caractères minimum. Aucun email demandé. Un code personnel vous permettra de récupérer votre compte.</p>' : ""}<p class="form-error" role="alert"></p><button class="btn primary full" type="submit">${authTab === "login" ? "Entrer dans mon espace" : "Créer mon compte gratuit"} ${icon("arrow", 17)}</button></form><button class="text-btn" data-action="recover">Mot de passe oublié ?</button><div class="divider"></div><p class="small-note">Vos piscines restent privées. Vous choisissez les personnes qui peuvent consulter leur dossier.</p></section></div>`;
   $("#auth-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const form = e.target,
@@ -108,7 +108,6 @@ function shell() {
   const pro = state.mode === "pro";
   const nav = pro
     ? [
-        ["home", "home", "Accueil"],
         ["planning", "calendar", "Agenda"],
         ["map", "map", "Carte"],
         ["clients", "users", "Clients"],
@@ -116,7 +115,6 @@ function shell() {
       ]
     : [
         ["home", "pool", "Mes piscines"],
-        ["help", "help", "Mes demandes"],
         ["settings", "settings", "Mon compte"],
       ];
   const links = nav
@@ -126,15 +124,16 @@ function shell() {
     )
     .join("");
   $("#app").innerHTML =
-    `<div class="classic-shell"><header class="classic-header"><div class="classic-header-inner"><a class="brand" href="#home" aria-label="Piscine Max, accueil">${brand}</a><div class="classic-account"><a class="classic-profile" href="#settings"><span class="profile-dot"></span><span class="profile-name">${esc(state.user.name)}</span>${badge(pro ? "Pro" : "Client", "teal")}</a>${pro ? `<a class="icon-btn" href="#help" aria-label="Entraide" title="Entraide">${icon("help")}</a>` : ""}<button class="icon-btn" data-action="notifications" aria-label="Notifications" title="Notifications">${icon("bell")}<span id="unread"></span></button><a class="icon-btn" href="#settings" aria-label="Mon compte" title="Mon compte">${icon("settings")}</a><button class="icon-btn" data-action="logout" aria-label="Se déconnecter" title="Se déconnecter">${icon("logout")}</button></div></div><nav class="classic-nav" aria-label="Navigation principale"><div>${links}</div></nav></header><main id="main" class="main"></main><nav class="classic-mobile-nav" aria-label="Navigation mobile">${links}</nav></div>`;
+    `<div class="classic-shell"><header class="classic-header"><div class="classic-header-inner"><a class="brand" href="#${pro ? "planning" : "home"}" aria-label="Peace in Blue App">${brand}</a><div class="classic-account"><a class="classic-profile" href="#settings"><span class="profile-dot"></span><span class="profile-name">${esc(state.user.name)}</span>${badge(pro ? "Pro" : "Client", "teal")}</a><button class="icon-btn" data-action="notifications" aria-label="Notifications" title="Notifications">${icon("bell")}<span id="unread"></span></button><a class="icon-btn" href="#settings" aria-label="Mon compte" title="Mon compte">${icon("settings")}</a><button class="icon-btn" data-action="logout" aria-label="Se déconnecter" title="Se déconnecter">${icon("logout")}</button></div></div><nav class="classic-nav" aria-label="Navigation principale"><div>${links}</div></nav></header><main id="main" class="main"></main><nav class="classic-mobile-nav" aria-label="Navigation mobile">${links}</nav></div>`;
 }
 
 on("mode", async (d) => {
   state.mode = d.mode;
   localStorage.setItem("pib-mode:" + state.user.id, d.mode);
   shell();
-  if (location.hash === "#home") await route();
-  else go("home");
+  const destination = state.mode === "pro" ? "planning" : "home";
+  if (location.hash === "#" + destination) await route();
+  else go(destination);
 });
 on("logout", async () => {
   await api("/logout", "POST", {});
@@ -169,7 +168,7 @@ on("notifications", async () => {
       ? state.notices
           .map(
             (n) =>
-              `<div class="notice ${n.read_at ? "read" : ""}"><span class="dot"></span><div class="grow"><h3>${esc(n.title)}</h3><p>${esc(n.body)}</p><small>${fmt(n.created_at, { hour: "2-digit", minute: "2-digit" })}</small>${n.pool_id || n.request_id ? `<div style="margin-top:10px">${button("Consulter", "notice-open", `data-pool="${esc(n.pool_id || "")}" data-request="${esc(n.request_id || "")}"`, "secondary small")}</div>` : ""}</div></div>`,
+              `<div class="notice ${n.read_at ? "read" : ""}"><span class="dot"></span><div class="grow"><h3>${esc(n.title)}</h3><p>${esc(n.body)}</p><small>${fmt(n.created_at, { hour: "2-digit", minute: "2-digit" })}</small>${n.pool_id ? `<div style="margin-top:10px">${button("Consulter", "notice-open", `data-pool="${esc(n.pool_id || "")}"`, "secondary small")}</div>` : ""}</div></div>`,
           )
           .join("")
       : empty(
@@ -183,23 +182,14 @@ on("notifications", async () => {
 });
 on("notice-open", (d) => {
   closeModal();
-  go(d.pool ? "pool/" + d.pool : "request/" + d.request);
+  if (d.pool) go("pool/" + d.pool);
 });
 async function settings(main) {
-  main.innerHTML = `<div class="page-heading"><div><div class="eyebrow">VOTRE ESPACE</div><h1>Mon compte</h1><p>Votre profil, votre zone et la sécurité de votre compte.</p></div></div><div class="grid two"><section class="card"><h2>Votre profil</h2><form id="settings-form">${field("Nom", "name", state.user.name, "text", 'required maxlength="80"')}${field("Identifiant", "username", state.user.username, "text", "disabled")}${
+  main.innerHTML = `<div class="page-heading"><div><div class="eyebrow">VOTRE ESPACE</div><h1>Mon compte</h1><p>Votre profil et la sécurité de votre compte.</p></div></div><div class="grid two"><section class="card"><h2>Votre profil</h2><form id="settings-form">${field("Nom", "name", state.user.name, "text", 'required maxlength="80"')}${field("Identifiant", "username", state.user.username, "text", "disabled")}${
     state.user.is_pro
-      ? `${field("Nom professionnel", "company", state.user.company, "text", 'maxlength="100"')}${cityField(state.user.city_code, state.user.city)}${field("Rayon d’intervention (km)", "radius_km", state.user.radius_km, "number", 'min="5" max="150" required')}<div class="field"><span>Vos prestations</span><div class="inline wrap">${Object.entries(
-          specs,
-        )
-          .map(
-            ([k, v]) =>
-              `<label class="chip"><input type="checkbox" name="specialties" value="${k}" ${state.user.specialties?.includes(k) ? "checked" : ""}>${v}</label>`,
-          )
-          .join(
-            "",
-          )}</div></div><p class="small-note">Les prestations sont déclarées par le professionnel. Votre profil ne comporte pas de badge de qualification vérifiée.</p>`
+      ? `${field("Nom professionnel", "company", state.user.company, "text", 'maxlength="100"')}${cityField(state.user.city_code, state.user.city)}`
       : '<label class="check"><input name="enable_pro" type="checkbox"> Je souhaite aussi activer mon espace pisciniste gratuit.</label>'
-  }<p class="form-error"></p><button class="btn primary">Enregistrer mon profil</button></form></section><div class="stack"><section class="card"><h2>Un compte, vos deux usages</h2><p class="muted" style="font-size:13px">Vous pouvez suivre vos piscines personnelles et exercer comme pisciniste avec la même connexion.</p>${state.user.is_pro ? `<div class="inline wrap">${button("Mon espace personnel", "mode", 'data-mode="client"', "secondary")}${button("Mon espace pisciniste", "mode", 'data-mode="pro"', "secondary")}</div>` : ""}</section><section class="card"><h2>Accès et sécurité</h2><p class="muted" style="font-size:13px">Changer de mot de passe déconnecte vos autres appareils et renouvelle votre code de récupération.</p>${button("Changer mon mot de passe", "password", "", "secondary")}<div class="divider"></div>${button("Se déconnecter", "logout", "", "ghost")}</section>${state.user.is_admin ? `<section class="card"><h2>Modération</h2>${button("Consulter les signalements", "moderation", "", "secondary")}</section>` : ""}</div></div>`;
+  }<p class="form-error"></p><button class="btn primary">Enregistrer mon profil</button></form></section><div class="stack"><section class="card"><h2>Un compte, vos deux usages</h2><p class="muted" style="font-size:13px">Vous pouvez suivre vos piscines personnelles et exercer comme pisciniste avec la même connexion.</p>${state.user.is_pro ? `<div class="inline wrap">${button("Mon espace personnel", "mode", 'data-mode="client"', "secondary")}${button("Mon espace pisciniste", "mode", 'data-mode="pro"', "secondary")}</div>` : ""}</section><section class="card"><h2>Accès et sécurité</h2><p class="muted" style="font-size:13px">Changer de mot de passe déconnecte vos autres appareils et renouvelle votre code de récupération.</p>${button("Changer mon mot de passe", "password", "", "secondary")}<div class="divider"></div>${button("Se déconnecter", "logout", "", "ghost")}</section></div></div>`;
   $("#settings-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const f = e.target,
@@ -210,7 +200,6 @@ async function settings(main) {
         ...(await api("/me", "PUT", {
           ...values,
           enable_pro: values.enable_pro === "on",
-          specialties: new FormData(f).getAll("specialties"),
         })),
       };
       shell();
@@ -233,28 +222,6 @@ on("password", () =>
     },
   ),
 );
-on("moderation", async () => {
-  const r = await api("/admin/flags");
-  modal(
-    "Signalements",
-    r.items
-      .map(
-        (f) =>
-          `<div class="card"><h3>${esc(f.title)}</h3><p>${esc(f.body)}</p><p class="note">${esc(f.reason)}</p>${button("Masquer cette demande", "moderate", `data-id="${f.id}" data-hide="1"`, "danger small")} ${button("Classer sans masquer", "moderate", `data-id="${f.id}" data-hide="0"`, "secondary small")}</div>`,
-      )
-      .join("") ||
-      empty(
-        "Aucun signalement",
-        "Les nouvelles demandes de modération apparaîtront ici.",
-      ),
-    null,
-  );
-});
-on("moderate", async (d) => {
-  await api("/admin/flags/" + d.id, "POST", { hide: d.hide === "1" });
-  closeModal();
-  toast("Signalement traité.");
-});
 async function route() {
   if (!state.user) return;
   const current = ++renderId;
@@ -262,9 +229,27 @@ async function route() {
     name = parts[0] || "home";
   if (
     state.mode !== "pro" &&
-    ["clients", "map", "planning", "tools", "stats"].includes(name)
+    [
+      "clients",
+      "map",
+      "planning",
+      "preparation",
+      "tools",
+      "stats",
+      "code",
+      "calculators",
+      "library",
+      "guide",
+    ].includes(name)
   ) {
     go("home");
+    return;
+  }
+  if (
+    ["help", "request", "assistant", "dashboard"].includes(name) ||
+    (name === "home" && state.mode === "pro")
+  ) {
+    go(state.mode === "pro" ? "planning" : "home");
     return;
   }
   state.route = name;
@@ -278,10 +263,10 @@ async function route() {
           ? state.mode === "pro"
             ? "clients"
             : "home"
-          : name === "request"
-            ? "help"
-            : name === "stats"
-              ? "home"
+          : ["stats", "preparation"].includes(name)
+            ? "planning"
+            : ["code", "calculators", "library", "guide"].includes(name)
+              ? "tools"
               : name),
     ),
   );
@@ -295,13 +280,12 @@ async function route() {
       settings,
     };
     if (name === "home") {
-      if (state.mode === "pro") await proPages.dashboard(main);
-      else await poolPages.pools(main);
+      await poolPages.pools(main);
     } else if (pages[name]) await pages[name](main, parts[1], parts[2]);
-    else go("home");
+    else go(state.mode === "pro" ? "planning" : "home");
     if (current === renderId)
       document.title =
-        "Piscine Max — " +
+        "Peace in Blue App — " +
         (name === "pool"
           ? state.pool?.name || "Piscine"
           : state.mode === "pro"
@@ -317,7 +301,7 @@ async function route() {
   }
   updateUnread();
 }
-on("home", () => go("home"));
+on("home", () => go(state.mode === "pro" ? "planning" : "home"));
 window.addEventListener("hashchange", route);
 try {
   await start(await api("/me"));

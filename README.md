@@ -1,4 +1,4 @@
-# Peace in Blue
+# Peace in Blue App
 
 Plateforme de suivi partagé entre propriétaires de piscines et piscinistes. Refonte de `piscine-max`, gratuite pour tous les utilisateurs à ce stade.
 
@@ -12,9 +12,11 @@ Les identifiants locaux de `wrangler.jsonc` restent destinés au développement.
 - Piscines créées par leur propriétaire, copropriétaires invités, un responsable des accès et un seul pisciniste principal. Acceptation explicite des invitations, droits temporaires et révocation.
 - Journal commun, analyses autonomes, courbes, comptes rendus avec photos privées, brouillons puis « Terminer et partager ». Corrections traçables, notes professionnelles séparées, export du carnet.
 - Planning individuel, récurrences, saisons, exceptions, passages réalisés et préparation des produits/matériels. Achat client ou approvisionnement pro, avec notifications distinctes dans la plateforme.
-- Demandes d'entraide, dépannage, renfort, remplacement et transmission de suivi. Secteur communal approximatif, aucune adresse privée transmise au fil. Le client voit ses demandes ; les échanges entre pros restent réservés aux pros.
-- Proposition d'intervention, accord du demandeur puis autorisation du responsable de la piscine. Accès ponctuel borné ou remplacement du professionnel principal.
-- Procédures personnelles, quiz existant, calcul de volume, météo et assistant textuel optionnel. Aucun abonnement ni paiement.
+- Navigation professionnelle : Agenda (arrivée directe), Carte, Clients, Pisciniste. Préparation et statistiques depuis l’Agenda.
+- Code du pisciniste : sessions courtes ou complètes, thèmes, correction et historique privé.
+- 16 calculateurs avec unités explicites, entrées contrôlées et hypothèses affichées. Dosages à partir de la notice réelle, sans cible chimique imposée.
+- Bibliothèque classée en Informations métier, Procédures et fiches personnelles. Huit procédures guidées dont l’entretien courant, variantes sable/verre et cartouche, progression personnelle sauvegardée.
+- L’entraide et l’assistant IA sont retirés de l’interface et de l’API. Aucun abonnement ni paiement.
 
 ## Documents
 
@@ -45,6 +47,6 @@ Tests navigateur : `npx playwright-core install chromium`, puis `BROWSER_PLAYWRI
 
 ## Organisation du code
 
-API Hono dans `src/platform/`, entrée et protections HTTP dans `src/index.tsx`. Frontend en modules JavaScript natifs dans `public/platform/`, sans CDN de code tiers. Nouveau schéma dans `schema/0001_platform.sql`, tests de droits et métier dans `tests/platform.test.ts`. Base de questions conservée dans `src/quiz-data.ts`.
+API Hono dans `src/platform/`, entrée et protections HTTP dans `src/index.tsx`. Frontend en modules JavaScript natifs dans `public/platform/`, sans CDN de code tiers. Migrations ordonnées dans `schema/`, tests de droits et métier dans `tests/platform.test.ts`. Base de questions conservée dans `src/quiz-data.ts`, guides dans `src/maintenance-guides.ts`, calculs purs dans `public/platform/calculations.js`.
 
 Le build n'exécute aucune migration et ne réinitialise aucune base. Ne pas appliquer ce nouveau schéma à la base historique : utiliser les nouvelles bases dédiées décrites dans le guide de déploiement.
