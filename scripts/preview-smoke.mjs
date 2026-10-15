@@ -133,17 +133,25 @@ async function cleanup() {
 }
 try {
   let ready = false;
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 20; i++) {
     try {
       const r = await request("/health");
-      if (r.status === 200 && r.data?.version === 2) {
+      if (r.status === 200 && r.data?.release === "professional-workbench-v1") {
+        const asset = await fetch(base + "/platform/calculations.js", {
+          cache: "no-store",
+          signal: AbortSignal.timeout(15000),
+        });
+        if (!asset.ok || !(await asset.text()).includes("CALCULATORS")) {
+          await new Promise((resolve) => setTimeout(resolve, 3000));
+          continue;
+        }
         ready = true;
         break;
       }
     } catch {}
     await new Promise((r) => setTimeout(r, 3000));
   }
-  assert.ok(ready, "Preview health check failed");
+  assert.ok(ready, "New preview release and calculator asset not ready");
   checks.push("Pages Worker online");
   for (const [path, mime] of [
     ["/", "text/html"],

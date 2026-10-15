@@ -49,7 +49,12 @@ app.use(
   }),
 );
 app.get("/api/health", (c) =>
-  c.json({ ok: true, application: "Peace in Blue App", version: 2 }),
+  c.json({
+    ok: true,
+    application: "Peace in Blue App",
+    version: 2,
+    release: "professional-workbench-v1",
+  }),
 );
 app.route("/api/auth", auth);
 app.use("/api/*", authenticate);
