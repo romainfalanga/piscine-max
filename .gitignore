@@ -29,3 +29,10 @@ pids/
 *.bak
 *.tar.gz
 *.zip
+
+# Local browser, capacity fixtures and reports
+.test-artifacts/
+# Generated metadata for isolated Cloudflare preview
+preview-resources.json
+preview-validation.json
+preview.wrangler.jsonc

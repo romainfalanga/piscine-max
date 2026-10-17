@@ -1,19 +1,25 @@
 {
-  "name": "piscine-max",
-  "version": "1.0.0",
-  "description": "Outil de gestion d'entretien de piscines pour pisciniste et exécutants",
+  "name": "peace-in-blue-app",
+  "version": "2.0.0",
+  "description": "Organisation des piscinistes et suivi partagé des piscines",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:sandbox": "wrangler pages dev dist --d1=piscine-max-production --local --ip 0.0.0.0 --port 3000",
-    "build": "vite build",
-    "preview": "wrangler pages dev dist --d1=piscine-max-production --local --ip 0.0.0.0 --port 3000",
-    "deploy": "npm run build && wrangler pages deploy dist --project-name piscine-max",
+    "dev:sandbox": "npm run build && wrangler pages dev dist --ip 0.0.0.0 --port 3000",
+    "build": "node scripts/deployment-preflight.mjs && vite build",
+    "preview": "wrangler pages dev dist --ip 0.0.0.0 --port 3000",
+    "deploy": "node scripts/deployment-preflight.mjs --remote && npm run build && wrangler pages deploy dist --project-name piscine-max",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings",
-    "db:migrate:local": "wrangler d1 migrations apply piscine-max-production --local",
-    "db:migrate:prod": "wrangler d1 migrations apply piscine-max-production",
-    "db:seed": "wrangler d1 execute piscine-max-production --local --file=./seed.sql",
-    "db:reset": "rm -rf .wrangler/state/v3/d1 && npm run db:migrate:local && npm run db:seed"
+    "db:migrate:local": "wrangler d1 migrations apply peaceinblue-platform --local",
+    "db:migrate:prod": "wrangler d1 migrations apply peaceinblue-platform --remote",
+    "test": "node --import tsx --test tests/platform.test.ts tests/calculations.test.mjs",
+    "typecheck": "tsc --noEmit",
+    "db:migrate:preview": "wrangler d1 migrations apply peaceinblue-platform-preview --remote --env preview",
+    "test:capacity": "python3 scripts/capacity.py",
+    "test:browser": "node --import tsx tests/browser.mjs",
+    "dev:fixture": "node --import tsx tests/server.ts",
+    "db:maintenance:local": "wrangler d1 execute peaceinblue-platform --local --file scripts/maintenance.sql",
+    "format": "prettier --write src/platform src/index.tsx public/platform tests scripts/deployment-preflight.mjs"
   },
   "dependencies": {
     "hono": "^4.6.0",
@@ -22,8 +28,15 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250705.0",
     "@hono/vite-cloudflare-pages": "^0.4.2",
+    "@sparticuz/chromium": "^153.0.0",
+    "@types/node": "^26.6.4",
+    "prettier": "^3.9.9",
+    "tsx": "^4.23.15",
     "typescript": "^5.5.0",
     "vite": "^5.4.0",
     "wrangler": "^4.86.0"
+  },
+  "engines": {
+    "node": ">=24"
   }
 }
