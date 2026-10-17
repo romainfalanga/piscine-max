@@ -1,4 +1,11 @@
 import {
+  addressField,
+  wireAddress,
+  readAddress,
+  mapAt,
+  itinerary,
+} from "./maps.js";
+import {
   $,
   $$,
   esc,
@@ -13,7 +20,6 @@ import {
   select,
   modal,
   closeModal,
-  cityField,
   button,
   badge,
   empty,
@@ -31,12 +37,19 @@ let activeTab = "journal",
   poolCursor = null,
   morePoolCursor = null,
   trendData = [];
+const filterTypes = {
+  unknown: "À préciser",
+  sand: "Sable",
+  glass: "Verre",
+  cartridge: "Cartouche",
+  other: "Autre",
+};
 const managerKinds = {
   owner: "Copropriétaire",
   principal: "Pisciniste principal",
 };
 function poolCard(p) {
-  return `<article class="card pool-card" data-action="open-pool" data-id="${p.id}" tabindex="0" role="button" aria-label="Ouvrir ${esc(p.name)}"><div class="pool-symbol">${icon("pool", 24)}</div><div class="tag">${badge(p.winterized ? "Hivernée" : managerKinds[p.membership], p.membership === "owner" ? "teal" : "")}</div><h3>${esc(p.name)}</h3><p>${esc(p.city || "Commune à compléter")} · ${esc(kinds[p.kind] || "Piscine")}</p><div class="bottom"><span>${p.last_reading ? "Dernier suivi · " + fmt(p.last_reading) : "Aucune analyse enregistrée"}</span>${icon("arrow", 17)}</div></article>`;
+  return `<a class="pool-overview" href="#pool/${p.id}"><span class="pool-overview-icon">${icon("pool", 30)}</span><div><h2>${esc(p.name)}</h2><p>${esc(p.city || "Adresse à compléter")}</p><small>${p.last_reading ? "Dernier suivi le " + fmt(p.last_reading) : "Aucun entretien enregistré"}</small></div><span class="pool-open">${icon("arrow")}</span></a>`;
 }
 export async function pools(main) {
   const pro = state.mode === "pro";
@@ -46,12 +59,7 @@ export async function pools(main) {
     api("/connections"),
   ]);
   morePoolCursor = r.next;
-  main.innerHTML = `<div class="page-heading"><div><div class="eyebrow">${pro ? "VOTRE ACTIVITÉ" : "VOTRE CARNET DE PISCINE"}</div><h1>${pro ? "Mes piscines suivies" : "Mes piscines"}</h1><p>${pro ? "Retrouvez les piscines qui vous sont confiées." : "Un même historique pour vous, vos proches et votre pisciniste."}</p></div>${button(pro ? "Ajouter un client" : icon("plus", 17) + " Ajouter une piscine", pro ? "invite-client" : "new-pool")}</div>${invitationSection(inv.items)}${connectionSection(connections.incoming)}<div class="section-heading"><h2>${pro ? "Vos piscines suivies" : "Vos piscines"}</h2><span>${r.items.length}${r.next ? "+" : ""} bassin${r.items.length > 1 ? "s" : ""}</span></div><div class="inline" style="margin-bottom:18px"><input id="pool-search" class="search-input" placeholder="Rechercher une piscine ou une ville" aria-label="Rechercher une piscine"><button class="btn secondary" data-action="search-pools">Rechercher</button></div><div id="pool-list" class="grid three">${r.items.map(poolCard).join("")}${!pro ? `<button class="card pool-card pool-add" data-action="new-pool"><span class="circle">${icon("plus", 22)}</span><h3>Une autre piscine ?</h3><p>Créez son carnet en quelques instants.</p></button>` : ""}</div>${!r.items.length && pro ? empty("Votre première piscine vous attend", "Créez une piscine ou demandez à rejoindre celle du client.", button("Comment ça marche ?", "invite-client", "", "secondary")) : ""}<div id="pool-more" style="margin-top:20px">${r.next ? button("Voir davantage de piscines", "more-pools", "", "secondary") : ""}</div>`;
-  $$("[data-action=open-pool]").forEach((x) =>
-    x.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") go("pool/" + x.dataset.id);
-    }),
-  );
+  main.innerHTML = `<div class="page-heading"><div><h1>${pro ? "Mes piscines suivies" : "Mes piscines"}</h1><p>${pro ? "Les bassins de votre tournée." : "Vos entretiens, vos analyses et votre pisciniste, au même endroit."}</p></div>${r.items.length ? button(icon("plus", 17) + (pro ? " Ajouter un client" : " Ajouter une piscine"), pro ? "invite-client" : "new-pool") : ""}</div>${invitationSection(inv.items)}${connectionSection(connections.incoming)}${r.items.length ? `<div class="directory-toolbar"><input id="pool-search" class="search-input" placeholder="Rechercher une piscine ou une ville" aria-label="Rechercher une piscine">${button("Rechercher", "search-pools", "", "secondary")}</div><div id="pool-list" class="pool-overviews">${r.items.map(poolCard).join("")}</div>` : `<section class="first-pool"><div class="first-pool-symbol">${icon("pool", 66)}</div><h2>${pro ? "Ajoutez votre premier client" : "Ajoutez votre première piscine"}</h2><p>${pro ? "Créez sa piscine ou rejoignez le dossier qu’il possède déjà." : "Commencez par son nom et son adresse. Vous pourrez ensuite suivre vos analyses et inviter votre pisciniste."}</p>${button(icon("plus", 18) + (pro ? " Ajouter un client" : " Ajouter une piscine"), pro ? "invite-client" : "new-pool")}</section>`}<div id="pool-more">${r.next ? button("Voir davantage de piscines", "more-pools", "", "secondary") : ""}</div>`;
 }
 on("search-pools", async () => {
   const r = await api(
@@ -190,18 +198,23 @@ on("new-pool", (d) => {
   const mode = d.mode || state.mode,
     pro = mode === "pro";
   modal(
-    pro ? "Créer la piscine d’un client" : "Le carnet de votre piscine",
-    `${field("Nom de la piscine", "name", "", "text", 'required maxlength="80" placeholder="La piscine de la maison"')}${pro ? field("Identifiant du client — facultatif", "client_username", "", "text", 'maxlength="40" autocapitalize="none" placeholder="Pour lui envoyer une invitation"') : ""}${select("Type de bassin", "kind", kinds, "private")}${cityField()}${field("Adresse exacte — privée", "address", "", "text", 'maxlength="300" autocomplete="street-address"')}<div class="grid two form-two">${field("Volume (m³) — facultatif", "volume", "", "number", 'min="0.1" max="100000" step="0.1" placeholder="Je ne sais pas"')}${select("Traitement", "treatment", treatments, "unknown")}</div><p class="small-note">${pro ? "Vous êtes le pisciniste principal. Le client rejoint ce dossier sur invitation. S’il existe déjà, demandez à le rejoindre." : "Vous pourrez inviter votre pisciniste depuis « Accès ». Un seul professionnel suit cette piscine."}</p>`,
+    pro ? "Créer la piscine d’un client" : "Créer ma piscine",
+    `<p class="form-intro">Le nom et l’adresse suffisent pour commencer.</p>${field("Nom de la piscine", "name", "", "text", 'required maxlength="80" placeholder="La piscine de la maison"')}${select("Type de bassin", "kind", kinds, "private")}${addressField()}${pro ? field("Identifiant du client (facultatif)", "client_username", "", "text", 'maxlength="40" autocapitalize="none"') : ""}<p class="small-note">Volume, traitement et équipements se complètent ensuite dans la fiche piscine.</p>`,
     async (b) => {
-      const r = await api("/pools", "POST", { ...b, mode });
+      const r = await api("/pools", "POST", {
+        name: b.name,
+        kind: b.kind,
+        mode,
+        client_username: b.client_username,
+        location: readAddress(b),
+      });
       closeModal();
       go("pool/" + r.id);
-      toast(
-        pro ? "Piscine créée pour votre suivi." : "Votre piscine est créée.",
-      );
+      toast("Votre piscine est créée.");
     },
     pro ? "Créer la piscine" : "Créer ma piscine",
   );
+  wireAddress();
 });
 export async function pool(main, id, tab = "journal") {
   const [p, r, n] = await Promise.all([
@@ -215,8 +228,8 @@ export async function pool(main, id, tab = "journal") {
   poolCursor = r.next;
   activeTab = tab;
   const isPro = p.membership === "principal";
-  main.innerHTML = `<div class="page-heading"><div><div class="eyebrow"><a href="#pools" style="text-decoration:none">${icon("pool", 12)} VOS PISCINES</a> / ${esc(p.city || "CARNET")}</div><h1>${esc(p.name)}</h1><p>${esc(kinds[p.kind])} · ${p.volume ? esc(p.volume) + " m³" : "Volume à préciser"} · ${esc(treatments[p.treatment])}</p></div><div class="inline wrap">${button(icon("plus", 16) + " Ajouter une analyse", "new-analysis", `data-pool="${id}"`)}${isPro ? button("Enregistrer un passage", "new-visit", `data-pool="${id}"`, "secondary") : ""}</div></div>${p.claimable ? `<div class="note" style="margin-bottom:16px">Client à associer. ${p.invitations.length ? "Invitation envoyée : le client doit l’accepter." : button("Inviter le client", "invite-member", "", "secondary small")}</div>` : ""}<div class="tabs" role="navigation" aria-label="Sections de la piscine">${[
-    ["journal", "Journal"],
+  main.innerHTML = `<a class="back-link" href="#${isPro ? "clients" : "home"}">${icon("arrow", 14)} ${isPro ? "Mes clients" : "Mes piscines"}</a><section class="pool-heading"><div><h1>${esc(p.name)}</h1><p>${icon("map", 16)} ${esc(p.address || p.city || "Adresse à compléter")}</p></div><div class="pool-heading-actions">${isPro ? button(icon("check", 18) + " Commencer l’entretien", "new-visit", `data-pool="${id}"`) : button(icon("plus", 18) + " Ajouter une analyse", "new-analysis", `data-pool="${id}"`)}${button("Modifier la piscine", "edit-pool", "", "secondary")}</div></section>${p.claimable ? `<div class="claim-banner">Client à associer. ${p.invitations.length ? "Invitation en attente d’acceptation." : button("Inviter le client", "invite-member", "", "secondary small")}</div>` : ""}<div class="tabs pool-tabs" role="navigation" aria-label="Sections de la piscine">${[
+    ["journal", "Suivi"],
     ["charts", "Évolution"],
     ["needs", "À prévoir"],
     ["planning", "Planning"],
@@ -225,24 +238,45 @@ export async function pool(main, id, tab = "journal") {
   ]
     .map(
       ([key, label]) =>
-        `<button class="${tab === key ? "active" : ""}" data-action="pool-tab" data-tab="${key}">${label}${key === "needs" && n.items.some((n) => n.status === "needed") ? " · " + n.items.filter((n) => n.status === "needed").length : ""}</button>`,
+        `<button class="${tab === key ? "active" : ""}" data-action="pool-tab" data-tab="${key}">${label}${key === "needs" && n.items.some((n) => n.status === "needed") ? " (" + n.items.filter((n) => n.status === "needed").length + ")" : ""}</button>`,
     )
     .join("")}</div><div id="pool-content"></div>`;
   await renderTab();
 }
 on("pool-tab", (d) => go("pool/" + state.pool.id + "/" + d.tab));
+function taskSummary(list) {
+  const done = list.filter((t) => t.done).length,
+    skipped = list.filter((t) => t.skipped).length;
+  return `${done} tâche${done > 1 ? "s" : ""} réalisée${done > 1 ? "s" : ""} sur ${list.length}${skipped ? " • " + skipped + " non réalisée" + (skipped > 1 ? "s" : "") : ""}`;
+}
+function taskReport(list) {
+  return `<ul class="task-report">${list.map((c) => `<li class="${c.done ? "completed" : c.skipped ? "skipped" : "pending"}"><span class="task-status-icon">${c.done ? icon("check", 15) : icon("close", 15)}</span><div><span>${esc(c.label)}</span>${!c.done ? `<small>${c.skipped ? "Non réalisé : " + esc(c.reason) : "Non renseigné"}</small>` : ""}</div></li>`).join("")}</ul>`;
+}
 function recordCard(r) {
   const values = Object.entries(r.readings).filter(([k]) => metrics[k]);
-  return `<article class="record"><div class="inline between"><div class="meta">${fmt(r.measured_at, { year: "numeric", hour: "2-digit", minute: "2-digit" })} · ${esc(r.author_name)}</div>${badge(r.published_at ? (r.superseded_by ? "Version corrigée" : r.correction_of ? "Correction" : "Partagé") : "Brouillon", r.published_at ? "teal" : "amber")}</div><h3>${r.kind === "visit" ? "Passage d’entretien" : "Analyse de l’eau"}</h3>${values.length ? `<div class="values">${values.map(([k, v]) => `<span>${metrics[k].label} <strong>${esc(v)}</strong> ${metrics[k].unit}</span>`).join("")}</div>` : ""}${r.notes ? `<p class="body">${esc(r.notes)}</p>` : ""}${r.products ? `<p class="small-note"><strong>Produits ajoutés :</strong> ${esc(r.products)}</p>` : ""}<div class="inline wrap">${button("Voir le détail", "record-detail", `data-id="${r.id}"`, "secondary small")}${r.author_id === state.user.id && !r.published_at ? button("Reprendre le brouillon", "edit-record", `data-id="${r.id}"`, "secondary small") : ""}${r.author_id === state.user.id && r.published_at && !r.superseded_by ? button("Ajouter une correction", "correct-record", `data-id="${r.id}"`, "ghost small") : ""}</div></article>`;
+  return `<article class="record"><div class="record-date">${icon(r.kind === "visit" ? "check" : "water", 18)}<time>${fmt(r.measured_at, { year: "numeric", hour: "2-digit", minute: "2-digit" })}</time>${badge(r.published_at ? (r.superseded_by ? "Version corrigée" : r.correction_of ? "Correction" : "Partagé") : "Brouillon", r.published_at ? "teal" : "amber")}</div><h3>${r.kind === "visit" ? "Entretien de la piscine" : "Analyse de l’eau"}</h3><p class="record-author">${esc(r.author_name)}${r.duration ? " • " + r.duration + " min" : ""}</p>${r.checklist.length ? `<p class="task-total">${esc(taskSummary(r.checklist))}</p><details class="record-tasks"><summary>Voir les tâches du passage</summary>${taskReport(r.checklist)}</details>` : ""}${values.length ? `<div class="values">${values.map(([k, v]) => `<span>${metrics[k].label} <strong>${esc(v)}</strong> ${metrics[k].unit}</span>`).join("")}</div>` : ""}${r.notes ? `<p class="body">${esc(r.notes)}</p>` : ""}${r.products ? `<p class="small-note"><strong>Produits ajoutés :</strong> ${esc(r.products)}</p>` : ""}<div class="inline wrap">${button("Voir le détail", "record-detail", `data-id="${r.id}"`, "secondary small")}${r.author_id === state.user.id && !r.published_at ? button("Reprendre le brouillon", "edit-record", `data-id="${r.id}"`, "secondary small") : ""}${r.author_id === state.user.id && r.published_at && !r.superseded_by ? button("Ajouter une correction", "correct-record", `data-id="${r.id}"`, "ghost small") : ""}</div></article>`;
 }
 async function renderTab() {
   const el = $("#pool-content"),
     p = state.pool;
   if (activeTab === "journal") {
-    const latest = state.records.find(
-      (r) => r.published_at && !r.superseded_by,
-    );
-    el.innerHTML = `<div class="split"><section>${state.records.length ? state.records.map(recordCard).join("") : empty("La première page de votre carnet", "Ajoutez une analyse, même sans rendez-vous avec un pisciniste.", button("Ajouter une analyse", "new-analysis", `data-pool="${p.id}"`))}<div id="record-more">${poolCursor ? button("Voir les passages précédents", "more-records", "", "secondary") : ""}</div></section><aside class="stack"><section class="card"><div class="eyebrow">LE DERNIER POINT</div><h2>${latest ? "Un suivi qui se construit." : "À votre rythme."}</h2><p class="muted" style="font-size:13px">${latest ? "Dernières mesures partagées le " + fmt(latest.measured_at) + ". Les valeurs décrivent cet instant et les seuls paramètres renseignés." : "Vos analyses et celles de votre pisciniste apparaissent dans un même journal."}</p>${p.client_advice ? `<div class="divider"></div><h3>Entre deux passages</h3><p class="prose">${esc(p.client_advice)}</p>` : ""}</section></aside></div>`;
+    const published = state.records.filter(
+        (r) => r.published_at && !r.superseded_by,
+      ),
+      latest = published[0],
+      visit = published.find((r) => r.kind === "visit"),
+      pro = p.members.find((m) => m.kind === "principal");
+    const readings = Object.keys(metrics)
+      .map((k) => {
+        const r = published.find((r) => r.readings[k] != null);
+        return `<div class="water-reading"><span>${metrics[k].label}</span><strong class="${r ? "" : "unmeasured"}">${r ? esc(r.readings[k]) : "Non mesuré"} <small>${r ? metrics[k].unit : ""}</small></strong><small>${r ? "Mesuré le " + fmt(r.measured_at) : "Ajoutez votre première mesure"}</small></div>`;
+      })
+      .join("");
+    el.innerHTML = `<div class="pool-layout"><section class="pool-feed"><div class="water-panel"><div class="water-panel-title"><h2>Les dernières mesures</h2>${p.membership === "principal" ? button("Ajouter une analyse", "new-analysis", `data-pool="${p.id}"`, "ghost small") : `<a class="reading-history" href="#pool/${p.id}/charts">Voir l’évolution</a>`}</div><div class="water-readings">${readings}</div></div><div class="section-heading"><h2>Historique des passages</h2><span class="small-note">${latest ? "Dernier suivi le " + fmt(latest.measured_at) : "Votre suivi commence ici"}</span></div>${state.records.length ? state.records.map(recordCard).join("") : empty("Aucun suivi pour le moment", p.membership === "principal" ? "Commencez un entretien pour renseigner les tâches et les analyses." : "Vos analyses et les entretiens de votre pisciniste apparaîtront ici.")}<div id="record-more">${poolCursor ? button("Voir les passages précédents", "more-records", "", "secondary") : ""}</div></section><aside class="pool-aside"><section class="aside-section"><h2>${p.membership === "principal" ? "Votre entretien" : "Votre pisciniste"}</h2>${p.membership === "principal" ? `<p>Retrouvez les gestes à effectuer pour ce bassin et partagez votre compte rendu.</p>${button("Commencer l’entretien", "new-visit", `data-pool="${p.id}"`, "primary full")}` : pro ? `<div class="person-line"><span class="avatar">${esc(pro.name.slice(0, 2).toUpperCase())}</span><div><strong>${esc(pro.company || pro.name)}</strong><small>Pisciniste principal</small></div></div>` : `<p>Invitez votre pisciniste pour partager le suivi de votre piscine.</p>${p.manager ? button("Inviter mon pisciniste", "invite-member", "", "secondary") : ""}`}</section><section class="aside-section"><h2>La piscine</h2><dl class="pool-facts"><div><dt>Volume</dt><dd>${p.volume ? esc(p.volume) + " m³" : "À compléter"}</dd></div><div><dt>Traitement</dt><dd>${p.treatment === "unknown" ? "À compléter" : esc(treatments[p.treatment])}</dd></div><div><dt>Filtre</dt><dd>${filterTypes[p.filter_type] || "À préciser"}</dd></div></dl>${button("Compléter les équipements", "edit-pool", "", "ghost small")}</section>${visit ? `<section class="aside-section"><h2>Dernier entretien</h2><strong>${fmt(visit.measured_at, { day: "numeric", month: "long" })}</strong><p>${esc(taskSummary(visit.checklist))}</p>${button("Ouvrir le compte rendu", "record-detail", `data-id="${visit.id}"`, "secondary small")}</section>` : ""}${p.client_advice ? `<section class="aside-section"><h2>Entre deux passages</h2><p>${esc(p.client_advice)}</p></section>` : ""}<section class="aside-section"><h2>Localisation</h2>${p.latitude != null ? '<div id="dossier-map" class="dossier-map" aria-label="Position de la piscine"></div><p class="small-note" data-map-status role="status"></p>' : ""}<p>${esc(p.address || p.city || "Adresse à compléter")}${p.location_precision === "municipality" ? "<small>Position approximative de la commune</small>" : ""}</p>${p.address || p.city ? `<a class="text-btn" target="_blank" rel="noopener" href="${esc(itinerary(p))}">Ouvrir l’itinéraire</a>` : ""}</section></aside></div>`;
+    if (p.latitude != null)
+      await mapAt($("#dossier-map"), p.latitude, p.longitude, {
+        approximate: p.location_precision !== "address",
+      });
   } else if (activeTab === "charts") {
     el.innerHTML = `<div class="card"><div class="inline between wrap"><div><h2>L’évolution de votre eau</h2><p class="small-note">Moyennes quotidiennes des analyses partagées. Les corrections remplacent les anciennes valeurs dans les courbes.</p></div><select id="chart-days" class="search-input" style="width:auto" aria-label="Période"><option value="30">30 jours</option><option value="180" selected>6 mois</option><option value="365">1 an</option><option value="1825">5 ans</option></select></div><div id="chart-content"></div></div>`;
     $("#chart-days").addEventListener("change", loadCharts);
@@ -254,7 +288,10 @@ async function renderTab() {
       ["Type", kinds[p.kind]],
       ["Traitement", treatments[p.treatment]],
       ["Volume", p.volume ? p.volume + " m³" : "À préciser"],
-      ["Filtration", p.filtration || "À préciser"],
+      [
+        "Filtration",
+        filterTypes[p.filter_type] + (p.filtration ? " / " + p.filtration : ""),
+      ],
       ["État saisonnier", p.winterized ? "Hivernée" : "En activité"],
       ["Adresse privée", p.address || "À préciser"],
     ]
@@ -320,7 +357,7 @@ async function loadCharts() {
           return `<section style="margin-top:25px"><div class="inline between"><h3>${metrics[k].label} <small>${metrics[k].unit}</small></h3><span class="small-note">${values.length} jour${values.length > 1 ? "s" : ""} mesuré${values.length > 1 ? "s" : ""}</span></div><svg class="chart" viewBox="0 0 650 180" role="img" aria-label="Évolution ${metrics[k].label}"><path d="M40 145H620M40 85H620M40 25H620" stroke="#e5eeee" stroke-dasharray="3 4"/><text x="0" y="30">${max.toFixed(1)}</text><text x="0" y="145">${min.toFixed(1)}</text><polyline points="${pts.join(" ")}" fill="none" stroke="${metrics[k].color}" stroke-width="2.5"/>${pts.map((p, i) => `<circle cx="${p.split(",")[0]}" cy="${p.split(",")[1]}" r="3" fill="${metrics[k].color}"><title>${fmt(values[i].date)} : ${values[i][k].toFixed(2)} ${metrics[k].unit}</title></circle>`).join("")}<text x="40" y="173">${fmt(values[0].date)}</text><text x="570" y="173">${fmt(values.at(-1).date)}</text></svg>${d.thresholds[k] ? `<p class="small-note">Repère propre au bassin : ${d.thresholds[k][0]} à ${d.thresholds[k][1]} ${metrics[k].unit}.</p>` : ""}</section>`;
         })
         .join("") +
-      `<details style="margin-top:25px"><summary>Consulter les valeurs en tableau</summary><div class="table-wrap"><table><thead><tr><th>Date</th>${keys.map((k) => `<th>${metrics[k].label}</th>`).join("")}</tr></thead><tbody>${d.items.map((v) => `<tr><td>${fmt(v.date)}</td>${keys.map((k) => `<td>${v[k] == null ? "—" : v[k].toFixed(2)}</td>`).join("")}</tr>`).join("")}</tbody></table></div></details>`
+      `<details style="margin-top:25px"><summary>Consulter les valeurs en tableau</summary><div class="table-wrap"><table><thead><tr><th>Date</th>${keys.map((k) => `<th>${metrics[k].label}</th>`).join("")}</tr></thead><tbody>${d.items.map((v) => `<tr><td>${fmt(v.date)}</td>${keys.map((k) => `<td>${v[k] == null ? "Non renseigné" : v[k].toFixed(2)}</td>`).join("")}</tr>`).join("")}</tbody></table></div></details>`
     : empty(
         "Vos premières courbes bientôt ici",
         "Partagez une analyse pour visualiser l’évolution de votre piscine.",
@@ -406,7 +443,18 @@ on("edit-pool", () => {
   const p = state.pool;
   modal(
     "Compléter le dossier piscine",
-    `${field("Nom", "name", p.name, "text", 'required maxlength="80"')}${select("Type de bassin", "kind", kinds, p.kind)}${cityField(p.city_code, p.city)}${field("Adresse privée", "address", p.address, "text", 'maxlength="300"')}<div class="grid two form-two">${field("Volume (m³)", "volume", p.volume, "number", 'min="0.1" max="100000" step="0.1"')}${select("Traitement", "treatment", treatments, p.treatment)}</div>${field("Filtration", "filtration", p.filtration, "text", 'maxlength="200"')}${area("Équipements, marques et références", "equipment", p.equipment, 'maxlength="4000"')}${area("Routine — une étape par ligne", "routine", p.routine, 'maxlength="2000"')}${area("Conseils au client entre deux passages", "client_advice", p.client_advice, 'maxlength="2000"')}${area("Consignes d’accès privées", "access_notes", p.access_notes, 'maxlength="1000"')}<label class="check"><input type="checkbox" name="winterized" ${p.winterized ? "checked" : ""}> Piscine actuellement hivernée</label><details><summary>Repères de suivi personnalisés</summary><p class="small-note">Renseignez uniquement des plages adaptées à ce bassin et à son usage. Aucun seuil générique ne certifie sa conformité.</p>${Object.entries(
+    `${field("Nom", "name", p.name, "text", 'required maxlength="80"')}${select("Type de bassin", "kind", kinds, p.kind)}${addressField(p)}<div class="grid two form-two">${field("Volume (m³)", "volume", p.volume, "number", 'min="0.1" max="100000" step="0.1"')}${select("Traitement", "treatment", treatments, p.treatment)}</div>${select("Type de filtre", "filter_type", filterTypes, p.filter_type)}${field("Modèle du filtre (facultatif)", "filtration", p.filtration, "text", 'maxlength="200"')}<fieldset class="equipment-options"><legend>Équipements présents</legend>${[
+      ["has_steps", "Marches"],
+      ["has_skimmers", "Skimmers"],
+      ["has_prefilter", "Préfiltre de pompe"],
+    ]
+      .map(
+        ([key, label]) =>
+          `<label class="check"><input type="checkbox" name="${key}" ${p[key] ? "checked" : ""}>${label}</label>`,
+      )
+      .join(
+        "",
+      )}</fieldset>${area("Équipements, marques et références", "equipment", p.equipment, 'maxlength="4000"')}${area("Tâches supplémentaires (une par ligne)", "routine", p.routine, 'maxlength="2000"')}${area("Conseils au client entre deux passages", "client_advice", p.client_advice, 'maxlength="2000"')}${area("Consignes d’accès privées", "access_notes", p.access_notes, 'maxlength="1000"')}<label class="check"><input type="checkbox" name="winterized" ${p.winterized ? "checked" : ""}> Piscine actuellement hivernée</label><details><summary>Repères de suivi personnalisés</summary><p class="small-note">Renseignez uniquement des plages adaptées à ce bassin et à son usage. Aucun seuil générique ne certifie sa conformité.</p>${Object.entries(
       metrics,
     )
       .filter(([k]) => k !== "water_temp")
@@ -426,6 +474,10 @@ on("edit-pool", () => {
           thresholds[k] = [Number(b["min_" + k]), Number(b["max_" + k])];
       await api("/pools/" + p.id, "PUT", {
         ...b,
+        location: readAddress(b),
+        has_steps: b.has_steps === "on",
+        has_skimmers: b.has_skimmers === "on",
+        has_prefilter: b.has_prefilter === "on",
         winterized: b.winterized === "on",
         thresholds,
       });
@@ -434,12 +486,13 @@ on("edit-pool", () => {
       toast("Dossier mis à jour.");
     },
   );
+  wireAddress();
 });
 on("private-notes", async () => {
   const r = await api("/pools/" + state.pool.id + "/notes");
   modal(
     "Vos notes internes",
-    `${area("Notes personnelles — jamais partagées au client", "body", r.body, 'maxlength="4000"')}`,
+    `${area("Notes personnelles : jamais partagées au client", "body", r.body, 'maxlength="4000"')}`,
     async (b) => {
       await api("/pools/" + state.pool.id + "/notes", "PUT", b);
       closeModal();
@@ -503,52 +556,91 @@ export async function openRecordForm(
   record = null,
   appointment = null,
 ) {
-  const p = await api("/pools/" + poolId);
-  const actualKind = record?.kind || kind,
-    id = record?.id || crypto.randomUUID();
-  const local = new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
-    .toISOString()
-    .slice(0, 16);
-  const value = record?.measured_at
-    ? new Date(
-        new Date(record.measured_at).getTime() -
-          new Date().getTimezoneOffset() * 60000,
-      )
-        .toISOString()
-        .slice(0, 16)
-    : local;
-  const checklist = record?.checklist?.length
-    ? record.checklist
-    : (
-        p.routine ||
-        "Niveau d’eau contrôlé et appoint arrêté\nContrôle visuel de l’eau et des algues\nAnalyses effectuées et consignées\nSurface et fond nettoyés\nLigne d’eau nettoyée\nParois et marches brossées\nPaniers de skimmer nettoyés\nPréfiltre de pompe nettoyé si présent\nPression et état du filtre contrôlés\nLavage et rinçage effectués si nécessaires (sable/verre)\nCartouche nettoyée si nécessaire (filtre compatible)\nPompe et électrolyseur contrôlés\nVannes remises en position de service\nFiltration et automatismes rétablis\nProduits et matériel du prochain passage vérifiés\nPhotos et compte rendu partagés"
-      )
-        .split("\n")
-        .filter(Boolean)
-        .map((label) => ({ label, done: false }));
+  const p = await api("/pools/" + poolId),
+    actualKind = record?.kind || kind,
+    visit = actualKind === "visit";
+  const uploadedFiles = new Set();
+  let id = record?.id || crypto.randomUUID(),
+    persisted = !!record?.id,
+    revision = record?.revision || 1;
+  const localDate = (d) =>
+    new Date(new Date(d).getTime() - new Date(d).getTimezoneOffset() * 60000)
+      .toISOString()
+      .slice(0, 16);
+  const value = localDate(record?.measured_at || Date.now());
+  const checklist = visit
+    ? record?.checklist?.length
+      ? record.checklist
+      : p.maintenance_tasks
+    : [];
   const draftKey =
-    "pib-draft:" + state.user.id + ":" + poolId + ":" + actualKind;
-  modal(
-    actualKind === "visit" ? "Compte rendu d’entretien" : "Ajouter une analyse",
-    `${record?.correction_of ? '<div class="note">Cette correction conservera la version originale dans le journal.</div>' : ""}${field("Date et heure de la mesure", "measured_at", value, "datetime-local", "required")}<div class="eyebrow">MESURES RELEVÉES</div><div class="grid two form-two">${Object.entries(
-      metrics,
+    "pib-draft:" +
+    state.user.id +
+    ":" +
+    poolId +
+    ":" +
+    actualKind +
+    ":" +
+    (record?.id || record?.correction_of || "new");
+  const groups = [
+    ...new Set(checklist.map((t) => t.group || "Tâches du passage")),
+  ];
+  const taskMarkup = groups
+    .map(
+      (group, index) =>
+        `<fieldset class="maintenance-group"><legend><span>${index + 1}</span>${esc(group)}</legend>${checklist
+          .map((c, i) => ({ c, i }))
+          .filter(({ c }) => (c.group || "Tâches du passage") === group)
+          .map(
+            ({ c, i }) =>
+              `<div class="maintenance-task ${c.done ? "is-done" : ""}"><label class="task-checkbox"><input type="checkbox" name="check_${i}" ${c.done ? "checked" : ""}><span>${esc(c.label)}</span></label><button type="button" class="task-exception" data-task-skip="${i}" aria-expanded="${!!c.skipped}">${c.skipped ? "Annuler le motif" : "Non réalisé"}</button><div class="task-reason" ${c.skipped ? "" : "hidden"}><label>Pourquoi ?<input name="reason_${i}" maxlength="250" value="${esc(c.reason || "")}" placeholder="Ex. filtre propre, lavage non nécessaire" ${c.skipped ? "required" : ""}></label><input type="hidden" name="skip_${i}" value="${c.skipped ? "1" : "0"}"></div></div>`,
+          )
+          .join("")}</fieldset>`,
     )
-      .filter(([k]) => k !== "bromine" || p.treatment === "bromine")
-      .map(([k, m]) =>
-        field(
-          m.label + (m.unit ? " (" + m.unit + ")" : ""),
-          k,
-          record?.readings?.[k] ?? "",
-          "number",
-          `step="0.01" min="0" max="${m.max}" inputmode="decimal" placeholder="Non mesuré"`,
-        ),
-      )
-      .join(
-        "",
-      )}</div>${field("Méthode de mesure — facultatif", "method", record?.method || "", "text", 'maxlength="100" placeholder="Bandelette, photomètre…"')}${actualKind === "visit" ? `<div class="note" style="margin-bottom:16px"><a href="#guide/entretien/${p.id}" target="_blank" rel="noopener">Ouvrir la procédure d’entretien complète ↗</a><br><small>Le guide s’ouvre séparément pour conserver votre saisie. Cochez seulement les gestes effectivement réalisés.</small></div><div class="eyebrow">LES GESTES EFFECTUÉS</div>${checklist.map((c, i) => `<label class="check"><input type="checkbox" name="check_${i}" ${c.done ? "checked" : ""}>${esc(c.label)}</label>`).join("")}${field("Durée du passage (minutes)", "duration", record?.duration || "", "number", 'min="1" max="1440"')}` : ""}${area("Produits effectivement ajoutés dans l’eau", "products", record?.products || "", 'maxlength="2000" placeholder="Produit exact, quantité et unité"')}${area("Observations partagées avec le client et son pisciniste", "notes", record?.notes || "", 'maxlength="4000"')}<label class="field"><span>Photos du bassin (maximum 6 · 4 Mo chacune)</span><input type="file" name="photos" multiple accept="image/jpeg,image/png,image/webp"></label>${record?.photos?.length ? `<p class="small-note">${record.photos.length} photo(s) déjà attachée(s).</p>` : ""}<p class="small-note">Les champs non renseignés restent « non mesurés ». Les observations sont partagées ; utilisez les notes internes du dossier pour vos notes privées.</p><label class="check"><input type="checkbox" name="draft"> Conserver un brouillon, sans partager pour le moment</label>`,
+    .join("");
+  const measurements = `<section class="visit-measures"><h3>Analyse de l’eau</h3><div class="grid two form-two">${Object.entries(
+    metrics,
+  )
+    .map(([k, m]) =>
+      field(
+        m.label + (m.unit ? " (" + m.unit + ")" : ""),
+        k,
+        record?.readings?.[k] ?? "",
+        "number",
+        `step="0.01" min="0" max="${m.max}" inputmode="decimal" placeholder="Non mesuré"`,
+      ),
+    )
+    .join(
+      "",
+    )}</div>${field("Méthode de mesure (facultatif)", "method", record?.method || "", "text", 'maxlength="100" placeholder="Gouttes, photomètre…"')}</section>`;
+  const dialog = modal(
+    visit ? "Entretien de la piscine" : "Ajouter une analyse",
+    `<p class="form-intro">${esc(p.name)}</p>${record?.correction_of ? '<p class="note">La version originale restera dans l’historique.</p>' : ""}${visit ? `<div class="visit-progress"><span id="task-progress" aria-live="polite"></span><progress id="task-progress-bar" max="${checklist.length}" value="0"></progress></div>` : ""}<div class="${visit ? "visit-workspace" : ""}">${visit ? `<section class="visit-checklist">${p.filter_type === "unknown" ? '<p class="note">Type de filtre à préciser dans la fiche piscine pour adapter les tâches.</p>' : ""}<p class="safety-inline">Arrêtez la pompe avant de changer la position de la vanne. Isolez et dépressurisez avant toute ouverture.</p>${taskMarkup}<a class="text-btn" href="#guide/entretien/${p.id}" target="_blank" rel="noopener">Consulter la procédure d’entretien</a></section>` : ""}<aside class="visit-details">${measurements}${field("Date et heure de la mesure", "measured_at", value, "datetime-local", "required")}${visit ? field("Durée du passage (minutes)", "duration", record?.duration || "", "number", 'min="1" max="1440"') : ""}${area("Produits ajoutés", "products", record?.products || "", 'maxlength="2000" placeholder="Produit, quantité et unité"')}${area("Observations partagées avec le client et son pisciniste", "notes", record?.notes || "", 'maxlength="4000" placeholder="État du bassin, point à surveiller…"')}<label class="field"><span>Photos du bassin (6 maximum, 4 Mo chacune)</span><input type="file" name="photos" multiple accept="image/jpeg,image/png,image/webp"></label>${record?.photos?.length ? `<p class="small-note">${record.photos.length} photo(s) déjà enregistrée(s).</p>` : ""}<p class="small-note">${visit ? "Le client verra les tâches réalisées, les éventuels motifs et les mesures après le partage." : "Vos mesures seront ajoutées au suivi partagé de la piscine."}</p><label class="check"><input type="checkbox" name="draft"> Conserver un brouillon</label></aside></div>`,
     async (b, form) => {
       const values = {};
-      for (const k of Object.keys(metrics)) if (b[k] !== "") values[k] = b[k];
+      for (const k of Object.keys(metrics))
+        if (b[k] !== "" && b[k] != null) values[k] = b[k];
+      const list = checklist.map((c, i) => ({
+        ...c,
+        done: b["check_" + i] === "on",
+        skipped: b["skip_" + i] === "1",
+        reason: b["skip_" + i] === "1" ? b["reason_" + i] : "",
+      }));
+      if (visit && b.draft !== "on") {
+        if (list.some((t) => !t.done && !t.skipped))
+          throw new Error(
+            "Cochez chaque tâche réalisée ou indiquez le motif d’une tâche non réalisée.",
+          );
+        if (list.some((t) => t.skipped && !t.reason.trim()))
+          throw new Error("Précisez les motifs des tâches non réalisées.");
+        if (
+          list.some((t) => t.id === "analysis" && t.done) &&
+          (values.ph == null || values.chlorine == null)
+        )
+          throw new Error(
+            "Renseignez le pH et le chlore pour valider l’analyse.",
+          );
+      }
       const payload = {
         id,
         kind: actualKind,
@@ -558,25 +650,36 @@ export async function openRecordForm(
         notes: b.notes,
         products: b.products,
         duration: b.duration,
-        checklist:
-          actualKind === "visit"
-            ? checklist.map((c, i) => ({
-                label: c.label,
-                done: b["check_" + i] === "on",
-              }))
-            : [],
+        checklist: visit ? list : [],
         appointment_id: appointment || record?.appointment_id,
         correction_of: record?.correction_of,
-        revision: record?.revision || 1,
+        revision,
       };
-      if (record?.id) await api("/records/" + id, "PUT", payload);
-      else await api("/pools/" + poolId + "/records", "POST", payload);
-      const files = $("[name=photos]", form).files;
-      for (const file of files) {
+      if (persisted) {
+        const r = await api("/records/" + id, "PUT", payload);
+        revision = r.revision;
+      } else {
+        const r = await api("/pools/" + poolId + "/records", "POST", payload);
+        persisted = true;
+        if (r.replayed) {
+          const saved = await api("/records/" + id);
+          revision = saved.revision;
+          const updated = await api("/records/" + id, "PUT", {
+            ...payload,
+            revision,
+          });
+          revision = updated.revision;
+        }
+      }
+      const files = $("[name=photos]", form);
+      for (const file of files.files) {
+        if (uploadedFiles.has(file)) continue;
         const fd = new FormData();
         fd.append("file", file);
         await api("/records/" + id + "/photos", "POST", fd);
+        uploadedFiles.add(file);
       }
+      files.value = "";
       if (b.draft !== "on")
         await api("/records/" + id + "/publish", "POST", {});
       sessionStorage.removeItem(draftKey);
@@ -584,44 +687,115 @@ export async function openRecordForm(
       toast(
         b.draft === "on"
           ? "Brouillon enregistré."
-          : "Votre suivi a été partagé.",
+          : visit
+            ? "Compte rendu partagé avec le client."
+            : "Analyse enregistrée.",
       );
       if (location.hash.startsWith("#pool/" + poolId)) refresh();
       else go("pool/" + poolId);
     },
     "Terminer et partager",
   );
+  if (visit) dialog.classList.add("maintenance-dialog");
   const form = $("#mform");
-  $("[name=draft]", form).addEventListener(
-    "change",
-    (e) =>
-      ($("[type=submit]", form).textContent = e.target.checked
-        ? "Enregistrer le brouillon"
-        : "Terminer et partager"),
-  );
+  const update = () => {
+    for (let i = 0; i < checklist.length; i++)
+      $(`[name=reason_${i}]`, form).required =
+        $(`[name=skip_${i}]`, form).value === "1" &&
+        !$("[name=draft]", form).checked;
+    if (visit) {
+      const done = checklist.filter(
+          (c, i) => $(`[name=check_${i}]`, form).checked,
+        ).length,
+        skipped = checklist.filter(
+          (c, i) => $(`[name=skip_${i}]`, form).value === "1",
+        ).length;
+      $("#task-progress").textContent =
+        `${done} sur ${checklist.length} réalisées${skipped ? " • " + skipped + " non réalisées" : ""}`;
+      $("#task-progress-bar").value = done + skipped;
+    }
+    $("[type=submit]", form).textContent = $("[name=draft]", form).checked
+      ? "Enregistrer le brouillon"
+      : "Terminer et partager";
+    for (const row of $$(".maintenance-task", form))
+      row.classList.toggle("is-done", $("[type=checkbox]", row).checked);
+  };
+  form.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-task-skip]");
+    if (!btn) return;
+    const i = btn.dataset.taskSkip,
+      reason = $(`[name=reason_${i}]`, form),
+      skip = $(`[name=skip_${i}]`, form),
+      expanded = skip.value !== "1";
+    skip.value = expanded ? "1" : "0";
+    reason.closest(".task-reason").hidden = !expanded;
+    reason.required = expanded;
+    btn.setAttribute("aria-expanded", String(expanded));
+    btn.textContent = expanded ? "Annuler le motif" : "Non réalisé";
+    if (expanded) {
+      $(`[name=check_${i}]`, form).checked = false;
+      reason.focus();
+    }
+    update();
+    saveLocal();
+  });
+  form.addEventListener("change", (e) => {
+    if (e.target.name?.startsWith("check_") && e.target.checked) {
+      const i = e.target.name.slice(6),
+        reason = $(`[name=reason_${i}]`, form);
+      $(`[name=skip_${i}]`, form).value = "0";
+      reason.required = false;
+      reason.closest(".task-reason").hidden = true;
+      const btn = $(`[data-task-skip="${i}"]`, form);
+      btn.textContent = "Non réalisé";
+      btn.setAttribute("aria-expanded", "false");
+    }
+    update();
+    saveLocal();
+  });
+  const saveLocal = () => {
+    const b = Object.fromEntries(new FormData(form));
+    delete b.photos;
+    try {
+      sessionStorage.setItem(
+        draftKey,
+        JSON.stringify({
+          fields: b,
+          taskIds: checklist.map((t) => t.id || t.label),
+        }),
+      );
+    } catch {}
+  };
   if (!record) {
     try {
       const saved = JSON.parse(sessionStorage.getItem(draftKey));
       if (
         saved &&
+        JSON.stringify(saved.taskIds) ===
+          JSON.stringify(checklist.map((t) => t.id || t.label)) &&
         confirm("Reprendre la saisie non envoyée de cette piscine ?")
-      )
-        for (const [k, v] of Object.entries(saved)) {
+      ) {
+        for (const [k, v] of Object.entries(saved.fields)) {
           const input = $(`[name="${k}"]`, form);
           if (input && input.type !== "file")
             input.type === "checkbox"
               ? (input.checked = v === "on")
               : (input.value = v);
         }
+        for (let i = 0; i < checklist.length; i++) {
+          const skipped = $(`[name=skip_${i}]`, form).value === "1",
+            reason = $(`[name=reason_${i}]`, form);
+          reason.required = skipped;
+          reason.closest(".task-reason").hidden = !skipped;
+          const btn = $(`[data-task-skip="${i}"]`, form);
+          btn.textContent = skipped ? "Annuler le motif" : "Non réalisé";
+          btn.setAttribute("aria-expanded", String(skipped));
+        }
+      }
     } catch {}
   }
-  form.addEventListener("input", () => {
-    const b = Object.fromEntries(new FormData(form));
-    delete b.photos;
-    try {
-      sessionStorage.setItem(draftKey, JSON.stringify(b));
-    } catch {}
-  });
+  form.addEventListener("input", saveLocal);
+  update();
 }
 on("record-detail", async (d) => {
   const r = await api("/records/" + d.id);
@@ -637,7 +811,7 @@ on("record-detail", async (d) => {
       )
       .join(
         "",
-      )}</div>${r.method ? `<p class="small-note">Méthode : ${esc(r.method)}</p>` : ""}${r.checklist.length ? `<h3>Gestes effectués</h3>${r.checklist.map((c) => `<p class="small-note">${c.done ? "✓" : "—"} ${esc(c.label)}</p>`).join("")}` : ""}<h3>Observations</h3><p class="prose">${esc(r.notes || "Aucune observation complémentaire.")}</p>${r.products ? `<h3>Produits ajoutés</h3><p class="prose">${esc(r.products)}</p>` : ""}<div class="photo-grid">${r.photos.map((p) => `<a href="/api/photos/${p.id}" target="_blank" rel="noopener"><img src="/api/photos/${p.id}" alt="${esc(p.caption || "Photo du bassin lors du passage")}" loading="lazy"></a>`).join("")}</div><p class="small-note">Ce compte rendu décrit les mesures renseignées à la date indiquée. Il ne constitue pas une certification de conformité.</p>${button("Imprimer ce compte rendu", "print", "", "secondary")}`,
+      )}</div>${r.method ? `<p class="small-note">Méthode : ${esc(r.method)}</p>` : ""}${r.checklist.length ? `<h3>${esc(taskSummary(r.checklist))}</h3>${taskReport(r.checklist)}` : ""}<h3>Observations</h3><p class="prose">${esc(r.notes || "Aucune observation complémentaire.")}</p>${r.products ? `<h3>Produits ajoutés</h3><p class="prose">${esc(r.products)}</p>` : ""}<div class="photo-grid">${r.photos.map((p) => `<a href="/api/photos/${p.id}" target="_blank" rel="noopener"><img src="/api/photos/${p.id}" alt="${esc(p.caption || "Photo du bassin lors du passage")}" loading="lazy"></a>`).join("")}</div><p class="small-note">Ce compte rendu décrit les mesures renseignées à la date indiquée. Il ne constitue pas une certification de conformité.</p>${button("Imprimer ce compte rendu", "print", "", "secondary")}`,
     null,
   );
 });

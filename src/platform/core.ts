@@ -265,15 +265,11 @@ export function readings(v: any) {
   const ranges: Record<string, number[]> = {
     ph: [0, 14],
     chlorine: [0, 30],
-    salt: [0, 50],
-    water_temp: [0, 60],
-    tac: [0, 1000],
-    stabilizer: [0, 1000],
-    bromine: [0, 30],
-    hardness: [0, 2000],
   };
   if (v == null) return out;
   if (typeof v !== "object" || Array.isArray(v)) fail("Relevés invalides.");
+  if (Object.keys(v).some((k) => !(k in ranges) && v[k] != null && v[k] !== ""))
+    fail("Seuls le pH et le chlore sont renseignés dans les analyses.");
   for (const [k, range] of Object.entries(ranges)) {
     const n = number(v[k], range[0], range[1]);
     if (n !== null) out[k] = n;

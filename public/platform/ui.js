@@ -204,22 +204,6 @@ export const specs = {
 export const metrics = {
   ph: { label: "pH", unit: "", max: 14, color: "#0e7e89" },
   chlorine: { label: "Chlore", unit: "mg/L", max: 30, color: "#687abb" },
-  bromine: { label: "Brome", unit: "mg/L", max: 30, color: "#687abb" },
-  salt: { label: "Sel", unit: "g/L", max: 50, color: "#ad8744" },
-  water_temp: { label: "Température", unit: "°C", max: 60, color: "#bd6d50" },
-  tac: { label: "TAC", unit: "mg/L", max: 1000, color: "#86558b" },
-  stabilizer: {
-    label: "Stabilisant",
-    unit: "mg/L",
-    max: 1000,
-    color: "#50813e",
-  },
-  hardness: {
-    label: "Dureté",
-    unit: "mg/L CaCO₃",
-    max: 2000,
-    color: "#587580",
-  },
 };
 export const refresh = () =>
   window.dispatchEvent(new HashChangeEvent("hashchange"));

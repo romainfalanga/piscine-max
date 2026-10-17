@@ -137,12 +137,15 @@ try {
   for (let i = 0; i < 20; i++) {
     try {
       const r = await request("/health");
-      if (r.status === 200 && r.data?.release === "single-professional-v2") {
-        const asset = await fetch(base + "/platform/calculations.js", {
+      if (r.status === 200 && r.data?.release === "maintenance-experience-v3") {
+        const asset = await fetch(base + "/platform/experience.css", {
           cache: "no-store",
           signal: AbortSignal.timeout(15000),
         });
-        if (!asset.ok || !(await asset.text()).includes("CALCULATORS")) {
+        if (
+          !asset.ok ||
+          !(await asset.text()).includes(".maintenance-dialog")
+        ) {
           await new Promise((resolve) => setTimeout(resolve, 3000));
           continue;
         }
@@ -152,13 +155,16 @@ try {
     } catch {}
     await new Promise((r) => setTimeout(r, 3000));
   }
-  assert.ok(ready, "New preview release and calculator asset not ready");
+  assert.ok(ready, "New preview release and design stylesheet not ready");
   checks.push("Pages Worker online");
   for (const [path, mime] of [
     ["/", "text/html"],
     ["/platform/app.js", "javascript"],
     ["/platform/style.css", "text/css"],
     ["/platform/classic.css", "text/css"],
+    ["/platform/experience.css", "text/css"],
+    ["/platform/maps.js", "javascript"],
+    ["/platform/manrope-latin.woff2", "font/woff2"],
     ["/platform/classic.js", "javascript"],
     ["/platform/calculations.js", "javascript"],
     ["/platform/tools.js", "javascript"],
@@ -186,10 +192,24 @@ try {
     pro = await signup("pro", "pro"),
     outsider = await signup("outsider", "client");
   checks.push("Client/pro signup and recovery codes work on Workers");
+  const addresses = await request(
+    "/addresses?q=Place%20de%20la%20Liberte%20Toulon",
+    "GET",
+    undefined,
+    owner.cookie,
+  );
+  assert.equal(addresses.status, 200, JSON.stringify(addresses.data));
+  assert.ok(addresses.data.items.length > 0);
+  assert.ok(Number.isFinite(addresses.data.items[0].latitude));
+  checks.push("IGN address suggestions work from Workers");
+
   const p = await request(
     "/pools",
     "POST",
-    { name: "Piscine de recette automatique", treatment: "chlorine" },
+    {
+      name: "Piscine de recette automatique",
+      location: addresses.data.items[0],
+    },
     owner.cookie,
   );
   assert.equal(p.status, 201);
@@ -286,6 +306,9 @@ try {
       measured_at: new Date(Date.now() - 1000).toISOString(),
       readings: { ph: 7.2, chlorine: 1.5 },
       notes: "Recette automatique sans données réelles",
+      checklist: (
+        await request("/pools/" + poolId, "GET", undefined, pro.cookie)
+      ).data.maintenance_tasks.map((t) => ({ ...t, done: true })),
     },
     pro.cookie,
   );

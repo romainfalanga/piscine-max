@@ -22,31 +22,31 @@ const step = (
   variant?: string,
 ): GuideStep => ({ id, title, detail, ...(variant ? { variant } : {}) });
 const sand = {
-  title: "Hayward — notice de filtre à sable",
+  title: "Hayward : notice de filtre à sable",
   url: "https://cdn.hayward.fr/production/media/3/4/6/6/6b626c.pdf",
 };
 const cartridge = {
-  title: "Pentair — sécurité des filtres à cartouche",
+  title: "Pentair : sécurité des filtres à cartouche",
   url: "https://www.pentair.com/en-us/pool-spa/education-support/homeowner-support/pool-filter-product-safety-help-center/clean-clear-rp-product-support.html",
 };
 const filtration = {
-  title: "BAYROL — entretien du filtre",
+  title: "BAYROL : entretien du filtre",
   url: "https://www.bayrol.fr/conseils/filtration-piscine-entretien-du-filtre",
 };
 const water = {
-  title: "Hanna — méthode et notice du photomètre piscine",
+  title: "Hanna : méthode et notice du photomètre piscine",
   url: "https://www.hannainstruments.fr/applications/photometre-piscine-alcalinite-acide-cyanurique-chlore-et-ph-en-mallette-avec-reactifs-hi971044r/",
 };
 const salt = {
-  title: "Zodiac — assistance des équipements",
+  title: "Zodiac : assistance des équipements",
   url: "https://www.zodiac-poolcare.fr/assistance/assistance-en-ligne",
 };
 const cleaning = {
-  title: "BAYROL — entretien de la piscine",
+  title: "BAYROL : entretien de la piscine",
   url: "https://www.bayrol.fr/nos-conseils/entretenir-sa-piscine",
 };
 const valves = {
-  title: "Hayward — fonctions de la vanne multivoies",
+  title: "Hayward : fonctions de la vanne multivoies",
   url: "https://www.hayward.fr/article/videos/la-vanne-d-un-filtre",
 };
 const backwash = [
@@ -321,7 +321,7 @@ export const MAINTENANCE_GUIDES: MaintenanceGuide[] = [
     sources: [
       sand,
       {
-        title: "Pentair — séquence de lavage assistée Maestro",
+        title: "Pentair : séquence de lavage assistée Maestro",
         url: "https://www.pentairpooleurope.com/sites/default/files/2023-07/im-maestro-full-fr.pdf",
       },
     ],
@@ -335,7 +335,7 @@ export const MAINTENANCE_GUIDES: MaintenanceGuide[] = [
     sections: [{ title: "Nettoyage et remise en service", steps: prefilter }],
     sources: [
       {
-        title: "Pentair — notice Poseidon",
+        title: "Pentair : notice Poseidon",
         url: "https://www.pentairpooleurope.com/sites/default/files/documents/manuals/1999__Poseidon_Manual_6_Lang_Rev._06.2017.pdf",
       },
       sand,

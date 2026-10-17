@@ -1,3 +1,4 @@
+import { itinerary } from "./maps.js";
 import {
   $,
   esc,
@@ -17,8 +18,7 @@ let directory = [],
   next = null,
   query = "",
   currentMap = null;
-const routeLink = (p) =>
-  `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent([p.address, p.city].filter(Boolean).join(", "))}`;
+const routeLink = itinerary;
 const heading = (title, subtitle, action = "") =>
   `<div class="page-heading"><div><h1>${title}</h1><p>${subtitle}</p></div>${action}</div>`;
 function toolbar() {
@@ -117,7 +117,7 @@ async function mapPage(main) {
       "Retrouvez les bassins suivis et ouvrez votre itinéraire.",
     ) +
     toolbar() +
-    `<p class="small-note">Les repères indiquent les communes, pas la position exacte des piscines. L’adresse partagée sert uniquement lorsque vous ouvrez un itinéraire.</p><div class="map-layout"><div><div id="pool-map" class="pool-map" role="region" aria-label="Carte des communes des piscines suivies"></div><p id="map-status" class="small-note" role="status"></p></div><div id="map-pool-list" class="map-pool-list"></div></div><div id="directory-more" style="margin-top:20px">${moreButton()}</div>`;
+    `<p class="small-note">Les adresses localisées positionnent chaque bassin. Les anciennes fiches sans adresse précise restent au niveau de la commune.</p><div class="map-layout"><div><div id="pool-map" class="pool-map" role="region" aria-label="Carte des piscines suivies"></div><p id="map-status" class="small-note" role="status"></p></div><div id="map-pool-list" class="map-pool-list"></div></div><div id="directory-more" style="margin-top:20px">${moreButton()}</div>`;
   wireSearch(main, mapPage);
   if (!document.querySelector("[data-leaflet-style]")) {
     const css = document.createElement("link");
@@ -160,7 +160,7 @@ function renderMapContent() {
   const towns = new Map();
   for (const p of directory) {
     if (p.latitude == null || p.longitude == null) continue;
-    const key = p.city_code || `${p.latitude},${p.longitude}`;
+    const key = `${p.latitude},${p.longitude}`;
     if (!towns.has(key)) towns.set(key, []);
     towns.get(key).push(p);
   }
@@ -170,7 +170,7 @@ function renderMapContent() {
       coords = [p.latitude, p.longitude];
     bounds.push(coords);
     L.marker(coords, {
-      title: p.city,
+      title: p.location_precision === "address" ? p.name : p.city,
       icon: L.divIcon({
         className: "classic-map-marker",
         html: String(pools.length),
@@ -178,12 +178,12 @@ function renderMapContent() {
       }),
     })
       .bindPopup(
-        `<strong>${esc(p.city)}</strong>${pools.map(poolLink).join("")}`,
+        `<strong>${esc(p.location_precision === "address" ? p.address : p.city)}</strong>${pools.map(poolLink).join("")}`,
       )
       .addTo(currentMap);
   }
   if (bounds.length)
-    currentMap.fitBounds(bounds, { padding: [40, 40], maxZoom: 12 });
+    currentMap.fitBounds(bounds, { padding: [40, 40], maxZoom: 17 });
   $("#map-pool-list").innerHTML =
     directory
       .map(

@@ -10,11 +10,12 @@ import { records } from "./platform/records";
 import { planning } from "./platform/planning";
 import { guides } from "./platform/guides";
 import { resources } from "./platform/resources";
+import { locations } from "./platform/locations";
 const app = new Hono<Env>();
 app.use("*", async (c, next) => {
   c.set("requestId", uid());
   c.header("X-Content-Type-Options", "nosniff");
-  c.header("Referrer-Policy", "same-origin");
+  c.header("Referrer-Policy", "strict-origin-when-cross-origin");
   c.header("X-Frame-Options", "DENY");
   c.header(
     "Permissions-Policy",
@@ -54,7 +55,7 @@ app.get("/api/health", (c) =>
     ok: true,
     application: "Peace in Blue App",
     version: 2,
-    release: "single-professional-v2",
+    release: "maintenance-experience-v3",
   }),
 );
 app.route("/api/auth", auth);
@@ -66,6 +67,7 @@ app.use("/api/*", async (c, next) => {
 });
 app.route("/api", account);
 app.route("/api", pools);
+app.route("/api", locations);
 app.route("/api", connections);
 app.route("/api", records);
 app.route("/api", planning);
@@ -78,7 +80,7 @@ app.use("/platform/*", serveStatic({ root: "./public" }));
 app.get("/favicon.svg", serveStatic({ path: "./public/platform/favicon.svg" }));
 app.get("*", (c) =>
   c.html(
-    `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0891b2"><meta name="description" content="Le carnet de votre piscine et le quotidien de votre pisciniste, réunis."><title>Peace in Blue App — Gestion d’entretien</title><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/platform/style.css"><link rel="stylesheet" href="/platform/classic.css"><script type="module" src="/platform/app.js"></script></head><body><div id="app"><div class="loading">Peace in Blue App · Chargement…</div></div><div id="modal"></div><div id="toast" role="status" aria-live="polite"></div></body></html>`,
+    `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0891b2"><meta name="description" content="Le carnet de votre piscine et le quotidien de votre pisciniste, réunis."><title>Peace in Blue App : Gestion d’entretien</title><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/platform/style.css"><link rel="stylesheet" href="/platform/classic.css"><link rel="stylesheet" href="/platform/experience.css"><script type="module" src="/platform/app.js"></script></head><body><div id="app"><div class="loading">Peace in Blue App · Chargement…</div></div><div id="modal"></div><div id="toast" role="status" aria-live="polite"></div></body></html>`,
   ),
 );
 app.onError((err, c) => {

@@ -30,7 +30,7 @@ Un ancien professionnel perd l'accès API aux rapports, photos et planning du do
 
 ## Outils professionnels et géographie
 
-La carte affiche les piscines dont l’accès est actif, avec des coordonnées communales approximatives. L’adresse exacte reste réservée aux membres autorisés du dossier.
+La carte affiche les piscines dont l’accès est actif, aux coordonnées de l’adresse sélectionnée auprès de l’IGN. Les fiches anciennes avec un centre communal restent signalées comme approximatives. Adresses et coordonnées ne sont accessibles qu’aux membres autorisés. Voir EXPERIENCE-ENTRETIEN.md pour la recherche et les prestataires cartographiques.
 
 Les endpoints d’entraide, de missions, de modération et d’assistant IA sont retirés. Les anciennes tables communautaires restent inutilisées dans la base pour permettre un retour arrière sans destruction de données. Les anciennes notifications liées à l’entraide ne sont plus retournées.
 

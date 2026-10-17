@@ -1,3 +1,5 @@
+import { maintenanceTasks } from "./maintenance";
+import { locationBody } from "./locations";
 import { Hono } from "hono";
 import {
   Env,
@@ -59,7 +61,7 @@ pools.get("/pools", async (c) => {
     ["client", "pro"] as const,
     "client",
   );
-  let q = `SELECT p.id,p.name,p.kind,p.city,p.city_code,p.address,p.latitude,p.longitude,p.treatment,p.volume,p.winterized,(SELECT user_id FROM pool_members WHERE pool_id=p.id AND kind='principal' AND revoked_at IS NULL) principal_id,m.kind membership,m.manager,(SELECT json_group_array(json_object('id',u.id,'name',u.name,'username',u.username)) FROM pool_members o JOIN users u ON u.id=o.user_id WHERE o.pool_id=p.id AND o.kind='owner' AND o.revoked_at IS NULL AND (o.expires_at IS NULL OR o.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))) owners_json,(SELECT max(r.measured_at) FROM records r WHERE r.pool_id=p.id AND r.published_at IS NOT NULL) last_reading FROM pools p JOIN pool_members m ON m.pool_id=p.id WHERE m.user_id=? AND ${ACTIVE} AND p.archived_at IS NULL AND ${mode === "client" ? "m.kind='owner'" : "m.kind='principal'"}`;
+  let q = `SELECT p.id,p.name,p.kind,p.city,p.city_code,p.address,p.latitude,p.longitude,p.location_precision,p.treatment,p.volume,p.winterized,(SELECT user_id FROM pool_members WHERE pool_id=p.id AND kind='principal' AND revoked_at IS NULL) principal_id,m.kind membership,m.manager,(SELECT json_group_array(json_object('id',u.id,'name',u.name,'username',u.username)) FROM pool_members o JOIN users u ON u.id=o.user_id WHERE o.pool_id=p.id AND o.kind='owner' AND o.revoked_at IS NULL AND (o.expires_at IS NULL OR o.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))) owners_json,(SELECT max(r.measured_at) FROM records r WHERE r.pool_id=p.id AND r.published_at IS NOT NULL) last_reading FROM pools p JOIN pool_members m ON m.pool_id=p.id WHERE m.user_id=? AND ${ACTIVE} AND p.archived_at IS NULL AND ${mode === "client" ? "m.kind='owner'" : "m.kind='principal'"}`;
   const binds: any[] = [who(c).id];
   if (after) {
     q += " AND p.id>?";
@@ -100,11 +102,21 @@ pools.post("/pools", async (c) => {
     );
   if (client?.id === u.id)
     fail("Utilisez votre espace client pour votre piscine personnelle.");
-  const p = b.city_code ? await place(str(b.city_code, 5, true)) : null;
+  const legacy =
+    !b.location && b.city_code ? await place(str(b.city_code, 5, true)) : null;
+  const loc = locationBody(b);
+  if (legacy)
+    Object.assign(loc, {
+      code: legacy.code,
+      city: legacy.name,
+      lat: legacy.lat,
+      lng: legacy.lng,
+      precision: "municipality",
+    });
   const ops = [
     stmt(
       c,
-      "INSERT INTO pools(id,name,kind,city_code,city,latitude,longitude,address,volume,treatment,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+      "INSERT INTO pools(id,name,kind,city_code,city,latitude,longitude,address,volume,treatment,created_by,location_precision) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
       id,
       str(b.name, 80, true),
       choice(
@@ -120,11 +132,11 @@ pools.post("/pools", async (c) => {
         ] as const,
         "private",
       ),
-      p?.code || null,
-      p?.name || null,
-      p?.lat ?? null,
-      p?.lng ?? null,
-      str(b.address, 300),
+      loc.code,
+      loc.city,
+      loc.lat,
+      loc.lng,
+      loc.address,
       number(b.volume, 0.1, 100000),
       choice(
         b.treatment,
@@ -132,6 +144,7 @@ pools.post("/pools", async (c) => {
         "unknown",
       ),
       u.id,
+      loc.precision,
     ),
     stmt(
       c,
@@ -185,6 +198,7 @@ pools.get("/pools/:id", async (c) => {
   return c.json({
     ...p,
     thresholds: jsonParse(p.thresholds),
+    maintenance_tasks: maintenanceTasks(p),
     members,
     invitations: pending,
   });
@@ -192,19 +206,18 @@ pools.get("/pools/:id", async (c) => {
 pools.put("/pools/:id", async (c) => {
   const p = await access(c, c.req.param("id"));
   const b = await c.req.json();
-  const location =
-    b.city_code && b.city_code !== p.city_code
-      ? await place(str(b.city_code, 5, true))
-      : null;
-  const thresholdKeys = [
-    "ph",
-    "chlorine",
-    "salt",
-    "tac",
-    "stabilizer",
-    "bromine",
-    "hardness",
-  ];
+  const loc = locationBody(b, p);
+  if (!b.location && b.city_code && b.city_code !== p.city_code) {
+    const v = await place(str(b.city_code, 5, true));
+    Object.assign(loc, {
+      code: v.code,
+      city: v.name,
+      lat: v.lat,
+      lng: v.lng,
+      precision: "municipality",
+    });
+  }
+  const thresholdKeys = ["ph", "chlorine"];
   const th: Record<string, number[]> = {};
   for (const k of thresholdKeys) {
     const pair = b.thresholds?.[k];
@@ -219,7 +232,7 @@ pools.put("/pools/:id", async (c) => {
   await c.env.DB.batch([
     stmt(
       c,
-      "UPDATE pools SET name=?,kind=?,city_code=?,city=?,latitude=?,longitude=?,address=?,access_notes=?,volume=?,treatment=?,filtration=?,equipment=?,routine=?,client_advice=?,thresholds=?,winterized=? WHERE id=?",
+      "UPDATE pools SET name=?,kind=?,city_code=?,city=?,latitude=?,longitude=?,address=?,access_notes=?,volume=?,treatment=?,filtration=?,equipment=?,routine=?,client_advice=?,thresholds=?,winterized=?,location_precision=?,filter_type=?,has_steps=?,has_skimmers=?,has_prefilter=? WHERE id=?",
       str(b.name, 80, true),
       choice(
         b.kind,
@@ -234,11 +247,11 @@ pools.put("/pools/:id", async (c) => {
         ] as const,
         p.kind,
       ),
-      location?.code || p.city_code,
-      location?.name || p.city,
-      location?.lat ?? p.latitude,
-      location?.lng ?? p.longitude,
-      str(b.address, 300),
+      loc.code,
+      loc.city,
+      loc.lat,
+      loc.lng,
+      loc.address,
       str(b.access_notes, 1000),
       number(b.volume, 0.1, 100000),
       choice(
@@ -252,6 +265,23 @@ pools.put("/pools/:id", async (c) => {
       str(b.client_advice, 2000),
       JSON.stringify(th),
       b.winterized ? 1 : 0,
+      loc.precision,
+      choice(
+        b.filter_type,
+        ["unknown", "sand", "glass", "cartridge", "other"] as const,
+        p.filter_type,
+      ),
+      b.has_steps === undefined ? p.has_steps : b.has_steps === true ? 1 : 0,
+      b.has_skimmers === undefined
+        ? p.has_skimmers
+        : b.has_skimmers === true
+          ? 1
+          : 0,
+      b.has_prefilter === undefined
+        ? p.has_prefilter
+        : b.has_prefilter === true
+          ? 1
+          : 0,
       p.id,
     ),
     audit(c, "pool.updated", p.id, p.id),

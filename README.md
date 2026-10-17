@@ -50,3 +50,7 @@ Tests navigateur : `npx playwright-core install chromium`, puis `BROWSER_PLAYWRI
 API Hono dans `src/platform/`, entrée et protections HTTP dans `src/index.tsx`. Frontend en modules JavaScript natifs dans `public/platform/`, sans CDN de code tiers. Migrations ordonnées dans `schema/`, tests de droits et métier dans `tests/platform.test.ts`. Base de questions conservée dans `src/quiz-data.ts`, guides dans `src/maintenance-guides.ts`, calculs purs dans `public/platform/calculations.js`.
 
 Le build n'exécute aucune migration et ne réinitialise aucune base. Ne pas appliquer ce nouveau schéma à la base historique : utiliser les nouvelles bases dédiées décrites dans le guide de déploiement.
+
+## Parcours entretien
+
+Création simple, adresses IGN et carte privée, analyses pH/chlore, checklist selon équipements et compte rendu client détaillé. Voir [le plan et les choix de conception](docs/EXPERIENCE-ENTRETIEN.md).

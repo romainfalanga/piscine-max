@@ -1,3 +1,8 @@
+import {
+  maintenanceTasks,
+  taskStates,
+  validateCompletion,
+} from "./maintenance";
 import { Hono } from "hono";
 import {
   Env,
@@ -32,15 +37,15 @@ async function visibleRecord(c: any, id: string) {
     fail("Compte rendu inaccessible.", 404);
   return { r, p };
 }
-function recordBody(b: any) {
-  const list = Array.isArray(b.checklist)
-    ? b.checklist
-        .slice(0, 30)
-        .map((v: any) => ({
+function recordBody(b: any, template?: any[]) {
+  const list = template
+    ? taskStates(template, b.checklist)
+    : Array.isArray(b.checklist)
+      ? b.checklist.slice(0, 30).map((v: any) => ({
           label: str(v.label, 150, true),
           done: v.done === true,
         }))
-    : [];
+      : [];
   return {
     measured: instant(b.measured_at),
     readings: JSON.stringify(readings(b.readings)),
@@ -88,7 +93,7 @@ records.get("/pools/:id/trends", async (c) => {
   const start = new Date(Date.now() - days * 86400000).toISOString();
   const list = await rows(
     c,
-    "SELECT substr(r.measured_at,1,10) date,avg(json_extract(r.readings,'$.ph')) ph,avg(json_extract(r.readings,'$.chlorine')) chlorine,avg(json_extract(r.readings,'$.bromine')) bromine,avg(json_extract(r.readings,'$.salt')) salt,avg(json_extract(r.readings,'$.tac')) tac,avg(json_extract(r.readings,'$.stabilizer')) stabilizer,avg(json_extract(r.readings,'$.water_temp')) water_temp,avg(json_extract(r.readings,'$.hardness')) hardness,count(*) samples FROM records r WHERE r.pool_id=? AND r.published_at IS NOT NULL AND r.measured_at>=? AND NOT EXISTS(SELECT 1 FROM records x WHERE x.correction_of=r.id AND x.published_at IS NOT NULL) GROUP BY substr(r.measured_at,1,10) ORDER BY date LIMIT 1826",
+    "SELECT substr(r.measured_at,1,10) date,avg(json_extract(r.readings,'$.ph')) ph,avg(json_extract(r.readings,'$.chlorine')) chlorine,count(*) samples FROM records r WHERE r.pool_id=? AND r.published_at IS NOT NULL AND r.measured_at>=? AND NOT EXISTS(SELECT 1 FROM records x WHERE x.correction_of=r.id AND x.published_at IS NOT NULL) GROUP BY substr(r.measured_at,1,10) ORDER BY date LIMIT 1826",
     p.id,
     start,
   );
@@ -117,12 +122,13 @@ records.post("/pools/:id/records", async (c) => {
       fail("Identifiant déjà utilisé.", 409);
     return c.json({ id, replayed: true });
   }
-  const v = recordBody(b);
+  let template = kind === "visit" ? maintenanceTasks(p) : undefined;
+  let checklistVersion = kind === "visit" ? 1 : 0;
   let appointment = null;
   if (b.appointment_id) {
     appointment = await row<any>(
       c,
-      "SELECT id FROM appointments WHERE id=? AND pool_id=? AND pro_id=? AND status='planned'",
+      `SELECT id FROM appointments WHERE id=? AND pool_id=? AND pro_id=? AND ${b.correction_of ? "status IN('planned','done')" : "status='planned'"}`,
       str(b.appointment_id, 36, true),
       p.id,
       u.id,
@@ -140,12 +146,20 @@ records.post("/pools/:id/records", async (c) => {
     );
     if (!old) fail("Seul l’auteur peut corriger ce compte rendu.", 403);
     if (old.kind !== kind) fail("Une correction conserve le type du relevé.");
+    if (appointment && appointment.id !== old.appointment_id)
+      fail("Une correction conserve le rendez-vous d’origine.");
     correction = old.id;
+    if (kind === "visit") {
+      checklistVersion = old.checklist_version;
+      template =
+        old.checklist_version === 1 ? jsonParse(old.checklist, []) : undefined;
+    }
   }
+  const v = recordBody(b, template);
   await c.env.DB.batch([
     stmt(
       c,
-      "INSERT INTO records(id,pool_id,author_id,author_name,kind,measured_at,readings,method,notes,products,checklist,duration,appointment_id,correction_of) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      "INSERT INTO records(id,pool_id,author_id,author_name,kind,measured_at,readings,method,notes,products,checklist,duration,appointment_id,correction_of,checklist_version) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
       id,
       p.id,
       u.id,
@@ -160,6 +174,7 @@ records.post("/pools/:id/records", async (c) => {
       v.duration,
       appointment?.id || null,
       correction,
+      checklistVersion,
     ),
     audit(c, "record.drafted", p.id, id),
   ]);
@@ -179,7 +194,10 @@ records.put("/records/:id", async (c) => {
   if (r.author_id !== who(c).id || r.published_at)
     fail("Crée une correction pour modifier un compte rendu publié.", 403);
   const b = await c.req.json(),
-    v = recordBody(b);
+    v = recordBody(
+      b,
+      r.checklist_version === 1 ? jsonParse(r.checklist, []) : undefined,
+    );
   const res = await stmt(
     c,
     "UPDATE records SET measured_at=?,readings=?,method=?,notes=?,products=?,checklist=?,duration=?,revision=revision+1 WHERE id=? AND revision=? AND published_at IS NULL",
@@ -202,13 +220,16 @@ records.post("/records/:id/publish", async (c) => {
   if (r.author_id !== who(c).id)
     fail("Seul l’auteur peut partager ce compte rendu.", 403);
   if (r.published_at) return c.json({ ok: true, replayed: true });
+  if (r.kind === "visit" && r.checklist_version === 1)
+    validateCompletion(jsonParse(r.checklist, []), jsonParse(r.readings));
   const at = now();
-  await c.env.DB.batch([
+  const published = await c.env.DB.batch([
     stmt(
       c,
-      "UPDATE records SET published_at=? WHERE id=? AND published_at IS NULL",
+      "UPDATE records SET published_at=? WHERE id=? AND published_at IS NULL AND revision=? AND EXISTS(SELECT 1 FROM pool_members m JOIN pools p ON p.id=m.pool_id WHERE m.pool_id=records.pool_id AND m.user_id=records.author_id AND m.revoked_at IS NULL AND p.archived_at IS NULL AND (m.kind='principal' OR (records.kind='analysis' AND m.kind='owner')))",
       at,
       r.id,
+      r.revision,
     ),
     stmt(
       c,
@@ -227,14 +248,22 @@ records.post("/records/:id/publish", async (c) => {
       ? [
           stmt(
             c,
-            "UPDATE appointments SET status='done' WHERE id=? AND pro_id=?",
+            "UPDATE appointments SET status='done' WHERE id=? AND pro_id=? AND EXISTS(SELECT 1 FROM records WHERE id=? AND published_at=? AND revision=?)",
             r.appointment_id,
             who(c).id,
+            r.id,
+            at,
+            r.revision,
           ),
         ]
       : []),
     audit(c, "record.published", p.id, r.id),
   ]);
+  if (!published[0].meta.changes)
+    fail(
+      "Le brouillon ou vos accès ont changé. Rouvrez le passage avant de partager.",
+      409,
+    );
   return c.json({ ok: true });
 });
 records.post("/records/:id/photos", async (c) => {

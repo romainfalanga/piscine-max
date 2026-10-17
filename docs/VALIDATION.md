@@ -1,4 +1,11 @@
-# Vérifications du 15 octobre 2026 — Peace in Blue App
+# Vérifications du 17 octobre 2026
+
+- 26 tests API et calculs, dont trois nouveaux parcours : adresse privée et remise à zéro des anciennes coordonnées ; checklist selon équipements, validation et conservation de l’historique ; restriction des nouvelles analyses à pH/chlore sans effacer l’ancien suivi.
+- Les fixtures existantes de passage effectuent désormais les tâches avant publication. La migration d’anciens accès est testée sur un schéma historique réel puis amenée au schéma courant.
+- Le navigateur couvre la création avec autocomplétion, l’absence de volume/traitement au départ, la modification des équipements, le brouillon d’entretien privé, sa reprise et le détail publié côté client. Contrôle sur ordinateur et mobile, absence de débordement et d’erreur JavaScript.
+- Le service IGN a aussi été interrogé réellement sur une adresse publique et a renvoyé ses coordonnées. Les tests locaux utilisent une réponse fixe pour rester reproductibles. Le workflow de recette vérifie les API sur Cloudflare après déploiement.
+
+## Historique : vérifications du 15 octobre 2026 — Peace in Blue App
 
 - 23 tests de calculs et d’API réussis : formules et unités des 16 outils, entrées incohérentes, droits, révocation, comptes rendus, création client/pro, demande professionnelle et invitation client, reprise d’un dossier existant sans perte d’historique, principal unique, invitations concurrentes, migration des anciens accès temporaires, suppression des routes communautaires/IA, progression des guides privée et sauvegardes concurrentes, révision courte/par thème et historique privé.
 - TypeScript et build Vite réussis. Les migrations 0001, 0002 et 0003 sont appliquées dans chaque base de test.

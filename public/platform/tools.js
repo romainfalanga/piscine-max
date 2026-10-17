@@ -176,7 +176,7 @@ async function library(main) {
 function procedureForm(p = {}) {
   modal(
     p.id ? "Modifier une fiche" : "Votre nouvelle fiche",
-    `${field("Titre", "title", p.title || "", "text", 'required maxlength="160"')}${area("Contenu — une étape par ligne pour une procédure", "body", p.body || "", 'required maxlength="12000" rows="10"')}<label class="check"><input type="checkbox" name="important" ${p.important ? "checked" : ""}> Garder cette fiche en tête de liste</label>`,
+    `${field("Titre", "title", p.title || "", "text", 'required maxlength="160"')}${area("Contenu : une étape par ligne pour une procédure", "body", p.body || "", 'required maxlength="12000" rows="10"')}<label class="check"><input type="checkbox" name="important" ${p.important ? "checked" : ""}> Garder cette fiche en tête de liste</label>`,
     async (b) => {
       await api(
         "/procedures" + (p.id ? "/" + p.id : ""),

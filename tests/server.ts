@@ -12,6 +12,24 @@ const env = {
 };
 const realFetch = globalThis.fetch;
 globalThis.fetch = async (input: any, init?: any) => {
+  if (String(input).startsWith("https://data.geopf.fr/geocodage/search")) {
+    return new Response(
+      JSON.stringify({
+        features: [
+          {
+            geometry: { type: "Point", coordinates: [5.7523, 43.1369] },
+            properties: {
+              label: "12 Rue de la République 83150 Bandol",
+              city: "Bandol",
+              citycode: "83009",
+              type: "housenumber",
+            },
+          },
+        ],
+      }),
+      { headers: { "Content-Type": "application/json" } },
+    );
+  }
   if (String(input).startsWith("https://geo.api.gouv.fr/communes")) {
     const url = new URL(String(input)),
       code = url.pathname.split("/")[2];
@@ -32,7 +50,7 @@ export const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url || "/", `http://127.0.0.1:${port}`);
     if (
-      /^\/platform\/[\w.-]+\.(js|css|svg)$/.test(url.pathname) ||
+      /^\/platform\/[\w.-]+\.(js|css|svg|woff2)$/.test(url.pathname) ||
       url.pathname === "/favicon.svg"
     ) {
       const path =
@@ -42,9 +60,11 @@ export const server = createServer(async (req, res) => {
       res.writeHead(200, {
         "Content-Type": path.endsWith(".js")
           ? "text/javascript"
-          : path.endsWith(".css")
-            ? "text/css"
-            : "image/svg+xml",
+          : path.endsWith(".woff2")
+            ? "font/woff2"
+            : path.endsWith(".css")
+              ? "text/css"
+              : "image/svg+xml",
       });
       res.end(readFileSync(new URL("../public" + path, import.meta.url)));
       return;

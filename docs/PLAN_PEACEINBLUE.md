@@ -2,6 +2,8 @@
 
 Ce document remplace les orientations communautaires précédentes, conformément à la dernière demande de Romain. L’application évolue dans le dépôt et sur la branche existants ; le nom exact est **Peace in Blue App**.
 
+La refonte du 17 octobre est décrite dans [EXPERIENCE-ENTRETIEN.md](EXPERIENCE-ENTRETIEN.md) : création simple, adresses sur carte, suivi pH/chlore et checklist partagée adaptée aux équipements.
+
 ## Objectif
 
 Un outil quotidien pour l’organisation du pisciniste et un carnet partagé permettant au client de suivre ses piscines. Conserver l’interface cyan/slate et la navigation de l’application originale en la simplifiant.

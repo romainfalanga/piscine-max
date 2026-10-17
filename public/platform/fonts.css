@@ -1,1 +1,7 @@
-/* System font stack keeps the application independent of third-party font requests. */
+@font-face {
+  font-family: Manrope;
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url("/platform/manrope-latin.woff2") format("woff2");
+}

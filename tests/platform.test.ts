@@ -8,6 +8,25 @@ import { cleanImage } from "../src/platform/uploads";
 const realFetch = globalThis.fetch;
 globalThis.fetch = async (input: any, init?: any) => {
   const url = String(input);
+  if (url.startsWith("https://data.geopf.fr/geocodage/search")) {
+    if (url.includes("indisponible")) throw new Error("Network fixture");
+    return new Response(
+      JSON.stringify({
+        features: [
+          {
+            geometry: { type: "Point", coordinates: [5.7523, 43.1369] },
+            properties: {
+              label: "12 Rue de la République 83150 Bandol",
+              city: "Bandol",
+              citycode: "83009",
+              type: "housenumber",
+            },
+          },
+        ],
+      }),
+      { headers: { "Content-Type": "application/json" } },
+    );
+  }
   if (url.startsWith("https://geo.api.gouv.fr/communes/"))
     return new Response(
       JSON.stringify({
@@ -62,6 +81,28 @@ async function request(
     token: response.headers.get("set-cookie")?.split(";")[0],
     response,
   };
+}
+async function completeVisit(env: any, id: string, token: string) {
+  const { data: r } = await request(
+    env,
+    "/records/" + id,
+    "GET",
+    undefined,
+    token,
+  );
+  const saved = await request(
+    env,
+    "/records/" + id,
+    "PUT",
+    {
+      ...r,
+      readings: { ph: 7.2, chlorine: 1.5 },
+      checklist: r.checklist.map((t: any) => ({ ...t, done: true })),
+      revision: r.revision,
+    },
+    token,
+  );
+  assert.equal(saved.status, 200, JSON.stringify(saved.data));
 }
 async function user(env: any, name: string, role = "client") {
   const r = await request(env, "/auth/signup", "POST", {
@@ -292,6 +333,7 @@ test("Exactly one principal, no duplicate invitation acceptance, and revocation 
       .status,
     404,
   );
+  await completeVisit(e, r.data.id, p.token);
   assert.equal(
     (
       await request(
@@ -558,6 +600,7 @@ test("Planning exceptions are isolated, deleting recurrence preserves completed 
     },
     p.token,
   );
+  await completeVisit(e, rec.data.id, p.token);
   await request(e, "/records/" + rec.data.id + "/publish", "POST", {}, p.token);
   await request(e, "/schedules/" + s.data.id, "DELETE", {}, p.token);
   const history = await request(
@@ -708,6 +751,7 @@ test("Classic clients, map and activity stats only expose current assignments an
       .visits,
     0,
   );
+  await completeVisit(e, draft.data.id, pro.token);
   await request(e, `/records/${draft.data.id}/publish`, "POST", {}, pro.token);
   const stats = (
     await request(e, "/activity-summary", "GET", undefined, pro.token)
@@ -1449,7 +1493,15 @@ test("Migration revokes legacy temporary access and schedules without deleting p
   const e = { ...context(), DB: new LocalD1("0002_guide_progress.sql") },
     owner = await user(e, "alice"),
     pro = await user(e, "paul", "pro"),
-    id = await pool(e, owner);
+    id = crypto.randomUUID();
+  e.DB.db
+    .prepare("INSERT INTO pools(id,name,created_by) VALUES(?,?,?)")
+    .run(id, "Ancien bassin", owner.user.id);
+  e.DB.db
+    .prepare(
+      "INSERT INTO pool_members(id,pool_id,user_id,kind,manager) VALUES(?,?,?,'owner',1)",
+    )
+    .run(crypto.randomUUID(), id, owner.user.id);
   e.DB.db
     .prepare(
       "INSERT INTO pool_members(id,pool_id,user_id,kind,expires_at) VALUES(?,?,?,'temporary','2099-01-01T00:00:00Z')",
@@ -1468,6 +1520,12 @@ test("Migration revokes legacy temporary access and schedules without deleting p
   e.DB.db.exec(
     readFileSync(
       new URL("../schema/0003_single_professional.sql", import.meta.url),
+      "utf8",
+    ),
+  );
+  e.DB.db.exec(
+    readFileSync(
+      new URL("../schema/0004_maintenance_location.sql", import.meta.url),
       "utf8",
     ),
   );
@@ -1504,4 +1562,325 @@ test("Migration revokes legacy temporary access and schedules without deleting p
       .membership,
     "principal",
   );
+});
+
+test("Address suggestions create a private precise point and editing the address clears stale coordinates", async () => {
+  const e = context(),
+    owner = await user(e, "addressowner"),
+    other = await user(e, "addressother", "pro");
+  assert.equal((await request(e, "/addresses?q=Bandol")).status, 401);
+  const suggestions = await request(
+    e,
+    "/addresses?q=12%20rue%20republique",
+    "GET",
+    undefined,
+    owner.token,
+  );
+  assert.equal(suggestions.status, 200);
+  assert.equal(suggestions.data.items[0].city_code, "83009");
+  assert.equal(
+    (
+      await request(
+        e,
+        "/addresses?q=indisponible",
+        "GET",
+        undefined,
+        owner.token,
+      )
+    ).status,
+    503,
+  );
+  const created = await request(
+    e,
+    "/pools",
+    "POST",
+    { name: "Bassin localisé", location: suggestions.data.items[0] },
+    owner.token,
+  );
+  assert.equal(created.status, 201, JSON.stringify(created.data));
+  let p = (
+    await request(e, "/pools/" + created.data.id, "GET", undefined, owner.token)
+  ).data;
+  assert.equal(p.longitude, 5.7523);
+  assert.equal(p.latitude, 43.1369);
+  assert.equal(p.location_precision, "address");
+  assert.equal(p.treatment, "unknown");
+  assert.equal(p.volume, null);
+  assert.equal(
+    (await request(e, "/pools/" + p.id, "GET", undefined, other.token)).status,
+    404,
+  );
+  assert.equal(
+    (await request(e, "/pools?mode=pro", "GET", undefined, other.token)).data
+      .items.length,
+    0,
+  );
+  const invalid = await request(
+    e,
+    "/pools",
+    "POST",
+    {
+      name: "Invalid",
+      location: { ...suggestions.data.items[0], latitude: 100 },
+    },
+    owner.token,
+  );
+  assert.equal(invalid.status, 400);
+  assert.equal(
+    (
+      await request(
+        e,
+        "/pools/" + p.id,
+        "PUT",
+        { name: p.name, address: "Une autre adresse" },
+        owner.token,
+      )
+    ).status,
+    200,
+  );
+  p = (await request(e, "/pools/" + p.id, "GET", undefined, owner.token)).data;
+  assert.equal(p.latitude, null);
+  assert.equal(p.longitude, null);
+  assert.equal(p.location_precision, "none");
+});
+
+test("Maintenance follows equipment, requires truthful task states and shares only the completed snapshot", async () => {
+  const e = context(),
+    owner = await user(e, "careowner"),
+    pro = await user(e, "carepro", "pro"),
+    id = await pool(e, owner);
+  await invite(e, owner, pro, id, "principal");
+  assert.equal(
+    (
+      await request(
+        e,
+        "/pools/" + id,
+        "PUT",
+        {
+          name: "Mon bassin",
+          treatment: "chlorine",
+          filter_type: "glass",
+          has_steps: false,
+          has_prefilter: false,
+          has_skimmers: true,
+        },
+        owner.token,
+      )
+    ).status,
+    200,
+  );
+  let p = (await request(e, "/pools/" + id, "GET", undefined, pro.token)).data;
+  let ids = p.maintenance_tasks.map((t: any) => t.id);
+  for (const key of [
+    "level",
+    "algae",
+    "waterline",
+    "surface",
+    "floor",
+    "walls",
+    "skimmers",
+    "analysis",
+    "backwash",
+    "rinse",
+    "tablets",
+  ])
+    assert.ok(ids.includes(key), key);
+  for (const key of ["steps", "prefilter", "cartridge", "electrolyser"])
+    assert.ok(!ids.includes(key), key);
+  const created = await request(
+    e,
+    "/pools/" + id + "/records",
+    "POST",
+    { kind: "visit", measured_at: measured() },
+    pro.token,
+  );
+  assert.equal(created.status, 201);
+  const rid = created.data.id;
+  assert.equal(
+    (await request(e, "/records/" + rid + "/publish", "POST", {}, pro.token))
+      .status,
+    400,
+  );
+  assert.equal(
+    (await request(e, "/records/" + rid, "GET", undefined, owner.token)).status,
+    404,
+  );
+  let r = (await request(e, "/records/" + rid, "GET", undefined, pro.token))
+    .data;
+  const save = async (list: any[], values: any) => {
+    const v = await request(
+      e,
+      "/records/" + rid,
+      "PUT",
+      { ...r, checklist: list, readings: values, revision: r.revision },
+      pro.token,
+    );
+    assert.equal(v.status, 200, JSON.stringify(v.data));
+    r = (await request(e, "/records/" + rid, "GET", undefined, pro.token)).data;
+  };
+  await save(
+    r.checklist.map((t: any) => ({
+      ...t,
+      done: true,
+      label: "Un libellé falsifié",
+    })),
+    { ph: 7.2 },
+  );
+  assert.equal(
+    (await request(e, "/records/" + rid + "/publish", "POST", {}, pro.token))
+      .status,
+    400,
+  );
+  assert.notEqual(r.checklist[0].label, "Un libellé falsifié");
+  await save(
+    r.checklist.map((t: any) => ({
+      ...t,
+      done: t.id !== "rinse",
+      skipped: t.id === "rinse",
+      reason: t.id === "rinse" ? "Oublié" : "",
+    })),
+    { ph: 7.2, chlorine: 1.4 },
+  );
+  assert.equal(
+    (await request(e, "/records/" + rid + "/publish", "POST", {}, pro.token))
+      .status,
+    400,
+  );
+  await save(
+    r.checklist.map((t: any) => ({
+      ...t,
+      done: !["backwash", "rinse"].includes(t.id),
+      skipped: ["backwash", "rinse"].includes(t.id),
+      reason: "",
+    })),
+    { ph: 7.2, chlorine: 1.4 },
+  );
+  assert.equal(
+    (await request(e, "/records/" + rid + "/publish", "POST", {}, pro.token))
+      .status,
+    400,
+  );
+  await save(
+    r.checklist.map((t: any) => ({
+      ...t,
+      reason: t.skipped ? "Filtre propre, lavage non nécessaire" : "",
+    })),
+    { ph: 7.2, chlorine: 1.4 },
+  );
+  assert.equal(
+    (await request(e, "/records/" + rid + "/publish", "POST", {}, pro.token))
+      .status,
+    200,
+  );
+  const client = (
+    await request(e, "/records/" + rid, "GET", undefined, owner.token)
+  ).data;
+  assert.equal(client.checklist.filter((t: any) => t.skipped).length, 2);
+  assert.ok(client.checklist.find((t: any) => t.id === "waterline").done);
+  assert.equal(
+    (
+      await request(
+        e,
+        "/pools/" + id,
+        "PUT",
+        {
+          name: "Mon bassin",
+          treatment: "salt",
+          filter_type: "cartridge",
+          has_steps: true,
+          has_prefilter: true,
+        },
+        owner.token,
+      )
+    ).status,
+    200,
+  );
+  p = (await request(e, "/pools/" + id, "GET", undefined, pro.token)).data;
+  ids = p.maintenance_tasks.map((t: any) => t.id);
+  for (const key of ["electrolyser", "cartridge", "steps", "prefilter"])
+    assert.ok(ids.includes(key), key);
+  for (const key of ["tablets", "backwash", "rinse"])
+    assert.ok(!ids.includes(key), key);
+  assert.deepEqual(
+    (await request(e, "/records/" + rid, "GET", undefined, owner.token)).data
+      .checklist,
+    client.checklist,
+  );
+  const correction = await request(
+    e,
+    "/pools/" + id + "/records",
+    "POST",
+    { ...client, id: crypto.randomUUID(), correction_of: rid },
+    pro.token,
+  );
+  assert.equal(correction.status, 201, JSON.stringify(correction.data));
+  assert.ok(
+    (
+      await request(
+        e,
+        "/records/" + correction.data.id,
+        "GET",
+        undefined,
+        pro.token,
+      )
+    ).data.checklist.some((t: any) => t.id === "backwash"),
+  );
+});
+
+test("New analyses only accept pH and chlorine while historical readings remain stored", async () => {
+  const e = context(),
+    owner = await user(e, "measureowner"),
+    id = await pool(e, owner);
+  assert.equal(
+    (
+      await request(
+        e,
+        "/pools/" + id + "/records",
+        "POST",
+        {
+          kind: "analysis",
+          measured_at: measured(),
+          readings: { ph: 7.2, salt: 4 },
+        },
+        owner.token,
+      )
+    ).status,
+    400,
+  );
+  const r = await request(
+    e,
+    "/pools/" + id + "/records",
+    "POST",
+    {
+      kind: "analysis",
+      measured_at: measured(),
+      readings: { ph: 7.2, chlorine: 0 },
+    },
+    owner.token,
+  );
+  assert.equal(r.status, 201);
+  assert.equal(
+    (
+      await request(
+        e,
+        "/records/" + r.data.id + "/publish",
+        "POST",
+        {},
+        owner.token,
+      )
+    ).status,
+    200,
+  );
+  e.DB.db
+    .prepare("UPDATE records SET readings=? WHERE id=?")
+    .run(JSON.stringify({ ph: 7.2, chlorine: 0, salt: 4 }), r.data.id);
+  const raw = (
+    await request(e, "/records/" + r.data.id, "GET", undefined, owner.token)
+  ).data;
+  assert.equal(raw.readings.salt, 4);
+  const trend = (
+    await request(e, "/pools/" + id + "/trends", "GET", undefined, owner.token)
+  ).data.items[0];
+  assert.equal(trend.chlorine, 0);
+  assert.equal(trend.salt, undefined);
 });

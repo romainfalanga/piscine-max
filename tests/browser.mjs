@@ -57,17 +57,26 @@ try {
   await page
     .getByLabel("Nom de la piscine", { exact: true })
     .fill("La piscine des Oliviers");
-  await page.locator("#city-search").fill("Bandol");
+  assert.equal(
+    await page.getByText("Une autre piscine ?", { exact: true }).count(),
+    0,
+  );
+  assert.equal(await page.locator("[name=volume]").count(), 0);
+  assert.equal(await page.locator("[name=treatment]").count(), 0);
   await page
-    .getByRole("button", { name: "Rechercher", exact: true })
-    .last()
+    .getByLabel("Adresse de la piscine", { exact: true })
+    .fill("12 rue republique Bandol");
+  await page
+    .getByRole("option", {
+      name: "12 Rue de la République 83150 Bandol",
+      exact: true,
+    })
     .click();
-  await page.locator("[name=city_code]").selectOption("83009");
-  await page
-    .getByLabel("Adresse exacte", { exact: false })
-    .fill("Adresse de démonstration");
-  await page.getByLabel("Volume (m³)", { exact: false }).fill("48");
-  await page.getByLabel("Traitement", { exact: true }).selectOption("salt");
+  await page.locator("#address-preview .address-pin").waitFor();
+  await page.screenshot({
+    path: ".test-artifacts/create-address.png",
+    fullPage: true,
+  });
   await page
     .getByRole("button", { name: "Créer ma piscine", exact: true })
     .click();
@@ -81,7 +90,10 @@ try {
     .click();
   await page.getByLabel("pH", { exact: true }).fill("7.3");
   await page.getByLabel("Chlore (mg/L)", { exact: true }).fill("1.8");
-  await page.getByLabel("Température (°C)", { exact: true }).fill("25");
+  assert.equal(
+    await page.getByLabel("Température (°C)", { exact: true }).count(),
+    0,
+  );
   await page
     .getByLabel("Observations partagées", { exact: false })
     .fill("Eau claire, filtration régulière. Le carnet commence ici.");
@@ -204,6 +216,14 @@ try {
   });
   await page.getByRole("button", { name: "Commencer", exact: true }).click();
   await page.getByLabel("pH", { exact: true }).fill("7.2");
+  await page.getByLabel("Chlore (mg/L)", { exact: true }).fill("1.6");
+  await page.screenshot({
+    path: ".test-artifacts/visit-workspace-desktop.png",
+    fullPage: true,
+  });
+  for (const checkbox of await page.locator(".task-checkbox input").all())
+    await checkbox.check();
+
   await page
     .getByRole("button", { name: "Terminer et partager", exact: true })
     .click();
@@ -492,7 +512,7 @@ try {
     .getByLabel("Nom de la piscine", { exact: true })
     .fill("Le bassin de Lucie");
   await page
-    .getByLabel("Identifiant du client — facultatif", { exact: true })
+    .getByLabel("Identifiant du client (facultatif)", { exact: true })
     .fill("lucie-" + suffix);
   await page
     .getByRole("button", { name: "Créer la piscine", exact: true })
@@ -605,6 +625,127 @@ try {
   await page
     .getByRole("heading", { name: "Bassin invité par Lucie", exact: true })
     .waitFor();
+  await clientPage.goto("http://127.0.0.1:8788/#pool/" + invitedPool.id);
+  await clientPage
+    .getByRole("button", { name: "Modifier la piscine", exact: true })
+    .click();
+  await clientPage.getByLabel("Volume (m³)", { exact: true }).fill("48");
+  await clientPage
+    .getByLabel("Traitement", { exact: true })
+    .selectOption("chlorine");
+  await clientPage
+    .getByLabel("Type de filtre", { exact: true })
+    .selectOption("glass");
+  await clientPage.getByLabel("Marches", { exact: true }).uncheck();
+  await clientPage
+    .getByRole("button", { name: "Enregistrer", exact: true })
+    .click();
+  await clientPage
+    .getByRole("heading", { name: "Bassin invité par Lucie", exact: true })
+    .waitFor();
+  await page.reload();
+  await page
+    .getByRole("button", { name: "Commencer l’entretien", exact: true })
+    .first()
+    .click();
+  assert.equal(
+    await page.getByLabel("Brosser les marches", { exact: true }).count(),
+    0,
+  );
+  await page.getByLabel("Nettoyer la ligne d’eau", { exact: true }).check();
+  await page.getByLabel("Conserver un brouillon", { exact: true }).check();
+  await page
+    .getByRole("button", { name: "Enregistrer le brouillon", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Reprendre le brouillon", exact: true })
+    .waitFor();
+  await clientPage.reload();
+  assert.equal(
+    await clientPage.getByText("Brouillon", { exact: true }).count(),
+    0,
+  );
+  await page
+    .getByRole("button", { name: "Reprendre le brouillon", exact: true })
+    .click();
+  assert.equal(
+    await page
+      .getByLabel("Nettoyer la ligne d’eau", { exact: true })
+      .isChecked(),
+    true,
+  );
+  for (const c of await page.locator(".task-checkbox input").all())
+    await c.check();
+  for (const text of [
+    "Effectuer le lavage du filtre si nécessaire",
+    "Effectuer le rinçage après le lavage",
+  ]) {
+    const row = page
+      .locator(".maintenance-task")
+      .filter({ has: page.getByText(text, { exact: true }) });
+    await row.getByRole("button", { name: "Non réalisé", exact: true }).click();
+    await row
+      .getByLabel("Pourquoi ?", { exact: true })
+      .fill("Filtre propre, lavage non nécessaire");
+  }
+  await page.getByLabel("pH", { exact: true }).fill("7.3");
+  await page.getByLabel("Chlore (mg/L)", { exact: true }).fill("1.7");
+  await page
+    .getByLabel("Durée du passage (minutes)", { exact: true })
+    .fill("45");
+  await page
+    .getByLabel("Observations partagées", { exact: false })
+    .fill(
+      "Bassin nettoyé, eau claire. Produits disponibles pour le prochain passage.",
+    );
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator(".modal-body").evaluate((e) => (e.scrollTop = 0));
+  assert.equal(
+    await page
+      .getByRole("dialog")
+      .evaluate((e) => e.scrollWidth > e.clientWidth),
+    false,
+  );
+  await page.screenshot({
+    path: ".test-artifacts/visit-workspace-mobile.png",
+    fullPage: true,
+  });
+  await page
+    .getByRole("button", { name: "Terminer et partager", exact: true })
+    .click();
+  await page.getByText("Partagé", { exact: true }).waitFor();
+  await clientPage.reload();
+  await clientPage
+    .getByText(
+      "Bassin nettoyé, eau claire. Produits disponibles pour le prochain passage.",
+      { exact: true },
+    )
+    .waitFor();
+  await clientPage
+    .getByText("Voir les tâches du passage", { exact: true })
+    .click();
+  assert.equal(
+    await clientPage
+      .getByText("Non réalisé : Filtre propre, lavage non nécessaire", {
+        exact: true,
+      })
+      .count(),
+    2,
+  );
+  await clientPage.screenshot({
+    path: ".test-artifacts/client-maintenance-mobile.png",
+    fullPage: true,
+  });
+  assert.equal(
+    await clientPage.evaluate(
+      () => document.documentElement.scrollWidth > innerWidth,
+    ),
+    false,
+  );
+  assert.equal(
+    await clientPage.evaluate(() => document.body.innerText.includes("—")),
+    false,
+  );
   await linkedContext.close();
   assert.deepEqual(errors, []);
   console.log(
