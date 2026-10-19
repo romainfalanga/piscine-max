@@ -27,6 +27,58 @@ let context = await browser.newContext({
 });
 let page = await context.newPage();
 const errors = [];
+async function verifyPersistentPoolSections(target) {
+  await target.waitForFunction(() => {
+    const sections = [...document.querySelectorAll("[data-pool-panel]")];
+    return (
+      sections.length && sections.every((el) => el.dataset.ready === "true")
+    );
+  });
+  const heading = await target.locator(".pool-heading").elementHandle();
+  const navigation = await target.locator(".pool-tabs").elementHandle();
+  assert.equal(await target.locator(".pool-tabs svg").count(), 0);
+  await target.getByRole("button", { name: "Évolution", exact: true }).click();
+  const curveResponse = target.waitForResponse((r) =>
+    r.url().includes("/trends?days=365"),
+  );
+  await target.getByLabel("Période", { exact: true }).selectOption("365");
+  await curveResponse;
+  let reads = 0;
+  const countReads = (request) => {
+    if (
+      request.resourceType() === "document" ||
+      /\/api\/pools\/[^/]+\/(records|overview|trends|needs)(\?|$)/.test(
+        request.url(),
+      )
+    )
+      reads++;
+  };
+  target.on("request", countReads);
+  for (const name of ["Le bassin", "Accès", "Suivi", "Évolution"]) {
+    await target.getByRole("button", { name, exact: true }).click();
+    await target.waitForFunction(
+      (name) =>
+        document.querySelector('.pool-tabs [aria-current="page"]')
+          ?.textContent === name,
+      name,
+    );
+    assert.equal(await heading.evaluate((el) => el.isConnected), true);
+    assert.equal(await navigation.evaluate((el) => el.isConnected), true);
+    assert.equal(await target.locator("#main>.loading").count(), 0);
+  }
+  assert.equal(
+    await target.getByLabel("Période", { exact: true }).inputValue(),
+    "365",
+  );
+  assert.equal(
+    reads,
+    0,
+    "Changing prepared sections must not fetch their content again or navigate the document",
+  );
+  target.off("request", countReads);
+  await target.getByRole("button", { name: "Suivi", exact: true }).click();
+}
+
 page.setDefaultTimeout(10000);
 page.on("pageerror", (e) => errors.push(e.message));
 try {
@@ -133,10 +185,12 @@ try {
     .getByRole("heading", { name: "La piscine des Oliviers", exact: true })
     .waitFor();
   const poolId = page.url().split("#pool/")[1];
+  await verifyPersistentPoolSections(page);
   await page
     .getByRole("button", { name: "Ajouter une analyse", exact: false })
     .first()
     .click();
+  assert.equal(await page.locator("[name=method]").count(), 0);
   await page.getByLabel("pH", { exact: true }).fill("7.3");
   await page.getByLabel("Chlore (mg/L)", { exact: true }).fill("1.8");
   assert.equal(
@@ -866,6 +920,7 @@ try {
   // All six sections must remain visible on a professional pool at every width.
   await page.goto(`http://127.0.0.1:8788/#pool/${assigned.id}`);
   await page.locator('.pool-tabs[data-count="6"]').waitFor();
+  await verifyPersistentPoolSections(page);
   for (const width of [320, 390, 768, 1440]) {
     await page.setViewportSize({ width, height: 844 });
     const bounds = await page.locator(".pool-tabs button").evaluateAll((els) =>
@@ -1183,6 +1238,7 @@ try {
   await page.getByLabel("pH", { exact: true }).fill("7.3");
   await page.getByLabel("Chlore (mg/L)", { exact: true }).fill("1.7");
   assert.equal(await page.locator("[name=duration]").count(), 0);
+  assert.equal(await page.locator("[name=method]").count(), 0);
   assert.equal(
     await page
       .locator('.maintenance-task[data-task-id="analysis"] [name=ph]')
@@ -1319,6 +1375,8 @@ try {
         "day, Monday week and civil month at 320, 390, 768 and 1440px",
         "full-screen map, live filtering and direct touch dragging",
         "client and professional pool sections remain visible",
+        "pool header and navigation persist, sections reuse prepared content and retain chart filters",
+        "measurement method removed from client and professional forms",
         "calculators, guided maintenance and quiz",
         "mobile journal and report",
         "professional pool creation and client claim",

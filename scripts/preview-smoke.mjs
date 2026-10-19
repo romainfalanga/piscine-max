@@ -143,12 +143,15 @@ try {
   for (let i = 0; i < 20; i++) {
     try {
       const r = await request("/health");
-      if (r.status === 200 && r.data?.release === "visit-flow-v9") {
-        const asset = await fetch(base + "/platform/mobile.css", {
+      if (r.status === 200 && r.data?.release === "clear-interface-v10") {
+        const asset = await fetch(base + "/platform/interface.css", {
           cache: "no-store",
           signal: AbortSignal.timeout(15000),
         });
-        if (!asset.ok || !(await asset.text()).includes(".schedule-title")) {
+        if (
+          !asset.ok ||
+          !(await asset.text()).includes("[data-pool-panel][hidden]")
+        ) {
           await new Promise((resolve) => setTimeout(resolve, 3000));
           continue;
         }
@@ -165,6 +168,7 @@ try {
     ["/platform/app.js", "javascript"],
     ["/platform/style.css", "text/css"],
     ["/platform/mobile.css", "text/css"],
+    ["/platform/interface.css", "text/css"],
     ["/platform/calendar.js", "javascript"],
     ["/platform/classic.css", "text/css"],
     ["/platform/experience.css", "text/css"],

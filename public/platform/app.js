@@ -241,7 +241,7 @@ on("password", () =>
     },
   ),
 );
-async function route() {
+async function route(event) {
   if (!state.user) return;
   const current = ++renderId;
   const parts = location.hash.slice(1).split("/"),
@@ -290,7 +290,12 @@ async function route() {
               : name),
     ),
   );
-  main.innerHTML = '<div class="loading">Votre espace se prépare…</div>';
+  const samePool =
+    name === "pool" &&
+    main.querySelector(".pool-heading")?.dataset.poolId === parts[1];
+  const reusePool = samePool && !!event?.oldURL;
+  if (!samePool)
+    main.innerHTML = '<div class="loading">Votre espace se prépare…</div>';
   try {
     const pages = {
       ...poolPages,
@@ -301,7 +306,8 @@ async function route() {
     };
     if (name === "home") {
       await poolPages.pools(main);
-    } else if (pages[name]) await pages[name](main, parts[1], parts[2]);
+    } else if (pages[name])
+      await pages[name](main, parts[1], parts[2], { reuse: reusePool });
     else go(state.mode === "pro" ? "planning" : "home");
     if (current === renderId)
       document.title =
