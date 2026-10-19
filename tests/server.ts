@@ -49,24 +49,32 @@ const port = Number(process.env.PORT || 8788);
 export const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url || "/", `http://127.0.0.1:${port}`);
+    const staticTypes: Record<string, string> = {
+      js: "text/javascript",
+      css: "text/css",
+      svg: "image/svg+xml",
+      woff2: "font/woff2",
+      png: "image/png",
+      ico: "image/x-icon",
+      webmanifest: "application/manifest+json",
+      xml: "application/xml",
+    };
     if (
-      /^\/platform\/[\w.-]+\.(js|css|svg|woff2)$/.test(url.pathname) ||
-      url.pathname === "/favicon.svg"
+      /^\/platform\/[\w.-]+\.(js|css|svg|woff2|png)$/.test(url.pathname) ||
+      [
+        "/favicon.svg",
+        "/favicon.png",
+        "/favicon.ico",
+        "/apple-touch-icon.png",
+        "/manifest.webmanifest",
+        "/browserconfig.xml",
+      ].includes(url.pathname)
     ) {
-      const path =
-        url.pathname === "/favicon.svg"
-          ? "/platform/favicon.svg"
-          : url.pathname;
-      res.writeHead(200, {
-        "Content-Type": path.endsWith(".js")
-          ? "text/javascript"
-          : path.endsWith(".woff2")
-            ? "font/woff2"
-            : path.endsWith(".css")
-              ? "text/css"
-              : "image/svg+xml",
-      });
-      res.end(readFileSync(new URL("../public" + path, import.meta.url)));
+      const ext = url.pathname.split(".").pop()!;
+      res.writeHead(200, { "Content-Type": staticTypes[ext] });
+      res.end(
+        readFileSync(new URL("../public" + url.pathname, import.meta.url)),
+      );
       return;
     }
     const parts = [];

@@ -1,6 +1,7 @@
 import { chromium } from "playwright-core";
 import bundled from "@sparticuz/chromium";
 import { mkdirSync } from "node:fs";
+import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
 mkdirSync(".test-artifacts", { recursive: true });
 const { server } = await import("./server.ts");
@@ -30,6 +31,45 @@ page.setDefaultTimeout(10000);
 page.on("pageerror", (e) => errors.push(e.message));
 try {
   await page.goto("http://127.0.0.1:8788/");
+  const manifestHref = await page
+    .locator('link[rel="manifest"]')
+    .getAttribute("href");
+  const manifestResponse = await context.request.get(
+    "http://127.0.0.1:8788" + manifestHref,
+  );
+  assert.ok(
+    manifestResponse
+      .headers()
+      ["content-type"].includes("application/manifest+json"),
+  );
+  const manifest = await manifestResponse.json();
+  assert.equal(manifest.name, "Peace in Blue App");
+  assert.equal(manifest.display, "standalone");
+  for (const entry of manifest.icons) {
+    const dimensions = await page.evaluate(async (src) => {
+      const img = new Image();
+      img.src = src;
+      await img.decode();
+      return `${img.naturalWidth}x${img.naturalHeight}`;
+    }, entry.src);
+    assert.equal(dimensions, entry.sizes);
+  }
+  for (const path of ["/favicon.png", "/platform/brand-logo.png"]) {
+    const response = await context.request.get("http://127.0.0.1:8788" + path);
+    assert.equal(response.status(), 200);
+    assert.equal(
+      createHash("sha256")
+        .update(await response.body())
+        .digest("hex"),
+      "1f344c03e3d9a518cd920a002c255e0006ab40f904a14f66b1aa4db640f88e0c",
+    );
+  }
+  await page.locator(".brand-image").evaluate((img) => img.decode());
+  assert.equal(
+    await page.locator(".brand-image").evaluate((img) => img.naturalWidth),
+    256,
+  );
+
   await page.screenshot({
     path: ".test-artifacts/login-desktop.png",
     fullPage: true,

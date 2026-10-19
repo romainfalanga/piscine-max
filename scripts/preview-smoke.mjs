@@ -143,12 +143,12 @@ try {
   for (let i = 0; i < 20; i++) {
     try {
       const r = await request("/health");
-      if (r.status === 200 && r.data?.release === "email-dashboard-v5") {
+      if (r.status === 200 && r.data?.release === "brand-v6") {
         const asset = await fetch(base + "/platform/experience.css", {
           cache: "no-store",
           signal: AbortSignal.timeout(15000),
         });
-        if (!asset.ok || !(await asset.text()).includes(".water-overview")) {
+        if (!asset.ok || !(await asset.text()).includes(".brand-wordmark")) {
           await new Promise((resolve) => setTimeout(resolve, 3000));
           continue;
         }
@@ -172,6 +172,14 @@ try {
     ["/platform/calculations.js", "javascript"],
     ["/platform/tools.js", "javascript"],
     ["/platform/leaflet.js", "javascript"],
+    ["/manifest.webmanifest", "application/manifest+json"],
+    ["/favicon.png", "image/png"],
+    ["/favicon.ico", "image/"],
+    ["/favicon.svg", "image/svg+xml"],
+    ["/apple-touch-icon.png", "image/png"],
+    ["/platform/brand-logo.png", "image/png"],
+    ["/platform/brand-sora.woff2", "font/woff2"],
+    ["/platform/icon-maskable-512.png", "image/png"],
   ]) {
     const response = await fetch(base + path, {
       redirect: "error",
