@@ -89,6 +89,16 @@ try {
     .click();
   await page.getByLabel("J’ai sauvegardé mon code personnel.").check();
   await page.getByRole("button", { name: "Continuer", exact: true }).click();
+  assert.equal(
+    await page.locator(".classic-mobile-nav, .classic-nav").count(),
+    0,
+  );
+  await page.getByRole("link", { name: "Mon compte", exact: true }).waitFor();
+  assert.equal(
+    await page.getByRole("link", { name: "Mon compte", exact: true }).count(),
+    1,
+  );
+
   await page
     .getByRole("button", { name: "Ajouter une piscine", exact: false })
     .first()
@@ -431,6 +441,81 @@ try {
         .getAttribute("href")
     ).includes("Adresse%20de%20d%C3%A9monstration"),
   );
+  // Create, reopen and edit a recurrence without leaving the application.
+  await page.goto(`http://127.0.0.1:8788/#pool/${assigned.id}/planning`);
+  await page
+    .getByRole("button", { name: "Créer une récurrence", exact: true })
+    .click();
+  await page.getByLabel("À partir du", { exact: true }).fill("2027-04-01");
+  await page.getByLabel("Heure", { exact: true }).fill("10:30");
+  await page
+    .getByRole("button", { name: "Créer le rythme", exact: true })
+    .click();
+  const tabCount = context.pages().length;
+  await page
+    .getByRole("button", { name: "Entretien régulier", exact: true })
+    .click();
+  await page
+    .getByRole("heading", { name: "Modifier la récurrence", exact: true })
+    .waitFor();
+  assert.equal(
+    await page.getByLabel("Heure", { exact: true }).inputValue(),
+    "10:30",
+  );
+  await page.getByLabel("Tous les X jours", { exact: true }).fill("14");
+  await page.getByLabel("Heure", { exact: true }).fill("11:15");
+  await page
+    .getByText("Adapter le rythme aux saisons", { exact: true })
+    .click();
+  await page
+    .getByLabel("Avril à octobre : tous les X jours", { exact: true })
+    .fill("14");
+  await page
+    .getByLabel("Novembre à mars : tous les X jours", { exact: true })
+    .fill("28");
+  await page
+    .getByRole("button", { name: "Enregistrer les modifications", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Entretien régulier", exact: true })
+    .waitFor();
+  await page.getByRole("button", { name: "Modifier", exact: true }).click();
+  assert.equal(
+    await page.getByLabel("Heure", { exact: true }).inputValue(),
+    "11:15",
+  );
+  assert.equal(
+    await page
+      .getByLabel("Avril à octobre : tous les X jours", { exact: true })
+      .inputValue(),
+    "14",
+  );
+  assert.equal(
+    await page
+      .getByLabel("Novembre à mars : tous les X jours", { exact: true })
+      .inputValue(),
+    "28",
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({
+    path: ".test-artifacts/schedule-edit-mobile.png",
+    fullPage: true,
+  });
+  await page.getByRole("button", { name: "Fermer", exact: true }).click();
+  await page.goto("http://127.0.0.1:8788/#planning");
+  await page.getByLabel("Début de période", { exact: true }).fill("2027-04-01");
+  await page
+    .getByLabel("Début de période", { exact: true })
+    .dispatchEvent("change");
+  await page.locator(".agenda-visit .schedule-title").click();
+  await page
+    .getByRole("heading", { name: "Modifier la récurrence", exact: true })
+    .waitFor();
+  assert.equal(context.pages().length, tabCount);
+  assert.ok(page.url().startsWith("http://127.0.0.1:8788/#planning"));
+  await page.getByRole("button", { name: "Fermer", exact: true }).click();
+  await page.getByRole("button", { name: "Aujourd’hui", exact: true }).click();
+  await page.setViewportSize({ width: 1440, height: 1080 });
   await nav.getByRole("link", { name: "Pisciniste", exact: true }).click();
 
   await page
@@ -1084,7 +1169,7 @@ try {
   for (const c of await page.locator(".task-checkbox input").all())
     await c.check();
   for (const text of [
-    "Effectuer le lavage du filtre si nécessaire",
+    "Effectuer le lavage du filtre",
     "Effectuer le rinçage après le lavage",
   ]) {
     const row = page
@@ -1093,13 +1178,35 @@ try {
     await row.getByRole("button", { name: "Non réalisé", exact: true }).click();
     await row
       .getByLabel("Pourquoi ?", { exact: true })
-      .fill("Filtre propre, lavage non nécessaire");
+      .fill("Vanne bloquée, entretien du filtre reporté");
   }
   await page.getByLabel("pH", { exact: true }).fill("7.3");
   await page.getByLabel("Chlore (mg/L)", { exact: true }).fill("1.7");
-  await page
-    .getByLabel("Durée du passage (minutes)", { exact: true })
-    .fill("45");
+  assert.equal(await page.locator("[name=duration]").count(), 0);
+  assert.equal(
+    await page
+      .locator('.maintenance-task[data-task-id="analysis"] [name=ph]')
+      .count(),
+    1,
+  );
+  assert.equal(
+    await page
+      .locator('.maintenance-task[data-task-id="analysis"] [name=chlorine]')
+      .count(),
+    1,
+  );
+  assert.equal(
+    await page
+      .locator('.maintenance-task[data-task-id="treatment"] [name=products]')
+      .count(),
+    1,
+  );
+  assert.equal(
+    await page
+      .getByLabel("Mesurer et renseigner le pH et le chlore", { exact: true })
+      .isChecked(),
+    true,
+  );
   await page
     .getByLabel("Observations partagées", { exact: false })
     .fill(
@@ -1144,7 +1251,7 @@ try {
     .click();
   assert.equal(
     await clientPage
-      .getByText("Non réalisé : Filtre propre, lavage non nécessaire", {
+      .getByText("Non réalisé : Vanne bloquée, entretien du filtre reporté", {
         exact: true,
       })
       .count(),
@@ -1203,6 +1310,9 @@ try {
         "agenda default and four professional tabs",
         "client directory and map after explicit invitation",
         "plan, perform and publish a visit",
+        "inline analysis and products in maintenance task order, no duration field",
+        "create and edit recurring schedules from pool and agenda",
+        "client account access in header without navigation menus",
         "private activity statistics",
         "reference procedures",
         "professional mobile navigation",

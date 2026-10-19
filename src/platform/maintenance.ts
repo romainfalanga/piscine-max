@@ -52,7 +52,7 @@ export function maintenanceTasks(p: any): Task[] {
     add(
       "backwash",
       "Filtration et équipements",
-      "Effectuer le lavage du filtre si nécessaire",
+      "Effectuer le lavage du filtre",
     );
     add(
       "rinse",
@@ -134,7 +134,13 @@ export function taskStates(template: Task[], input: any): Task[] {
       skipped = v?.skipped === true;
     if (done && skipped)
       fail("Une tâche ne peut pas être réalisée et non réalisée.");
-    return { ...t, done, skipped, reason: skipped ? str(v?.reason, 250) : "" };
+    return {
+      ...t,
+      label: t.id === "backwash" ? "Effectuer le lavage du filtre" : t.label,
+      done,
+      skipped,
+      reason: skipped ? str(v?.reason, 250) : "",
+    };
   });
 }
 export function validateCompletion(tasks: Task[], readings: any) {

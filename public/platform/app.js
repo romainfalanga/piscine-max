@@ -122,10 +122,7 @@ function shell() {
         ["clients", "users", "Clients"],
         ["tools", "book", "Pisciniste"],
       ]
-    : [
-        ["home", "pool", "Mes piscines"],
-        ["settings", "settings", "Mon compte"],
-      ];
+    : [];
   const links = nav
     .map(
       ([route, i, label]) =>
@@ -133,7 +130,7 @@ function shell() {
     )
     .join("");
   $("#app").innerHTML =
-    `<div class="classic-shell"><header class="classic-header"><div class="classic-header-inner"><a class="brand" href="#${pro ? "planning" : "home"}" aria-label="Peace in Blue App">${brand}</a><div class="classic-account"><a class="classic-profile" href="#settings"><span class="profile-dot"></span><span class="profile-name">${esc(state.user.name)}</span>${badge(pro ? "Pro" : "Client", "teal")}</a><button class="icon-btn" data-action="notifications" aria-label="Notifications" title="Notifications">${icon("bell")}<span id="unread"></span></button><a class="icon-btn" href="#settings" aria-label="Mon compte" title="Mon compte">${icon("settings")}</a><button class="icon-btn" data-action="logout" aria-label="Se déconnecter" title="Se déconnecter">${icon("logout")}</button></div></div><nav class="classic-nav" aria-label="Navigation principale"><div>${links}</div></nav></header><main id="main" class="main"></main><nav class="classic-mobile-nav" aria-label="Navigation mobile">${links}</nav></div>`;
+    `<div class="classic-shell ${pro ? "pro-shell" : "client-shell"}"><header class="classic-header"><div class="classic-header-inner"><a class="brand" href="#${pro ? "planning" : "home"}" aria-label="Peace in Blue App">${brand}</a><div class="classic-account"><a class="classic-profile" href="#settings"><span class="profile-dot"></span><span class="profile-name">${esc(state.user.name)}</span>${badge(pro ? "Pro" : "Client", "teal")}</a><button class="icon-btn" data-action="notifications" aria-label="Notifications" title="Notifications">${icon("bell")}<span id="unread"></span></button><a class="icon-btn" href="#settings" aria-label="Mon compte" title="Mon compte">${icon("settings")}</a><button class="icon-btn" data-action="logout" aria-label="Se déconnecter" title="Se déconnecter">${icon("logout")}</button></div></div>${pro ? `<nav class="classic-nav" aria-label="Navigation principale"><div>${links}</div></nav>` : ""}</header><main id="main" class="main"></main>${pro ? `<nav class="classic-mobile-nav" aria-label="Navigation mobile">${links}</nav>` : ""}</div>`;
 }
 
 on("mode", async (d) => {

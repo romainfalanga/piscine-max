@@ -55,7 +55,7 @@ app.get("/api/health", (c) =>
     ok: true,
     application: "Peace in Blue App",
     version: 2,
-    release: "full-map-v8",
+    release: "visit-flow-v9",
   }),
 );
 app.route("/api/auth", auth);

@@ -32,7 +32,7 @@ let planDate = today(),
 const heading = (eye, title, sub, actions = "") =>
   `<div class="page-heading"><div><div class="eyebrow">${eye}</div><h1>${title}</h1><p>${sub}</p></div>${actions}</div>`;
 function appointmentRow(a) {
-  return `<article class="agenda-visit ${a.status === "cancelled" ? "is-cancelled" : ""}"><div class="agenda-time"><time>${esc(a.time)}</time><span>${a.duration} min</span></div><div class="agenda-visit-body"><div class="agenda-visit-title"><h3><a href="#pool/${a.pool_id}">${esc(a.pool_name)}</a></h3>${badge(a.status === "done" ? "Effectué" : a.status === "cancelled" ? "Annulé" : "À venir", a.status === "done" ? "teal" : "")}</div><p>${esc(a.title)}</p><p class="small-note">${icon("map", 14)} ${esc(a.city || "Commune à compléter")}</p>${a.reason ? `<p>${esc(a.reason)}</p>` : ""}${a.status === "planned" ? `<div class="agenda-visit-actions">${button("Commencer", "start-appointment", `data-id="${a.id}"`, "primary small")}${button("Déplacer", "move-appointment", `data-id="${a.id}"`, "ghost small")}</div>` : ""}</div></article>`;
+  return `<article class="agenda-visit ${a.status === "cancelled" ? "is-cancelled" : ""}"><div class="agenda-time"><time>${esc(a.time)}</time><span>${a.duration} min</span></div><div class="agenda-visit-body"><div class="agenda-visit-title"><h3><a href="#pool/${a.pool_id}">${esc(a.pool_name)}</a></h3>${badge(a.status === "done" ? "Effectué" : a.status === "cancelled" ? "Annulé" : "À venir", a.status === "done" ? "teal" : "")}</div><p>${a.schedule_id ? `<button type="button" class="schedule-title" data-action="edit-schedule" data-id="${a.schedule_id}" data-pool="${a.pool_id}">${esc(a.title)}</button>` : esc(a.title)}</p><p class="small-note">${icon("map", 14)} ${esc(a.city || "Commune à compléter")}</p>${a.reason ? `<p>${esc(a.reason)}</p>` : ""}${a.status === "planned" ? `<div class="agenda-visit-actions">${button("Commencer", "start-appointment", `data-id="${a.id}"`, "primary small")}${button("Déplacer", "move-appointment", `data-id="${a.id}"`, "ghost small")}</div>` : ""}</div></article>`;
 }
 async function planning(main) {
   const { from, to } = period(planDate, planRange),
@@ -149,42 +149,81 @@ on("new-appointment", async (d) => {
     "Planifier",
   );
 });
-on("new-schedule", async (d) => {
-  const pick = await poolSelect(d.pool);
+async function scheduleForm(d, edit = false) {
+  let existing = null;
+  if (edit) {
+    const r = await api("/pools/" + d.pool + "/schedules");
+    existing = r.items.find((s) => s.id === d.id && s.pro_id === state.user.id);
+    if (!existing) throw new Error("Cette récurrence n’est plus disponible.");
+  }
+  const pick = edit
+    ? `<p class="small-note">${esc((await api("/pools/" + d.pool)).name)}</p>`
+    : await poolSelect(d.pool);
   if (!pick) return;
+  const v = existing || {},
+    seasons = v.seasons || [];
+  const standard =
+    seasons.length === 0 ||
+    (seasons.length === 2 &&
+      seasons.every(
+        (s) => String(s.weekday || "") === String(v.weekday || ""),
+      ) &&
+      seasons.some((s) => s.start === "04-01" && s.end === "10-31") &&
+      seasons.some((s) => s.start === "11-01" && s.end === "03-31"));
+  const seasonFields = standard
+    ? `<p class="small-note">Laissez les deux périodes vides pour garder le même rythme toute l’année.</p><div class="grid two form-two">${field("Avril à octobre : tous les X jours", "summer", seasons.find((s) => s.start === "04-01")?.interval_days || "", "number", 'min="1" max="365"')}${field("Novembre à mars : tous les X jours", "winter", seasons.find((s) => s.start === "11-01")?.interval_days || "", "number", 'min="1" max="365"')}</div>`
+    : seasons
+        .map(
+          (s, i) =>
+            `<fieldset class="schedule-season"><legend>Saison ${i + 1}</legend><div class="grid two form-two">${field("Début (MM-JJ)", "season_start_" + i, s.start, "text", 'required pattern="[0-9]{2}-[0-9]{2}"')}${field("Fin (MM-JJ)", "season_end_" + i, s.end, "text", 'required pattern="[0-9]{2}-[0-9]{2}"')}${field("Intervalle en jours", "season_interval_" + i, s.interval_days, "number", 'required min="1" max="365"')}${select("Jour de cette saison", "season_weekday_" + i, { "": "Selon l’intervalle", 1: "Lundi", 2: "Mardi", 3: "Mercredi", 4: "Jeudi", 5: "Vendredi", 6: "Samedi", 7: "Dimanche" }, s.weekday || "")}</div></fieldset>`,
+        )
+        .join("");
   modal(
-    "Un rythme adapté à la piscine",
-    `${pick}${field("Intitulé", "title", "Entretien régulier", "text", 'required maxlength="120"')}<div class="grid two form-two">${field("À partir du", "start_date", today(), "date", "required")}${field("Jusqu’au : facultatif", "end_date", "", "date")}</div><div class="grid two form-two">${field("Tous les X jours", "interval_days", 7, "number", 'required min="1" max="365"')}${select("Jour souhaité", "weekday", { "": "Selon l’intervalle", 1: "Lundi", 2: "Mardi", 3: "Mercredi", 4: "Jeudi", 5: "Vendredi", 6: "Samedi", 7: "Dimanche" }, "")}</div><div class="grid two form-two">${field("Heure", "time", "09:00", "time", "required")}${field("Durée (minutes)", "duration", 45, "number", 'required min="5" max="1440"')}</div><details><summary>Adapter le rythme aux saisons</summary><p class="small-note">Laissez vide pour conserver le même rythme toute l’année. Renseignez les deux périodes pour activer la saisonnalité.</p><div class="grid two form-two">${field("Avril → octobre : tous les X jours", "summer", "", "number", 'min="1" max="365"')}${field("Novembre → mars : tous les X jours", "winter", "", "number", 'min="1" max="365"')}</div></details>`,
+    edit ? "Modifier la récurrence" : "Créer une récurrence",
+    `${pick}${field("Intitulé", "title", v.title || "Entretien régulier", "text", 'required maxlength="120"')}<div class="grid two form-two">${field("À partir du", "start_date", v.start_date || today(), "date", "required")}${field("Jusqu’au : facultatif", "end_date", v.end_date || "", "date")}</div><div class="grid two form-two">${field("Tous les X jours", "interval_days", v.interval_days || 7, "number", 'required min="1" max="365"')}${select("Jour souhaité", "weekday", { "": "Selon l’intervalle", 1: "Lundi", 2: "Mardi", 3: "Mercredi", 4: "Jeudi", 5: "Vendredi", 6: "Samedi", 7: "Dimanche" }, v.weekday || "")}</div><div class="grid two form-two">${field("Heure", "time", v.time || "09:00", "time", "required")}${field("Durée prévue (minutes)", "duration", v.duration || 45, "number", 'required min="5" max="1440"')}</div><details ${seasons.length ? "open" : ""}><summary>Adapter le rythme aux saisons</summary>${seasonFields}</details>${edit ? '<p class="small-note">Les prochains passages automatiques seront mis à jour. Les passages déjà réalisés ou enregistrés individuellement sont conservés.</p>' : ""}`,
     async (b) => {
-      if (Boolean(b.summer) !== Boolean(b.winter))
+      if (standard && Boolean(b.summer) !== Boolean(b.winter))
         throw new Error("Renseignez les deux périodes saisonnières.");
-      const seasons = b.summer
-        ? [
-            {
-              start: "04-01",
-              end: "10-31",
-              interval_days: Number(b.summer),
-              weekday: b.weekday || null,
-            },
-            {
-              start: "11-01",
-              end: "03-31",
-              interval_days: Number(b.winter),
-              weekday: b.weekday || null,
-            },
-          ]
-        : [];
-      await api("/pools/" + b.pool_id + "/schedules", "POST", {
-        ...b,
-        seasons,
-      });
+      const nextSeasons = standard
+        ? b.summer
+          ? [
+              {
+                start: "04-01",
+                end: "10-31",
+                interval_days: Number(b.summer),
+                weekday: b.weekday || null,
+              },
+              {
+                start: "11-01",
+                end: "03-31",
+                interval_days: Number(b.winter),
+                weekday: b.weekday || null,
+              },
+            ]
+          : []
+        : seasons.map((s, i) => ({
+            ...s,
+            start: b["season_start_" + i],
+            end: b["season_end_" + i],
+            interval_days: Number(b["season_interval_" + i]),
+            weekday: b["season_weekday_" + i] || null,
+          }));
+      await api(
+        edit
+          ? "/schedules/" + existing.id
+          : "/pools/" + b.pool_id + "/schedules",
+        edit ? "PUT" : "POST",
+        { ...b, seasons: nextSeasons },
+      );
       closeModal();
-      toast("Récurrence enregistrée.");
+      toast(edit ? "Récurrence modifiée." : "Récurrence enregistrée.");
       refresh();
     },
-    "Créer le rythme",
+    edit ? "Enregistrer les modifications" : "Créer le rythme",
   );
-});
+}
+on("new-schedule", (d) => scheduleForm(d));
+on("edit-schedule", (d) => scheduleForm(d, true));
 on("stop-schedule", (d) =>
   confirmAction(
     "Arrêter cette récurrence",

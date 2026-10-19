@@ -3,6 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import app from "../src/index";
 import { LocalD1, LocalR2 } from "./d1";
+import { maintenanceTasks } from "../src/platform/maintenance";
 import { occurs } from "../src/platform/planning";
 import { cleanImage } from "../src/platform/uploads";
 const realFetch = globalThis.fetch;
@@ -2523,5 +2524,124 @@ test("Dashboard keeps latest readings and published professional photos aligned 
       )
     ).status,
     200,
+  );
+});
+
+test("Filter tasks require backwash and rinse for sand/glass while cartridge maintenance stays distinct", () => {
+  for (const filter_type of ["sand", "glass"]) {
+    const tasks = maintenanceTasks({ filter_type });
+    assert.equal(
+      tasks.find((t) => t.id === "backwash")?.label,
+      "Effectuer le lavage du filtre",
+    );
+    assert.ok(tasks.some((t) => t.id === "rinse"));
+    assert.ok(!tasks.some((t) => t.id === "cartridge"));
+  }
+  const cartridge = maintenanceTasks({ filter_type: "cartridge" });
+  assert.ok(
+    cartridge.some(
+      (t) => t.id === "cartridge" && t.label.includes("si nécessaire"),
+    ),
+  );
+  assert.ok(!cartridge.some((t) => ["backwash", "rinse"].includes(t.id)));
+});
+
+test("Recurrence edits update future occurrences, preserve completed reports and deny other accounts", async () => {
+  const e = context(),
+    owner = await user(e, "schedule-owner"),
+    pro = await user(e, "schedule-pro", "pro"),
+    outsider = await user(e, "schedule-other", "pro"),
+    id = await pool(e, owner);
+  await invite(e, owner, pro, id, "principal");
+  const body = {
+    title: "Entretien régulier",
+    start_date: "2026-10-01",
+    interval_days: 7,
+    time: "09:00",
+    duration: 45,
+    seasons: [],
+  };
+  const created = await request(
+    e,
+    "/pools/" + id + "/schedules",
+    "POST",
+    body,
+    pro.token,
+  );
+  assert.equal(created.status, 201);
+  const sid = created.data.id;
+  const occurrence = await request(
+    e,
+    "/schedules/" + sid + "/occurrence",
+    "POST",
+    { date: body.start_date },
+    pro.token,
+  );
+  const record = await request(
+    e,
+    "/pools/" + id + "/records",
+    "POST",
+    {
+      kind: "visit",
+      measured_at: "2026-10-01T09:00:00Z",
+      appointment_id: occurrence.data.id,
+    },
+    pro.token,
+  );
+  await completeVisit(e, record.data.id, pro.token);
+  assert.equal(
+    (
+      await request(
+        e,
+        "/records/" + record.data.id + "/publish",
+        "POST",
+        {},
+        pro.token,
+      )
+    ).status,
+    200,
+  );
+  const changed = { ...body, time: "11:15", interval_days: 14 };
+  assert.equal(
+    (await request(e, "/schedules/" + sid, "PUT", changed, owner.token)).status,
+    404,
+  );
+  assert.equal(
+    (await request(e, "/schedules/" + sid, "PUT", changed, outsider.token))
+      .status,
+    404,
+  );
+  assert.equal(
+    (await request(e, "/schedules/" + sid, "PUT", changed, pro.token)).status,
+    200,
+  );
+  const upcoming = await request(
+    e,
+    "/planning?from=2026-10-01&to=2026-10-30",
+    "GET",
+    undefined,
+    pro.token,
+  );
+  const virtual = upcoming.data.items.filter((a: any) => a.virtual);
+  assert.deepEqual(
+    virtual.map((a: any) => a.date),
+    ["2026-10-15", "2026-10-29"],
+  );
+  assert.ok(virtual.every((a: any) => a.time === "11:15"));
+  assert.equal(
+    upcoming.data.items.find((a: any) => a.id === occurrence.data.id).status,
+    "done",
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        "/records/" + record.data.id,
+        "GET",
+        undefined,
+        owner.token,
+      )
+    ).data.readings.ph,
+    7.2,
   );
 });

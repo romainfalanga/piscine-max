@@ -357,7 +357,7 @@ async function renderTab() {
       ),
       api("/pools/" + p.id + "/schedules"),
     ]);
-    el.innerHTML = `<div class="section-heading"><h2>Les prochains passages</h2>${p.membership !== "owner" ? button("Planifier un passage", "new-appointment", `data-pool="${p.id}"`) : ""}</div><div class="card">${r.items.length ? r.items.map((a) => `<div class="row"><div class="time">${fmt(a.date)}<small style="display:block;margin-top:5px">${esc(a.time)}</small></div><div class="grow"><h3>${esc(a.title)}</h3><p>${esc(a.pro_name)}</p></div>${badge(a.status === "done" ? "Effectué" : a.status === "cancelled" ? "Annulé" : "Prévu", a.status === "done" ? "teal" : "")}</div>`).join("") : empty("Pas encore de passage prévu", "Votre pisciniste pourra programmer ses interventions ici.")}</div><div class="section-heading"><h2>Rythmes d’entretien</h2>${p.membership !== "owner" ? button("Créer une récurrence", "new-schedule", `data-pool="${p.id}"`, "secondary") : ""}</div><div class="card">${ss.items.map((s) => `<div class="row"><div class="grow"><h3>${esc(s.title)}</h3><p>${esc(s.pro_name)} · tous les ${s.interval_days} jours${s.seasons.length ? " · saisons personnalisées" : ""}</p></div>${s.pro_id === state.user.id ? button("Arrêter", "stop-schedule", `data-id="${s.id}"`, "ghost small") : ""}</div>`).join("") || '<p class="small-note">Aucune récurrence active.</p>'}</div>`;
+    el.innerHTML = `<div class="section-heading"><h2>Les prochains passages</h2>${p.membership !== "owner" ? button("Planifier un passage", "new-appointment", `data-pool="${p.id}"`) : ""}</div><div class="card">${r.items.length ? r.items.map((a) => `<div class="row"><div class="time">${fmt(a.date)}<small style="display:block;margin-top:5px">${esc(a.time)}</small></div><div class="grow"><h3>${esc(a.title)}</h3><p>${esc(a.pro_name)}</p></div>${badge(a.status === "done" ? "Effectué" : a.status === "cancelled" ? "Annulé" : "Prévu", a.status === "done" ? "teal" : "")}</div>`).join("") : empty("Pas encore de passage prévu", "Votre pisciniste pourra programmer ses interventions ici.")}</div><div class="section-heading"><h2>Rythmes d’entretien</h2>${p.membership !== "owner" ? button("Créer une récurrence", "new-schedule", `data-pool="${p.id}"`, "secondary") : ""}</div><div class="card">${ss.items.map((s) => `<div class="row"><div class="grow"><h3>${s.pro_id === state.user.id ? `<button type="button" class="schedule-title" data-action="edit-schedule" data-id="${s.id}" data-pool="${p.id}">${esc(s.title)}</button>` : esc(s.title)}</h3><p>${esc(s.pro_name)} · tous les ${s.interval_days} jours${s.seasons.length ? " · saisons personnalisées" : ""}</p></div>${s.pro_id === state.user.id ? `<div class="actions">${button("Modifier", "edit-schedule", `data-id="${s.id}" data-pool="${p.id}"`, "secondary small")}${button("Arrêter", "stop-schedule", `data-id="${s.id}"`, "ghost small")}</div>` : ""}</div>`).join("") || '<p class="small-note">Aucune récurrence active.</p>'}</div>`;
   }
 }
 on("more-records", async () => {
@@ -598,7 +598,11 @@ export async function openRecordForm(
   const value = localDate(record?.measured_at || Date.now());
   const checklist = visit
     ? record?.checklist?.length
-      ? record.checklist
+      ? record.checklist.map((t) =>
+          t.id === "backwash"
+            ? { ...t, label: "Effectuer le lavage du filtre" }
+            : t,
+        )
       : p.maintenance_tasks
     : [];
   const draftKey =
@@ -613,19 +617,6 @@ export async function openRecordForm(
   const groups = [
     ...new Set(checklist.map((t) => t.group || "Tâches du passage")),
   ];
-  const taskMarkup = groups
-    .map(
-      (group, index) =>
-        `<fieldset class="maintenance-group"><legend><span>${index + 1}</span>${esc(group)}</legend>${checklist
-          .map((c, i) => ({ c, i }))
-          .filter(({ c }) => (c.group || "Tâches du passage") === group)
-          .map(
-            ({ c, i }) =>
-              `<div class="maintenance-task ${c.done ? "is-done" : ""}"><label class="task-checkbox"><input type="checkbox" name="check_${i}" ${c.done ? "checked" : ""}><span>${esc(c.label)}</span></label><button type="button" class="task-exception" data-task-skip="${i}" aria-expanded="${!!c.skipped}">${c.skipped ? "Annuler le motif" : "Non réalisé"}</button><div class="task-reason" ${c.skipped ? "" : "hidden"}><label>Pourquoi ?<input name="reason_${i}" maxlength="250" value="${esc(c.reason || "")}" placeholder="Ex. filtre propre, lavage non nécessaire" ${c.skipped ? "required" : ""}></label><input type="hidden" name="skip_${i}" value="${c.skipped ? "1" : "0"}"></div></div>`,
-          )
-          .join("")}</fieldset>`,
-    )
-    .join("");
   const measurements = `<section class="visit-measures"><h3>Analyse de l’eau</h3><div class="grid two form-two">${Object.entries(
     metrics,
   )
@@ -640,10 +631,23 @@ export async function openRecordForm(
     )
     .join(
       "",
-    )}</div>${field("Méthode de mesure (facultatif)", "method", record?.method || "", "text", 'maxlength="100" placeholder="Gouttes, photomètre…"')}</section>`;
+    )}</div>${field("Méthode de mesure (facultatif)", "method", record?.method || "", "text", 'maxlength="100" placeholder="Gouttes, photomètre…"')}${field("Date et heure de la mesure", "measured_at", value, "datetime-local", "required")}</section>`;
+  const taskMarkup = groups
+    .map(
+      (group, index) =>
+        `<fieldset class="maintenance-group"><legend><span>${index + 1}</span>${esc(group)}</legend>${checklist
+          .map((c, i) => ({ c, i }))
+          .filter(({ c }) => (c.group || "Tâches du passage") === group)
+          .map(
+            ({ c, i }) =>
+              `<div class="maintenance-task ${c.done ? "is-done" : ""}" data-task-id="${esc(c.id || "")}"><label class="task-checkbox"><input type="checkbox" name="check_${i}" ${c.done ? "checked" : ""}><span>${esc(c.label)}</span></label>${c.id === "analysis" ? measurements : c.id === "treatment" ? area("Produits ajoutés", "products", record?.products || "", 'maxlength="2000" placeholder="Produit, quantité et unité"') : ""}<button type="button" class="task-exception" data-task-skip="${i}" aria-expanded="${!!c.skipped}">${c.skipped ? "Annuler le motif" : "Non réalisé"}</button><div class="task-reason" ${c.skipped ? "" : "hidden"}><label>Pourquoi ?<input name="reason_${i}" maxlength="250" value="${esc(c.reason || "")}" placeholder="Indiquez la difficulté rencontrée" ${c.skipped ? "required" : ""}></label><input type="hidden" name="skip_${i}" value="${c.skipped ? "1" : "0"}"></div></div>`,
+          )
+          .join("")}</fieldset>`,
+    )
+    .join("");
   const dialog = modal(
     visit ? "Entretien de la piscine" : "Ajouter une analyse",
-    `<p class="form-intro">${esc(p.name)}</p>${record?.correction_of ? '<p class="note">La version originale restera dans l’historique.</p>' : ""}${visit ? `<div class="visit-progress"><span id="task-progress" aria-live="polite"></span><progress id="task-progress-bar" max="${checklist.length}" value="0"></progress></div>` : ""}<div class="${visit ? "visit-workspace" : ""}">${visit ? `<section class="visit-checklist">${p.filter_type === "unknown" ? '<p class="note">Type de filtre à préciser dans la fiche piscine pour adapter les tâches.</p>' : ""}<p class="safety-inline">Arrêtez la pompe avant de changer la position de la vanne. Isolez et dépressurisez avant toute ouverture.</p>${taskMarkup}<a class="text-btn" href="#guide/entretien/${p.id}" target="_blank" rel="noopener">Consulter la procédure d’entretien</a></section>` : ""}<aside class="visit-details">${measurements}${field("Date et heure de la mesure", "measured_at", value, "datetime-local", "required")}${visit ? field("Durée du passage (minutes)", "duration", record?.duration || "", "number", 'min="1" max="1440"') : ""}${area("Produits ajoutés", "products", record?.products || "", 'maxlength="2000" placeholder="Produit, quantité et unité"')}${area(p.membership === "principal" ? "Observations partagées avec le client" : "Observations", "notes", record?.notes || "", 'maxlength="4000" placeholder="État du bassin, point à surveiller…"')}<label class="field"><span>Photos du bassin (6 maximum, 4 Mo chacune)</span><input type="file" name="photos" multiple accept="image/jpeg,image/png,image/webp"></label>${record?.photos?.length ? `<p class="small-note">${record.photos.length} photo(s) déjà enregistrée(s).</p>` : ""}<p class="small-note">${visit ? "Le client verra les tâches réalisées, les éventuels motifs et les mesures après le partage." : "Vos mesures seront ajoutées à l’historique de votre piscine."}</p><label class="check"><input type="checkbox" name="draft"> Conserver un brouillon</label></aside></div>`,
+    `<p class="form-intro">${esc(p.name)}</p>${record?.correction_of ? '<p class="note">La version originale restera dans l’historique.</p>' : ""}${visit ? `<div class="visit-progress"><span id="task-progress" aria-live="polite"></span><progress id="task-progress-bar" max="${checklist.length}" value="0"></progress></div>` : ""}<div class="${visit ? "visit-workspace" : ""}">${visit ? `<section class="visit-checklist">${p.filter_type === "unknown" ? '<p class="note">Type de filtre à préciser dans la fiche piscine pour adapter les tâches.</p>' : ""}<p class="safety-inline">Arrêtez la pompe avant de changer la position de la vanne. Isolez et dépressurisez avant toute ouverture.</p>${taskMarkup}${!checklist.some((t) => t.id === "analysis") ? measurements : ""}<a class="text-btn" href="#guide/entretien/${p.id}" target="_blank" rel="noopener">Consulter la procédure d’entretien</a></section>` : ""}<section class="visit-details">${visit ? "<h3>Compte rendu du passage</h3>" : measurements}${!visit || !checklist.some((t) => t.id === "treatment") ? area("Produits ajoutés", "products", record?.products || "", 'maxlength="2000" placeholder="Produit, quantité et unité"') : ""}${area(p.membership === "principal" ? "Observations partagées avec le client" : "Observations", "notes", record?.notes || "", 'maxlength="4000" placeholder="État du bassin, point à surveiller…"')}<label class="field"><span>Photos du bassin (6 maximum, 4 Mo chacune)</span><input type="file" name="photos" multiple accept="image/jpeg,image/png,image/webp"></label>${record?.photos?.length ? `<p class="small-note">${record.photos.length} photo(s) déjà enregistrée(s).</p>` : ""}<p class="small-note">${visit ? "Le client verra les tâches réalisées, les éventuels motifs et les mesures après le partage." : "Vos mesures seront ajoutées à l’historique de votre piscine."}</p><label class="check"><input type="checkbox" name="draft"> Conserver un brouillon</label></section></div>`,
     async (b, form) => {
       const values = {};
       for (const k of Object.keys(metrics))
@@ -677,7 +681,7 @@ export async function openRecordForm(
         method: b.method,
         notes: b.notes,
         products: b.products,
-        duration: b.duration,
+        duration: record?.duration ?? null,
         checklist: visit ? list : [],
         appointment_id: appointment || record?.appointment_id,
         correction_of: record?.correction_of,
@@ -769,6 +773,32 @@ export async function openRecordForm(
     update();
     saveLocal();
   });
+  form.addEventListener("input", (e) => {
+    if (["ph", "chlorine"].includes(e.target.name)) {
+      const i = checklist.findIndex((t) => t.id === "analysis");
+      if (i >= 0) {
+        const ph = $('[name="ph"]', form),
+          chlorine = $('[name="chlorine"]', form);
+        const complete =
+          ph.value !== "" &&
+          chlorine.value !== "" &&
+          ph.validity.valid &&
+          chlorine.validity.valid;
+        $(`[name=check_${i}]`, form).checked = complete;
+        if (complete) {
+          $(`[name=skip_${i}]`, form).value = "0";
+          const reason = $(`[name=reason_${i}]`, form);
+          reason.required = false;
+          reason.closest(".task-reason").hidden = true;
+          const button = $(`[data-task-skip="${i}"]`, form);
+          button.textContent = "Non réalisé";
+          button.setAttribute("aria-expanded", "false");
+        }
+      }
+    }
+    update();
+    saveLocal();
+  });
   form.addEventListener("change", (e) => {
     if (e.target.name?.startsWith("check_") && e.target.checked) {
       const i = e.target.name.slice(6),
@@ -824,7 +854,6 @@ export async function openRecordForm(
       }
     } catch {}
   }
-  form.addEventListener("input", saveLocal);
   update();
 }
 on("record-detail", async (d) => {

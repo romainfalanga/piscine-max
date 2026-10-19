@@ -668,3 +668,71 @@ body.map-page {
     top: calc(max(12px, env(safe-area-inset-top)) + 70px);
   }
 }
+
+/* An intervention is completed in task order, including the measurements. */
+.maintenance-dialog .visit-workspace {
+  display: block;
+  max-width: 760px;
+  margin: 0 auto;
+}
+.maintenance-dialog .visit-details {
+  border-top: 1px solid #cfdee3;
+  margin-top: 26px;
+  padding-top: 24px;
+}
+.maintenance-task > .task-checkbox {
+  order: 0;
+}
+.maintenance-task > .task-exception {
+  order: 1;
+}
+.maintenance-task > .visit-measures,
+.maintenance-task > .field {
+  order: 2;
+  flex: 0 0 100%;
+  width: 100%;
+  margin: 12px 0 4px;
+}
+.maintenance-task > .task-reason {
+  order: 3;
+}
+.maintenance-task .visit-measures h3 {
+  display: none;
+}
+.maintenance-task .visit-measures {
+  padding: 16px;
+}
+.schedule-title {
+  border: 0;
+  padding: 4px 0;
+  background: transparent;
+  text-align: left;
+  color: #006b7b;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.schedule-title:focus-visible {
+  outline: 2px solid #007d8c;
+  outline-offset: 3px;
+}
+.schedule-season {
+  border: 1px solid #cfdee3;
+  padding: 16px;
+  margin: 12px 0;
+  border-radius: 10px;
+}
+@media (max-width: 700px) {
+  .classic-shell.client-shell .main {
+    padding-bottom: 28px;
+  }
+  .maintenance-dialog .visit-measures .form-two {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .schedule-title {
+    min-height: 44px;
+  }
+}
