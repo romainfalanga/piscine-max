@@ -6,7 +6,7 @@ Le rôle est choisi à l’inscription. Un compte client ne peut pas activer un 
 
 `pool_members` autorise seulement `owner` et `principal` pour les accès actifs. Les contraintes SQL imposent un principal unique et un responsable client unique. Les anciennes lignes `temporary` sont révoquées par la migration 0003, leurs récurrences arrêtées et leurs rendez-vous futurs annulés ; les comptes rendus publiés sont conservés. Des triggers empêchent la réactivation de ces accès.
 
-Le client invite le professionnel par son identifiant ou par recherche. Le professionnel peut demander à un client de choisir sa piscine via `connection_requests`, sans voir ses dossiers avant acceptation. Il peut aussi préparer une piscine puis inviter le client à la récupérer. Tant que le dossier n'a aucun propriétaire, son professionnel créateur peut inviter le premier client et archiver sa fiche ; dès acceptation, le client gère les autorisations.
+Le client invite le professionnel depuis Accès avec son adresse email exacte. Le professionnel peut demander à un client de choisir sa piscine via `connection_requests`, sans voir ses dossiers avant acceptation. Il peut aussi préparer une piscine puis inviter le client à la récupérer. Tant que le dossier n'a aucun propriétaire, son professionnel créateur peut inviter le premier client et archiver sa fiche ; dès acceptation, le client gère les autorisations.
 
 Le client qui possède déjà un dossier peut le sélectionner en acceptant une fiche préparée vide : le professionnel rejoint le dossier existant, la fiche préparée est archivée. Si elle contient déjà du suivi, la redirection est refusée pour préserver les historiques ; le client peut refuser cette invitation puis inviter le professionnel depuis son dossier existant. Aucun historique n'est fusionné silencieusement.
 
@@ -23,6 +23,8 @@ Les invitations et demandes expirent après sept jours et requièrent une accept
 | Brouillon d'un autre auteur     | Non            | Non                | Non                                           | Non       |
 
 Les besoins d’approvisionnement, la routine et les conseils professionnels se modifient uniquement par le principal actif. Les propriétaires conservent le suivi, les informations du bassin et les notifications pertinentes. Voir [PARCOURS-CLIENT.md](PARCOURS-CLIENT.md).
+
+L’email est désormais l’identité de connexion unique, normalisée en minuscules. La migration 0006 conserve tous les comptes historiques et ne rattache automatiquement que les emails non ambigus ; le code de récupération ou une session avec mot de passe permet d’associer une adresse aux autres comptes. Aucun annuaire public de personnes n’est exposé.
 
 ## Historique
 

@@ -7,6 +7,7 @@ export type User = {
   first_name: string;
   last_name: string;
   email: string | null;
+  login_email: string | null;
   is_pro: number;
   company: string;
   city_code: string | null;
@@ -222,13 +223,16 @@ export async function limit(
     fail("Trop de tentatives. Réessaie dans quelques instants.", 429);
   }
 }
+export function emailAddress(value: unknown) {
+  const email = str(value, 254, true).toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    fail("Renseignez une adresse email valide.");
+  return email;
+}
 export const publicUser = (u: User) => ({
   id: u.id,
-  username: u.username,
-  name: u.name,
-  first_name: u.first_name,
-  last_name: u.last_name,
-  email: u.email,
+  name: u.login_email || "Compte à compléter",
+  email: u.login_email,
   is_pro: u.is_pro,
   company: u.company,
   city_code: u.city_code,

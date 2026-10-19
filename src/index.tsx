@@ -55,7 +55,7 @@ app.get("/api/health", (c) =>
     ok: true,
     application: "Peace in Blue App",
     version: 2,
-    release: "client-experience-v4",
+    release: "email-dashboard-v5",
   }),
 );
 app.route("/api/auth", auth);

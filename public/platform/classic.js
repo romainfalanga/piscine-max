@@ -66,7 +66,7 @@ function clientCards() {
       people
         .map(
           (c) =>
-            `<section class="card"><div class="client-header"><span class="client-avatar">${esc(c.name.slice(0, 2).toUpperCase())}</span><div><h2>${esc(c.name)}</h2><small class="muted">@${esc(c.username)}</small></div></div>${c.pools.map(poolLink).join("")}</section>`,
+            `<section class="card"><div class="client-header"><span class="client-avatar">${esc(c.name.slice(0, 2).toUpperCase())}</span><div><h2>${esc(c.name)}</h2></div></div>${c.pools.map(poolLink).join("")}</section>`,
         )
         .join("") ||
     empty(

@@ -1,40 +1,38 @@
-# Simplification du parcours client, 19 octobre 2026
+# Comptes par email et suivi de piscine
 
-## Audit et choix retenus
+## Identité
 
-Le compte client permettait d’activer un profil professionnel ; son identifiant était figé. La fiche affichait la préparation des interventions et les mêmes formulaires au client et au pisciniste. L’email n’était ni demandé ni stocké.
+Les seuls éléments demandés à l’inscription sont l’adresse email et le mot de passe, avec le choix client ou pisciniste. Aucun prénom, nom ou identifiant personnel n’est demandé. L’email est normalisé en minuscules et unique. Le compte affiche l’email et le changement de mot de passe. Modifier l’email exige le mot de passe actuel et révoque les autres sessions.
 
-Le client doit pouvoir tenir son suivi seul, puis confier la même piscine à un professionnel sans changer de dossier. La séparation s’appuie sur le rôle dans la piscine : un professionnel propriétaire de sa piscine personnelle y suit également le parcours propriétaire.
+Le code de récupération personnel reste nécessaire pour un mot de passe oublié. Aucun envoi de mail n’est activé par cette évolution. Le rôle ne se transforme pas depuis Mon compte.
 
-| Écran | Client | Pisciniste principal |
-| --- | --- | --- |
-| Mon compte | Prénom, nom, identifiant, email, mot de passe | Même identité, plus profil professionnel |
-| Suivi | Analyses personnelles, courbes et comptes rendus publiés | Entretiens, analyses et comptes rendus |
-| En-tête piscine | Ajouter une analyse, ajouter un pisciniste si responsable et aucun principal | Commencer l’entretien, modifier la piscine |
-| Le bassin | Informations et bouton Modifier unique | Informations, routine et notes internes privées |
-| À prévoir / Planning | Aucun onglet de préparation ; prochains passages en lecture seule dans Suivi si programmés | Préparation, approvisionnements et planification |
-| Accès | Copropriétaires, invitation du principal et révocation selon responsabilité | Membres autorisés, invitation du premier client pour une fiche en attente |
+La migration additive `0006_email_login.sql` rattache les adresses déjà enregistrées lorsqu’elles sont uniques. Elle conserve les piscines, membres, photos et rapports. Pour un compte sans adresse unique, l’utilisateur peut associer son email depuis une session existante, avec son mot de passe, ou récupérer son compte avec son code personnel. Les doublons historiques ne sont jamais fusionnés ou attribués arbitrairement. Les anciens champs d’identité restent en base pour compatibilité, mais ne sont plus demandés ni renvoyés dans le profil.
 
-Sans pisciniste, les textes invitent à enregistrer une première analyse. Avec un pisciniste, les rapports publiés apparaissent dans le même historique. Les brouillons professionnels restent privés. Une invitation en attente est distinguée d’un accès déjà accepté.
+## Piscine et invitations
 
-## Identité et migration
+Les quatre onglets client sont Suivi, Évolution, Le bassin et Accès. L’ajout d’une personne se trouve uniquement dans Accès. Le responsable choisit Mon pisciniste ou Copropriétaire et saisit son adresse email exacte. Aucune recherche publique de personnes par nom ou liste d’emails n’est proposée. La personne doit avoir créé son compte et accepter l’invitation dans la plateforme.
 
-La migration additive `0005_account_identity.sql` ajoute `first_name`, `last_name` et `email`. Les anciens noms ne sont pas découpés automatiquement : l’utilisateur renseigne son prénom et son nom. Les anciens emails restent absents ; l’interface l’indique et propose un ajout, confirmé par le mot de passe actuel. Les nouvelles inscriptions demandent ces trois champs.
+| Rôle dans la piscine | Consultation | Analyses et bassin | Entretiens et préparation | Invitations |
+| --- | --- | --- | --- | --- |
+| Responsable propriétaire | Historique et photos publiés | Oui | Non | Oui |
+| Copropriétaire | Historique et photos publiés | Oui | Non | Non, sauf transfert de responsabilité |
+| Pisciniste principal | Historique et photos, ses brouillons | Oui | Oui, pour ses piscines attribuées | Premier client d’une fiche préparée uniquement |
+| Autre utilisateur | Aucun accès | Non | Non | Non |
 
-L’identifiant devient modifiable, avec unicité, validation et confirmation par mot de passe. Un changement déconnecte les autres sessions. L’email enregistré est affiché en lecture seule. Il n’est pas exposé aux autres membres ni à la recherche de professionnels. L’authentification reste fondée sur l’identifiant et le mot de passe ; la récupération conserve le code personnel. L’ajout d’un email n’active aucun envoi ni récupération par email.
+Le rattachement professionnel peut aussi partir du pisciniste : demande au client par email ou création d’une fiche avec son email. L’acceptation conserve un seul dossier par piscine et un seul principal. Les invitations ne créent jamais de compte à la place du client. La révocation retire l’accès aux photos, au tableau de bord et aux outils du dossier.
 
-Le rôle est choisi à l’inscription. `/me` ne peut plus l’élever, même par un appel manuel à l’API.
+Le bassin regroupe les informations modifiables et les équipements. L’export du carnet et les consignes d’accès privées sont retirés de l’interface. Les anciennes consignes ne sont pas effacées par une modification du bassin.
 
-## Séparation des outils
+## Tableau de bord
 
-L’accès aux besoins d’approvisionnement et à leur modification exige le principal actif de la piscine. Le client conserve les notifications pertinentes sur les achats ou produits apportés, mais ne gère plus la préparation de tournée. Les anciennes URL `needs` et `planning` de la piscine reviennent au suivi côté client.
+Le suivi présente dans le même panneau la dernière photo d’entretien publiée par un professionnel et les dernières valeurs de pH et de chlore. Chaque élément porte sa propre date : une analyse personnelle récente ne redonne pas artificiellement une date récente à une photo plus ancienne.
 
-Le formulaire client conserve les informations de son bassin : adresse, volume, traitement, équipements, état saisonnier et repères de mesure. Il n’affiche ni tâches professionnelles supplémentaires ni conseils « au client ». Ces deux champs ne peuvent plus être modifiés par un propriétaire ; leur absence dans le formulaire ne les efface pas en base. Les conseils existants restent lisibles dans le suivi. La checklist métier n’est retournée qu’au principal.
+Un résumé du dernier entretien rend visibles sa date, son auteur, sa durée, les tâches réalisées ou non, les observations et les produits ajoutés. Le compte rendu complet et son historique restent accessibles.
 
-## Direction visuelle
+`GET /pools/:id/overview` contrôle l’appartenance active puis recherche séparément les deux dernières mesures, le dernier entretien et la dernière photo d’entretien. Il exclut les brouillons et les versions remplacées par une correction publiée. La recherche ne dépend pas de la pagination du journal. Une photo d’analyse personnelle n’est pas présentée comme une réalisation du pisciniste. La lecture de chaque image repasse par le contrôle privé R2 existant.
 
-La palette du 17 octobre est conservée : bleu profond `#153d4c`, turquoise `#007d8c`, fond `#f3f7f8`, eau `#e3f4f3`, texte secondaire `#58717b`. Manrope reste la police unique. La simplification porte sur les actions : une action à son emplacement, un formulaire d’identité clair, la sécurité à côté, aucun nouveau décor. Les titres sont alignés à gauche et le mobile passe sur une colonne.
+## Vérifications
 
-## Validation
+31 tests métier et de permissions : connexion par email, unicité sans distinction de casse, changement sécurisé, migration des comptes historiques, récupération, invitations et droits des copropriétaires/principaux, refus des accès hors dossier, photo de brouillon, conservation de la photo et du chlore malgré plus d’une page d’analyses personnelles.
 
-Les tests couvrent l’identité privée, l’unicité de l’identifiant, la confirmation du mot de passe, la révocation des anciennes sessions, la migration des comptes sans email, le refus d’élévation de rôle et les droits sur les besoins. Les parcours navigateur utilisent désormais deux comptes réellement distincts pour le client autonome et le professionnel, puis valident un client associé au professionnel, avec reprise de brouillon et publication.
+Le parcours navigateur couvre l’inscription email/mot de passe, le compte simplifié, les invitations par email dans Accès, Le bassin sans export/consignes privées, la préparation professionnelle et la publication d’une photo. Les contrôles Cloudflare testent également la connexion par email, les rôles acceptés et l’aperçu des photos publiées.

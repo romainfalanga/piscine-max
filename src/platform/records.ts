@@ -61,6 +61,38 @@ const decode = (r: any) => ({
   readings: jsonParse(r.readings),
   checklist: jsonParse(r.checklist, []),
 });
+records.get("/pools/:id/overview", async (c) => {
+  const p = await access(c, c.req.param("id"));
+  const current =
+    "r.pool_id=? AND r.published_at IS NOT NULL AND NOT EXISTS(SELECT 1 FROM records x WHERE x.correction_of=r.id AND x.published_at IS NOT NULL)";
+  const [ph, chlorine, visit, photo] = await Promise.all([
+    row(
+      c,
+      `SELECT r.id record_id,r.measured_at,json_extract(r.readings,'$.ph') value FROM records r WHERE ${current} AND json_extract(r.readings,'$.ph') IS NOT NULL ORDER BY r.measured_at DESC,r.id DESC LIMIT 1`,
+      p.id,
+    ),
+    row(
+      c,
+      `SELECT r.id record_id,r.measured_at,json_extract(r.readings,'$.chlorine') value FROM records r WHERE ${current} AND json_extract(r.readings,'$.chlorine') IS NOT NULL ORDER BY r.measured_at DESC,r.id DESC LIMIT 1`,
+      p.id,
+    ),
+    row(
+      c,
+      `SELECT r.* FROM records r WHERE ${current} AND r.kind='visit' ORDER BY r.measured_at DESC,r.id DESC LIMIT 1`,
+      p.id,
+    ),
+    row(
+      c,
+      `SELECT f.id,f.record_id,f.caption,r.measured_at,r.author_name FROM photos f JOIN records r ON r.id=f.record_id AND r.pool_id=f.pool_id WHERE ${current} AND r.kind='visit' ORDER BY r.measured_at DESC,r.id DESC,f.created_at DESC,f.id DESC LIMIT 1`,
+      p.id,
+    ),
+  ]);
+  return c.json({
+    measurements: { ph, chlorine },
+    last_visit: visit ? decode(visit) : null,
+    last_photo: photo,
+  });
+});
 records.get("/pools/:id/records", async (c) => {
   const p = await access(c, c.req.param("id"));
   const { limit, cursor: after } = cursor(c);

@@ -5,6 +5,8 @@ import {
   who,
   requirePro,
   str,
+  emailAddress,
+  limit,
   uid,
   now,
   fail,
@@ -20,13 +22,13 @@ connections.get("/connections", async (c) => {
   return c.json({
     incoming: await rows(
       c,
-      "SELECT r.id,r.expires_at,u.name,u.company,u.username FROM connection_requests r JOIN users u ON u.id=r.pro_id WHERE r.client_id=? AND r.status='pending' AND r.expires_at>? AND u.disabled=0 AND u.is_pro=1 ORDER BY r.created_at DESC LIMIT 100",
+      "SELECT r.id,r.expires_at,coalesce(u.login_email,'Compte à compléter') name,u.company,u.login_email email FROM connection_requests r JOIN users u ON u.id=r.pro_id WHERE r.client_id=? AND r.status='pending' AND r.expires_at>? AND u.disabled=0 AND u.is_pro=1 ORDER BY r.created_at DESC LIMIT 100",
       u,
       now(),
     ),
     outgoing: await rows(
       c,
-      "SELECT r.id,r.expires_at,u.name,u.username FROM connection_requests r JOIN users u ON u.id=r.client_id WHERE r.pro_id=? AND r.status='pending' AND r.expires_at>? ORDER BY r.created_at DESC LIMIT 100",
+      "SELECT r.id,r.expires_at,coalesce(u.login_email,'Compte à compléter') name,u.login_email email FROM connection_requests r JOIN users u ON u.id=r.client_id WHERE r.pro_id=? AND r.status='pending' AND r.expires_at>? ORDER BY r.created_at DESC LIMIT 100",
       u,
       now(),
     ),
@@ -34,15 +36,16 @@ connections.get("/connections", async (c) => {
 });
 connections.post("/connections", async (c) => {
   requirePro(c);
+  await limit(c, `connections:${who(c).id}`, 30, 3600);
   const b = await c.req.json(),
     target = await row(
       c,
-      "SELECT id FROM users WHERE username=? AND disabled=0",
-      str(b.username, 40, true).toLowerCase(),
+      "SELECT id FROM users WHERE login_email=? AND disabled=0",
+      emailAddress(b.email),
     );
   if (!target)
     fail(
-      "Compte introuvable. Demandez au client de s’inscrire et de vous transmettre son identifiant.",
+      "Compte introuvable. Vérifiez l’adresse email du client et son inscription.",
     );
   if (target.id === who(c).id) fail("Choisissez le compte de votre client.");
   await stmt(

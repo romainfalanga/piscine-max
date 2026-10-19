@@ -12,6 +12,7 @@ import {
   row,
   limit,
   publicUser,
+  emailAddress,
   place,
   choice,
   number,
@@ -59,25 +60,6 @@ const password = (v: unknown) => {
   if (s.length < 12) fail("Choisis un mot de passe de 12 caractères minimum.");
   return s;
 };
-const username = (v: unknown) => {
-  const s = str(v, 40, true).toLowerCase();
-  if (!/^[a-z0-9][a-z0-9._-]{2,39}$/.test(s))
-    fail(
-      "Identifiant : 3 à 40 lettres minuscules, chiffres, points ou tirets.",
-    );
-  return s;
-};
-const emailAddress = (v: unknown) => {
-  const s = str(v, 254, true);
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s))
-    fail("Renseignez une adresse email valide.");
-  return s;
-};
-const identity = (b: any) => {
-  const first = str(b.first_name, 40, true),
-    last = str(b.last_name, 40, true);
-  return { first, last, name: `${first} ${last}` };
-};
 async function verifyCurrentPassword(c: C, value: unknown, u: any) {
   await limit(c, `account-password:${u.id}`, 15, 900);
   if (
@@ -120,7 +102,7 @@ export async function authenticate(c: C, next: () => Promise<void>) {
     Date.now(),
   );
   if (!u) fail("Session expirée. Connecte-toi à nouveau.", 401);
-  c.set("user", u);
+  c.set("user", { ...u, name: u.login_email || "Compte à compléter" });
   c.set("sessionHash", hash);
   await next();
 }
@@ -132,11 +114,9 @@ auth.use("*", async (c, next) => {
 });
 auth.post("/signup", async (c) => {
   const b = await c.req.json();
-  const profile = identity(b),
-    email = emailAddress(b.email),
-    login = username(b.username),
+  const email = emailAddress(b.email),
     pwd = password(b.password);
-  const role = choice(b.role, ["client", "pro"] as const);
+  const role = choice(b.role, ["client", "pro"] as const, "client");
   await limit(
     c,
     `signup:${await digest(c.req.header("CF-Connecting-IP") || "local")}`,
@@ -149,20 +129,19 @@ auth.post("/signup", async (c) => {
   try {
     await stmt(
       c,
-      "INSERT INTO users(id,username,name,password_hash,recovery_hash,is_pro,first_name,last_name,email) VALUES(?,?,?,?,?,?,?,?,?)",
+      "INSERT INTO users(id,username,name,password_hash,recovery_hash,is_pro,email,login_email) VALUES(?,?,?,?,?,?,?,?)",
       id,
-      login,
-      profile.name,
+      id,
+      email,
       hash,
       await digest(recovery),
       role === "pro" ? 1 : 0,
-      profile.first,
-      profile.last,
+      email,
       email,
     ).run();
   } catch (e) {
     if (String(e).includes("UNIQUE"))
-      fail("Cet identifiant est déjà utilisé.", 409);
+      fail("Cette adresse email est déjà associée à un compte.", 409);
     throw e;
   }
   await session(c, id);
@@ -171,12 +150,12 @@ auth.post("/signup", async (c) => {
 });
 auth.post("/login", async (c) => {
   const b = await c.req.json();
-  const login = username(b.username),
+  const login = emailAddress(b.email),
     pwd = str(b.password, 128, true);
   await limit(c, `login:${await digest(login)}`, 15, 900);
   const u = await row<any>(
     c,
-    "SELECT * FROM users WHERE username=? AND disabled=0",
+    "SELECT * FROM users WHERE login_email=? AND disabled=0",
     login,
   );
   const stored =
@@ -184,39 +163,55 @@ auth.post("/login", async (c) => {
     "pib1$00000000000000000000000000000000$00000000000000000000000000000000";
   const candidate = await passwordHash(c, pwd, stored.split("$")[1]);
   if (!u || !safeEqual(candidate, stored))
-    fail("Identifiant ou mot de passe incorrect.", 401);
+    fail("Adresse email ou mot de passe incorrect.", 401);
   await session(c, u.id);
   return c.json({ user: publicUser(u) });
 });
 auth.post("/recover", async (c) => {
-  const b = await c.req.json();
-  const login = username(b.username),
+  const b = await c.req.json(),
+    email = emailAddress(b.email),
     code = str(b.code, 64, true),
     pwd = password(b.password);
-  await limit(c, `recovery:${await digest(login)}`, 8, 3600);
+  await limit(c, `recovery:${await digest(email)}`, 8, 3600);
+  const codeHash = await digest(code);
   const u = await row<any>(
     c,
-    "SELECT * FROM users WHERE username=? AND disabled=0",
-    login,
+    "SELECT * FROM users WHERE recovery_hash=? AND disabled=0",
+    codeHash,
   );
-  if (!u || !safeEqual(await digest(code), u.recovery_hash))
-    fail("Identifiant ou code de récupération incorrect.", 401);
+  // Existing email identities cannot be retargeted with a recovery request.
+  // Legacy accounts without one may claim their own account with its secret code.
+  if (!u || (u.login_email && u.login_email !== email))
+    fail("Adresse email ou code de récupération incorrect.", 401);
   const nextCode = secret(),
     hash = await passwordHash(c, pwd);
-  const result = await c.env.DB.batch([
-    stmt(
-      c,
-      "UPDATE users SET password_hash=?,recovery_hash=? WHERE id=? AND recovery_hash=?",
-      hash,
-      await digest(nextCode),
-      u.id,
-      u.recovery_hash,
-    ),
-    stmt(c, "DELETE FROM sessions WHERE user_id=? AND changes()=1", u.id),
-  ]);
+  let result;
+  try {
+    result = await c.env.DB.batch([
+      stmt(
+        c,
+        "UPDATE users SET password_hash=?,recovery_hash=?,email=?,login_email=?,name=? WHERE id=? AND recovery_hash=?",
+        hash,
+        await digest(nextCode),
+        email,
+        email,
+        email,
+        u.id,
+        codeHash,
+      ),
+      stmt(c, "DELETE FROM sessions WHERE user_id=? AND changes()=1", u.id),
+    ]);
+  } catch (e) {
+    if (String(e).includes("UNIQUE"))
+      fail("Cette adresse email est déjà associée à un compte.", 409);
+    throw e;
+  }
   if (!result[0].meta.changes) fail("Ce code a déjà été utilisé.", 409);
   await session(c, u.id);
-  return c.json({ user: publicUser(u), recovery_code: nextCode });
+  return c.json({
+    user: publicUser({ ...u, login_email: email }),
+    recovery_code: nextCode,
+  });
 });
 export const account = new Hono<Env>();
 account.get("/me", (c) =>
@@ -242,13 +237,9 @@ account.put("/me", async (c) => {
     (b.is_pro !== undefined && Number(b.is_pro) !== u.is_pro)
   )
     fail("Le type de compte ne se modifie pas depuis le profil.", 403);
-  const profile = identity(b),
-    login = username(b.username ?? u.username),
-    email = u.email || (b.email ? emailAddress(b.email) : null);
-  if (u.email && b.email !== undefined && b.email !== u.email)
-    fail("L’adresse email de ce compte est affichée en lecture seule.");
-  const changedLogin = login !== u.username;
-  if (changedLogin || (!u.email && email)) {
+  const email = emailAddress(b.email ?? u.login_email),
+    changedEmail = email !== u.login_email;
+  if (changedEmail) {
     const stored = await row<any>(c, "SELECT * FROM users WHERE id=?", u.id);
     await verifyCurrentPassword(c, b.current_password, stored);
   }
@@ -274,11 +265,9 @@ account.put("/me", async (c) => {
   try {
     await stmt(
       c,
-      "UPDATE users SET name=?,first_name=?,last_name=?,username=?,email=?,company=?,city_code=?,city=?,latitude=?,longitude=?,radius_km=?,specialties=? WHERE id=?",
-      profile.name,
-      profile.first,
-      profile.last,
-      login,
+      "UPDATE users SET name=?,email=?,login_email=?,company=?,city_code=?,city=?,latitude=?,longitude=?,radius_km=?,specialties=? WHERE id=?",
+      email,
+      email,
       email,
       u.is_pro && b.company !== undefined ? str(b.company, 100) : u.company,
       location?.code || u.city_code,
@@ -291,10 +280,10 @@ account.put("/me", async (c) => {
     ).run();
   } catch (e) {
     if (String(e).includes("UNIQUE"))
-      fail("Cet identifiant est déjà utilisé.", 409);
+      fail("Cette adresse email est déjà associée à un compte.", 409);
     throw e;
   }
-  if (changedLogin)
+  if (changedEmail)
     await stmt(
       c,
       "DELETE FROM sessions WHERE user_id=? AND token_hash!=?",

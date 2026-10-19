@@ -106,9 +106,6 @@ async function completeVisit(env: any, id: string, token: string) {
 }
 async function user(env: any, name: string, role = "client") {
   const r = await request(env, "/auth/signup", "POST", {
-    username: name,
-    first_name: name,
-    last_name: "Test",
     email: name + "@example.test",
     password: "Test account long password 2026!",
     role,
@@ -144,7 +141,7 @@ async function invite(
     env,
     "/pools/" + poolId + "/invitations",
     "POST",
-    { username: target.user.username, kind, until },
+    { email: target.user.email, kind, until },
     owner.token,
   );
   assert.equal(r.status, 201, JSON.stringify(r.data));
@@ -166,10 +163,10 @@ test("Registration stores private identity, password recovery revokes sessions a
   const noEmail = await request(e, "/me", "GET", undefined, a.token);
   assert.equal(noEmail.status, 200);
   assert.equal(noEmail.data.email, "alice@example.test");
-  assert.equal(noEmail.data.first_name, "alice");
-  assert.equal(noEmail.data.last_name, "Test");
+  assert.equal(noEmail.data.first_name, undefined);
+  assert.equal(noEmail.data.last_name, undefined);
   const r = await request(e, "/auth/recover", "POST", {
-    username: "alice",
+    email: "alice@example.test",
     code: a.recovery_code,
     password: "New long password for Alice!",
   });
@@ -181,7 +178,7 @@ test("Registration stores private identity, password recovery revokes sessions a
   assert.equal(
     (
       await request(e, "/auth/recover", "POST", {
-        username: "alice",
+        email: "alice@example.test",
         code: a.recovery_code,
         password: "Another long password!",
       })
@@ -199,7 +196,7 @@ test("Missing secret fails closed and cross-origin writes are forbidden", async 
   assert.equal(
     (
       await request(e, "/auth/signup", "POST", {
-        username: "nobody",
+        email: "nobody@example.test",
         first_name: "No",
         last_name: "Body",
         email: "nobody@example.test",
@@ -248,7 +245,7 @@ test("Co-ownership invitation requires acceptance; client and pro accounts have 
         e,
         "/pools/" + id + "/invitations",
         "POST",
-        { username: "paul", kind: "principal" },
+        { email: "paul@example.test", kind: "principal" },
         b.token,
       )
     ).status,
@@ -295,7 +292,7 @@ test("Exactly one principal, no duplicate invitation acceptance, and revocation 
     e,
     "/pools/" + id + "/invitations",
     "POST",
-    { username: "quentin", kind: "principal" },
+    { email: "quentin@example.test", kind: "principal" },
     a.token,
   );
   assert.equal(i.status, 409);
@@ -685,7 +682,7 @@ test("Manager transfer preserves co-owner history and stops former manager chang
         e,
         "/pools/" + id + "/invitations",
         "POST",
-        { username: p.user.username, kind: "principal" },
+        { email: p.user.email, kind: "principal" },
         a.token,
       )
     ).status,
@@ -718,10 +715,10 @@ test("Classic clients, map and activity stats only expose current assignments an
   assert.equal(list.data.items.length, 1);
   assert.equal(list.data.items[0].address, "Adresse strictement privée");
   assert.equal(list.data.items[0].latitude, 43.14);
-  assert.deepEqual(
-    list.data.items[0].owners.map((u: any) => u.username).sort(),
-    ["elise", "marie"],
-  );
+  assert.deepEqual(list.data.items[0].owners.map((u: any) => u.email).sort(), [
+    "elise@example.test",
+    "marie@example.test",
+  ]);
   assert.equal(
     (
       await request(
@@ -1050,7 +1047,11 @@ test("Professional can create a pool, invite its client and hand ownership over 
     e,
     "/pools",
     "POST",
-    { name: "Bassin créé par Paul", mode: "pro", client_username: "alice" },
+    {
+      name: "Bassin créé par Paul",
+      mode: "pro",
+      client_email: "alice@example.test",
+    },
     pro.token,
   );
   assert.equal(created.status, 201, JSON.stringify(created.data));
@@ -1123,7 +1124,7 @@ test("Professional can create a pool, invite its client and hand ownership over 
         e,
         "/pools/" + id + "/invitations",
         "POST",
-        { username: "quentin", kind: "owner" },
+        { email: "quentin@example.test", kind: "owner" },
         pro.token,
       )
     ).status,
@@ -1135,7 +1136,7 @@ test("Professional can create a pool, invite its client and hand ownership over 
         e,
         "/pools/" + id + "/invitations",
         "POST",
-        { username: "quentin", kind: "principal" },
+        { email: "quentin@example.test", kind: "principal" },
         client.token,
       )
     ).status,
@@ -1147,7 +1148,11 @@ test("Professional can create a pool, invite its client and hand ownership over 
         e,
         "/pools/" + id + "/invitations",
         "POST",
-        { username: "quentin", kind: "temporary", until: "2099-01-01" },
+        {
+          email: "quentin@example.test",
+          kind: "temporary",
+          until: "2099-01-01",
+        },
         client.token,
       )
     ).status,
@@ -1188,14 +1193,21 @@ test("Professional requests an existing pool; only its client manager can author
     e,
     "/connections",
     "POST",
-    { username: "alice" },
+    { email: "alice@example.test" },
     pro.token,
   );
   assert.equal(create.status, 201);
   const requestId = create.data.id;
   assert.equal(
-    (await request(e, "/connections", "POST", { username: "alice" }, pro.token))
-      .status,
+    (
+      await request(
+        e,
+        "/connections",
+        "POST",
+        { email: "alice@example.test" },
+        pro.token,
+      )
+    ).status,
     409,
   );
   assert.equal(
@@ -1206,7 +1218,7 @@ test("Professional requests an existing pool; only its client manager can author
     await request(e, "/connections", "GET", undefined, owner.token)
   ).data.incoming;
   assert.equal(incoming.length, 1);
-  assert.equal(incoming[0].username, "paul");
+  assert.equal(incoming[0].email, "paul@example.test");
   assert.ok(!JSON.stringify(incoming).includes(id));
   assert.equal(
     (
@@ -1254,7 +1266,7 @@ test("Professional requests an existing pool; only its client manager can author
     e,
     "/connections",
     "POST",
-    { username: "alice" },
+    { email: "alice@example.test" },
     other.token,
   );
   assert.equal(
@@ -1277,7 +1289,7 @@ test("Professional requests an existing pool; only its client manager can author
     e,
     "/connections",
     "POST",
-    { username: "bob" },
+    { email: "bob@example.test" },
     other.token,
   );
   assert.equal(
@@ -1329,7 +1341,7 @@ test("Client can reuse an existing dossier instead of the empty pool prepared by
     e,
     "/pools",
     "POST",
-    { name: "Fiche préparée", mode: "pro", client_username: "alice" },
+    { name: "Fiche préparée", mode: "pro", client_email: "alice@example.test" },
     pro.token,
   );
   const inv = (await request(e, "/invitations", "GET", undefined, owner.token))
@@ -1373,7 +1385,11 @@ test("Existing work on a prepared pool prevents silent merging or loss of histor
     e,
     "/pools",
     "POST",
-    { name: "Piscine préparée", mode: "pro", client_username: "alice" },
+    {
+      name: "Piscine préparée",
+      mode: "pro",
+      client_email: "alice@example.test",
+    },
     pro.token,
   );
   const r = await request(
@@ -1423,14 +1439,14 @@ test("Only the first accepted principal invitation succeeds and a claim expires 
     e,
     "/pools/" + id + "/invitations",
     "POST",
-    { username: "paul", kind: "principal" },
+    { email: "paul@example.test", kind: "principal" },
     owner.token,
   );
   const b = await request(
     e,
     "/pools/" + id + "/invitations",
     "POST",
-    { username: "quentin", kind: "principal" },
+    { email: "quentin@example.test", kind: "principal" },
     owner.token,
   );
   assert.equal(
@@ -1469,7 +1485,11 @@ test("Only the first accepted principal invitation succeeds and a claim expires 
     e,
     "/pools",
     "POST",
-    { name: "Fiche en attente", mode: "pro", client_username: "alice" },
+    {
+      name: "Fiche en attente",
+      mode: "pro",
+      client_email: "alice@example.test",
+    },
     other.token,
   );
   const claim = (
@@ -1500,6 +1520,12 @@ test("Migration revokes legacy temporary access and schedules without deleting p
     identityMigration = e.DB.db.exec(
       readFileSync(
         new URL("../schema/0005_account_identity.sql", import.meta.url),
+        "utf8",
+      ),
+    ),
+    emailMigration = e.DB.db.exec(
+      readFileSync(
+        new URL("../schema/0006_email_login.sql", import.meta.url),
         "utf8",
       ),
     ),
@@ -1897,66 +1923,104 @@ test("New analyses only accept pH and chlorine while historical readings remain 
   assert.equal(trend.salt, undefined);
 });
 
-test("Account identity edits cannot enable a professional role, expose email, or take another username", async () => {
+test("Email is the sole login, is unique without case differences, and changes require the current password", async () => {
   const e = context(),
     a = await user(e, "accountowner"),
-    b = await user(e, "secondowner"),
-    pro = await user(e, "accountpro", "pro");
-  const body = {
-    first_name: "Camille",
-    last_name: "Durand",
-    username: "camille.durand",
-  };
+    other = await user(e, "otheremail");
+  const simple = await request(e, "/auth/signup", "POST", {
+    email: "simple@example.test",
+    password: "Just email and password!",
+  });
+  assert.equal(simple.status, 201);
+  assert.equal(simple.data.user.is_pro, 0);
+  const me = (await request(e, "/me", "GET", undefined, a.token)).data;
+  assert.equal(me.email, "accountowner@example.test");
+  for (const key of ["username", "first_name", "last_name"])
+    assert.equal(me[key], undefined);
+  const duplicate = await request(e, "/auth/signup", "POST", {
+    email: "ACCOUNTOWNER@EXAMPLE.TEST",
+    password: "Long password fixture!",
+    role: "pro",
+  });
+  assert.equal(duplicate.status, 409);
   assert.equal(
-    (await request(e, "/me", "PUT", { ...body, enable_pro: true }, a.token))
-      .status,
-    403,
+    (
+      await request(e, "/auth/login", "POST", {
+        username: "accountowner",
+        password: "Test account long password 2026!",
+      })
+    ).status,
+    400,
   );
-  assert.equal(
-    (await request(e, "/me", "PUT", { ...body, is_pro: 1 }, a.token)).status,
-    403,
-  );
-  assert.equal((await request(e, "/me", "PUT", body, a.token)).status, 400);
+  const session = await request(e, "/auth/login", "POST", {
+    email: "ACCOUNTOWNER@EXAMPLE.TEST",
+    password: "Test account long password 2026!",
+  });
+  assert.equal(session.status, 200);
   assert.equal(
     (
       await request(
         e,
         "/me",
         "PUT",
-        { ...body, current_password: "Wrong password long!" },
+        { email: a.user.email, enable_pro: true },
+        a.token,
+      )
+    ).status,
+    403,
+  );
+  assert.equal(
+    (await request(e, "/me", "PUT", { email: "new@example.test" }, a.token))
+      .status,
+    400,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        "/me",
+        "PUT",
+        { email: "new@example.test", current_password: "Wrong password long!" },
         a.token,
       )
     ).status,
     401,
   );
-  const oldSession = await request(e, "/auth/login", "POST", {
-    username: "accountowner",
-    password: "Test account long password 2026!",
-  });
-  const updated = await request(
+  assert.equal(
+    (
+      await request(
+        e,
+        "/me",
+        "PUT",
+        {
+          email: other.user.email,
+          current_password: "Test account long password 2026!",
+        },
+        a.token,
+      )
+    ).status,
+    409,
+  );
+  const changed = await request(
     e,
     "/me",
     "PUT",
     {
-      ...body,
+      email: "New@Example.Test",
       current_password: "Test account long password 2026!",
-      company: "Unexpected pro field",
     },
     a.token,
   );
-  assert.equal(updated.status, 200, JSON.stringify(updated.data));
-  assert.equal(updated.data.name, "Camille Durand");
-  assert.equal(updated.data.is_pro, 0);
-  assert.equal(updated.data.company, "");
-  assert.equal(updated.data.email, "accountowner@example.test");
+  assert.equal(changed.status, 200);
+  assert.equal(changed.data.email, "new@example.test");
   assert.equal(
-    (await request(e, "/me", "GET", undefined, oldSession.token)).status,
+    (await request(e, "/me", "GET", undefined, session.token)).status,
     401,
   );
   assert.equal(
     (
       await request(e, "/auth/login", "POST", {
-        username: "accountowner",
+        email: "accountowner@example.test",
         password: "Test account long password 2026!",
       })
     ).status,
@@ -1965,7 +2029,7 @@ test("Account identity edits cannot enable a professional role, expose email, or
   assert.equal(
     (
       await request(e, "/auth/login", "POST", {
-        username: "camille.durand",
+        email: "new@example.test",
         password: "Test account long password 2026!",
       })
     ).status,
@@ -1975,112 +2039,76 @@ test("Account identity edits cannot enable a professional role, expose email, or
     (
       await request(
         e,
-        "/me",
-        "PUT",
-        {
-          ...body,
-          username: "secondowner",
-          current_password: "Test account long password 2026!",
-        },
-        a.token,
+        "/professionals?q=account",
+        "GET",
+        undefined,
+        other.token,
       )
     ).status,
-    409,
+    404,
   );
-  assert.equal(
-    (
-      await request(
-        e,
-        "/me",
-        "PUT",
-        { ...body, email: "changed@example.test" },
-        a.token,
-      )
-    ).status,
-    400,
-  );
-  const id = await pool(e, a);
-  await invite(e, a, pro, id, "principal");
-  await invite(e, a, b, id, "owner");
-  const otherView = await request(
-    e,
-    "/pools/" + id,
-    "GET",
-    undefined,
-    pro.token,
-  );
-  assert.ok(
-    !JSON.stringify(otherView.data).includes("accountowner@example.test"),
-  );
-  assert.ok(
-    !JSON.stringify(
-      (await request(e, "/professionals?q=account", "GET", undefined, b.token))
-        .data,
-    ).includes("accountpro@example.test"),
-  );
-  const passwordChange = await request(
-    e,
-    "/password",
-    "POST",
-    {
-      current_password: "Test account long password 2026!",
-      password: "Changed password very long!",
-    },
-    a.token,
-  );
-  assert.equal(passwordChange.status, 200);
-  assert.ok(passwordChange.data.recovery_code);
 });
 
-test("Legacy accounts retain their name and can add missing identity without fabricated email", async () => {
-  const e = { ...context(), DB: new LocalD1("0004_maintenance_location.sql") };
-  e.DB.db
-    .prepare(
-      "INSERT INTO users(id,username,name,password_hash,recovery_hash) VALUES('legacy-id','legacy.user','Nom composé inconnu','unused','unused')",
-    )
-    .run();
+test("Email migration preserves legacy accounts, avoids ambiguous duplicates, and recovery attaches only the account proved by its code", async () => {
+  const e = { ...context(), DB: new LocalD1("0005_account_identity.sql") };
+  const insert = e.DB.db.prepare(
+    "INSERT INTO users(id,username,name,password_hash,recovery_hash,email) VALUES(?,?,?,'unused',?,?)",
+  );
+  insert.run("one", "one", "Ancien nom", "unused1", "  ONE@EXAMPLE.TEST ");
+  insert.run("two", "two", "Second nom", "unused2", "same@example.test");
+  insert.run("three", "three", "Troisième nom", "unused3", "SAME@example.test");
+  insert.run("four", "four", "Sans email", "unused4", null);
   e.DB.db.exec(
     readFileSync(
-      new URL("../schema/0005_account_identity.sql", import.meta.url),
+      new URL("../schema/0006_email_login.sql", import.meta.url),
       "utf8",
     ),
   );
-  const old = e.DB.db
-    .prepare(
-      "SELECT name,first_name,last_name,email FROM users WHERE id='legacy-id'",
-    )
-    .get();
-  assert.deepEqual(
-    { ...old },
-    { name: "Nom composé inconnu", first_name: "", last_name: "", email: null },
-  );
-  const a = await user(e, "legacytest");
-  e.DB.db
-    .prepare(
-      "UPDATE users SET email=NULL,first_name='',last_name='' WHERE id=?",
-    )
-    .run(a.user.id);
-  const identity = {
-    first_name: "Anne Marie",
-    last_name: "Le Goff",
-    username: "legacytest",
-    email: "anne@example.test",
-  };
+  const values = e.DB.db
+    .prepare("SELECT id,login_email FROM users ORDER BY id")
+    .all();
+  assert.equal(values.length, 4);
   assert.equal(
-    (await request(e, "/me", "GET", undefined, a.token)).data.email,
-    null,
+    values.find((x: any) => x.id === "one")?.login_email,
+    "one@example.test",
   );
-  assert.equal((await request(e, "/me", "PUT", identity, a.token)).status, 400);
-  const saved = await request(
-    e,
-    "/me",
-    "PUT",
-    { ...identity, current_password: "Test account long password 2026!" },
-    a.token,
+  for (const id of ["two", "three", "four"])
+    assert.equal(values.find((x: any) => x.id === id)?.login_email, null);
+  const legacy = await user(e, "legacycode");
+  e.DB.db
+    .prepare("UPDATE users SET email=NULL,login_email=NULL WHERE id=?")
+    .run(legacy.user.id);
+  const recovered = await request(e, "/auth/recover", "POST", {
+    email: "attached@example.test",
+    code: legacy.recovery_code,
+    password: "New password very long!",
+  });
+  assert.equal(recovered.status, 200);
+  assert.equal(recovered.data.user.id, legacy.user.id);
+  assert.equal(recovered.data.user.email, "attached@example.test");
+  assert.equal(
+    (await request(e, "/me", "GET", undefined, legacy.token)).status,
+    401,
   );
-  assert.equal(saved.status, 200);
-  assert.equal(saved.data.name, "Anne Marie Le Goff");
-  assert.equal(saved.data.email, "anne@example.test");
+  assert.equal(
+    (
+      await request(e, "/auth/recover", "POST", {
+        email: "different@example.test",
+        code: recovered.data.recovery_code,
+        password: "Another password very long!",
+      })
+    ).status,
+    401,
+  );
+  assert.equal(
+    (
+      await request(e, "/auth/login", "POST", {
+        email: "attached@example.test",
+        password: "New password very long!",
+      })
+    ).status,
+    200,
+  );
 });
 
 test("Client remains autonomous while professional preparation is restricted to the current principal", async () => {
@@ -2234,5 +2262,266 @@ test("Client remains autonomous while professional preparation is restricted to 
     (
       await request(e, "/notifications", "GET", undefined, owner.token)
     ).data.items.some((n: any) => n.type === "supply"),
+  );
+});
+
+test("Email invitations grant the selected role only, after acceptance", async () => {
+  const e = context(),
+    manager = await user(e, "mailowner"),
+    co = await user(e, "mailco"),
+    pro = await user(e, "mailpro", "pro"),
+    id = await pool(e, manager);
+  const invitation = await request(
+    e,
+    `/pools/${id}/invitations`,
+    "POST",
+    { email: "MAILCO@EXAMPLE.TEST", kind: "owner" },
+    manager.token,
+  );
+  assert.equal(invitation.status, 201);
+  assert.equal(
+    (await request(e, `/pools/${id}`, "GET", undefined, co.token)).status,
+    404,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        `/invitations/${invitation.data.id}/respond`,
+        "POST",
+        { accept: true },
+        co.token,
+      )
+    ).status,
+    200,
+  );
+  const own = (await request(e, `/pools/${id}`, "GET", undefined, co.token))
+    .data;
+  assert.equal(own.membership, "owner");
+  assert.equal(own.manager, 0);
+  assert.equal(
+    (
+      await request(
+        e,
+        `/pools/${id}`,
+        "PUT",
+        { ...own, name: "Bassin partagé", client_advice: undefined },
+        co.token,
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        `/pools/${id}/records`,
+        "POST",
+        { kind: "analysis", measured_at: measured(), readings: { ph: 7.3 } },
+        co.token,
+      )
+    ).status,
+    201,
+  );
+  for (const path of [`/pools/${id}/needs`, `/pools/${id}/notes`])
+    assert.equal(
+      (await request(e, path, "GET", undefined, co.token)).status,
+      403,
+    );
+  assert.equal(
+    (
+      await request(
+        e,
+        `/pools/${id}/records`,
+        "POST",
+        { kind: "visit", measured_at: measured() },
+        co.token,
+      )
+    ).status,
+    403,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        `/pools/${id}/invitations`,
+        "POST",
+        { kind: "principal", email: pro.user.email },
+        co.token,
+      )
+    ).status,
+    403,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        `/pools/${id}/invitations`,
+        "POST",
+        { kind: "principal", email: co.user.email },
+        manager.token,
+      )
+    ).status,
+    400,
+  );
+  await invite(e, manager, pro, id, "principal");
+  const professional = (
+    await request(e, `/pools/${id}`, "GET", undefined, pro.token)
+  ).data;
+  assert.equal(professional.membership, "principal");
+  assert.ok(professional.maintenance_tasks.length > 10);
+  assert.equal(
+    (await request(e, `/pools?mode=pro`, "GET", undefined, pro.token)).data
+      .items[0].id,
+    id,
+  );
+  assert.equal(
+    (await request(e, `/pools/${id}/needs`, "GET", undefined, pro.token))
+      .status,
+    200,
+  );
+  const member = professional.members.find(
+    (m: any) => m.user_id === pro.user.id,
+  );
+  await request(
+    e,
+    `/pools/${id}/members/${member.id}`,
+    "DELETE",
+    {},
+    manager.token,
+  );
+  assert.equal(
+    (await request(e, `/pools/${id}/overview`, "GET", undefined, pro.token))
+      .status,
+    404,
+  );
+  assert.equal(
+    (await request(e, `/pools/${id}/overview`, "GET", undefined, co.token))
+      .status,
+    200,
+  );
+});
+
+test("Dashboard keeps latest readings and published professional photos aligned without leaking drafts", async () => {
+  const e = context(),
+    owner = await user(e, "photoowner"),
+    pro = await user(e, "photopro", "pro"),
+    outsider = await user(e, "photooutsider"),
+    id = await pool(e, owner);
+  await invite(e, owner, pro, id, "principal");
+  const visit = await request(
+    e,
+    `/pools/${id}/records`,
+    "POST",
+    { kind: "visit", measured_at: new Date(Date.now() - 60000).toISOString() },
+    pro.token,
+  );
+  const fd = new FormData();
+  fd.set(
+    "file",
+    new File(
+      [
+        Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=",
+          "base64",
+        ),
+      ],
+      "pool.png",
+      { type: "image/png" },
+    ),
+  );
+  const photo = await request(
+    e,
+    `/records/${visit.data.id}/photos`,
+    "POST",
+    fd,
+    pro.token,
+  );
+  assert.equal(photo.status, 201);
+  let overview = (
+    await request(e, `/pools/${id}/overview`, "GET", undefined, owner.token)
+  ).data;
+  assert.equal(overview.last_photo, null);
+  assert.equal(overview.last_visit, null);
+  await completeVisit(e, visit.data.id, pro.token);
+  await request(e, `/records/${visit.data.id}/publish`, "POST", {}, pro.token);
+  // More than a history page of partial personal readings must not hide the last chlorine result or photo.
+  for (let i = 0; i < 26; i++) {
+    const analysis = await request(
+      e,
+      `/pools/${id}/records`,
+      "POST",
+      {
+        kind: "analysis",
+        measured_at: new Date(Date.now() - 1000 - i * 1000).toISOString(),
+        readings: { ph: 7.4 },
+      },
+      owner.token,
+    );
+    assert.equal(analysis.status, 201);
+    await request(
+      e,
+      `/records/${analysis.data.id}/publish`,
+      "POST",
+      {},
+      owner.token,
+    );
+  }
+  overview = (
+    await request(e, `/pools/${id}/overview`, "GET", undefined, owner.token)
+  ).data;
+  assert.equal(overview.last_photo.id, photo.data.id);
+  assert.equal(overview.last_photo.record_id, visit.data.id);
+  assert.equal(overview.last_visit.id, visit.data.id);
+  assert.equal(overview.measurements.ph.value, 7.4);
+  assert.equal(overview.measurements.chlorine.value, 1.5);
+  assert.equal(overview.measurements.chlorine.record_id, visit.data.id);
+  assert.notEqual(
+    overview.measurements.ph.measured_at,
+    overview.last_photo.measured_at,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        `/pools/${id}/overview`,
+        "GET",
+        undefined,
+        outsider.token,
+      )
+    ).status,
+    404,
+  );
+  const membership = (
+    await request(e, `/pools/${id}`, "GET", undefined, owner.token)
+  ).data.members.find((m: any) => m.user_id === pro.user.id);
+  await request(
+    e,
+    `/pools/${id}/members/${membership.id}`,
+    "DELETE",
+    {},
+    owner.token,
+  );
+  assert.equal(
+    (await request(e, `/pools/${id}/overview`, "GET", undefined, pro.token))
+      .status,
+    404,
+  );
+  assert.equal(
+    (await request(e, `/photos/${photo.data.id}`, "GET", undefined, pro.token))
+      .status,
+    404,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        `/photos/${photo.data.id}`,
+        "GET",
+        undefined,
+        owner.token,
+      )
+    ).status,
+    200,
   );
 });

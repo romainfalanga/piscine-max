@@ -44,10 +44,7 @@ async function signup(label, role) {
   const username = prefix + "-" + label,
     password = randomBytes(24).toString("hex");
   const r = await request("/auth/signup", "POST", {
-    username,
     password,
-    first_name: "Recette",
-    last_name: label,
     email: username + "@example.test",
     role,
   });
@@ -56,6 +53,13 @@ async function signup(label, role) {
   users.push(r.data.user.id);
   assert.ok(r.cookie);
   assert.ok(r.data.recovery_code);
+  const signedIn = await request("/auth/login", "POST", {
+    email: r.data.user.email.toUpperCase(),
+    password,
+  });
+  assert.equal(signedIn.status, 200);
+  assert.equal(signedIn.data.user.id, r.data.user.id);
+  assert.equal(signedIn.data.user.username, undefined);
   return { ...r.data.user, cookie: r.cookie };
 }
 async function cleanup() {
@@ -114,7 +118,7 @@ async function cleanup() {
     params: users,
   });
   batch.push({
-    sql: `DELETE FROM users WHERE id IN(${list}) AND username LIKE ?`,
+    sql: `DELETE FROM users WHERE id IN(${list}) AND login_email LIKE ?`,
     params: [...users, prefix + "-%"],
   });
   const r = await fetch(
@@ -139,12 +143,12 @@ try {
   for (let i = 0; i < 20; i++) {
     try {
       const r = await request("/health");
-      if (r.status === 200 && r.data?.release === "client-experience-v4") {
+      if (r.status === 200 && r.data?.release === "email-dashboard-v5") {
         const asset = await fetch(base + "/platform/experience.css", {
           cache: "no-store",
           signal: AbortSignal.timeout(15000),
         });
-        if (!asset.ok || !(await asset.text()).includes(".account-layout")) {
+        if (!asset.ok || !(await asset.text()).includes(".water-overview")) {
           await new Promise((resolve) => setTimeout(resolve, 3000));
           continue;
         }
@@ -189,7 +193,8 @@ try {
   checks.push("Anonymous private access denied");
   const owner = await signup("owner", "client"),
     pro = await signup("pro", "pro"),
-    outsider = await signup("outsider", "client");
+    outsider = await signup("outsider", "client"),
+    coowner = await signup("coowner", "client");
   assert.equal(
     (await request("/me", "GET", undefined, owner.cookie)).data.email,
     owner.email,
@@ -199,7 +204,7 @@ try {
       await request(
         "/me",
         "PUT",
-        { first_name: "Recette", last_name: "owner", enable_pro: true },
+        { email: owner.email, enable_pro: true },
         owner.cookie,
       )
     ).status,
@@ -242,7 +247,7 @@ try {
   const inv = await request(
     "/pools/" + poolId + "/invitations",
     "POST",
-    { kind: "principal", username: pro.username },
+    { kind: "principal", email: pro.email },
     owner.cookie,
   );
   assert.equal(inv.status, 201);
@@ -261,7 +266,54 @@ try {
     (await request("/pools/" + poolId, "GET", undefined, pro.cookie)).status,
     200,
   );
-  checks.push("Invitation and explicit professional access work");
+  const coInvitation = await request(
+    "/pools/" + poolId + "/invitations",
+    "POST",
+    { kind: "owner", email: coowner.email },
+    owner.cookie,
+  );
+  assert.equal(coInvitation.status, 201);
+  assert.equal(
+    (
+      await request(
+        "/invitations/" + coInvitation.data.id + "/respond",
+        "POST",
+        { accept: true },
+        coowner.cookie,
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (await request("/pools/" + poolId, "GET", undefined, coowner.cookie)).data
+      .membership,
+    "owner",
+  );
+  assert.equal(
+    (
+      await request(
+        "/pools/" + poolId + "/needs",
+        "GET",
+        undefined,
+        coowner.cookie,
+      )
+    ).status,
+    403,
+  );
+  assert.equal(
+    (
+      await request(
+        "/pools/" + poolId + "/records",
+        "POST",
+        { kind: "visit", measured_at: new Date().toISOString() },
+        coowner.cookie,
+      )
+    ).status,
+    403,
+  );
+  checks.push(
+    "Email invitations grant professional and co-owner roles after acceptance",
+  );
   assert.equal(
     (
       await request(
@@ -283,9 +335,9 @@ try {
   ).data;
   assert.equal(clientDossier.maintenance_tasks, undefined);
   assert.equal(clientDossier.routine, undefined);
-  assert.ok(!JSON.stringify(clientDossier.members).includes("@example.test"));
+  assert.ok(clientDossier.members.every((m) => !m.username && m.email));
   checks.push(
-    "Client dossier excludes professional preparation and private email",
+    "Client dossier excludes professional preparation and uses email identities",
   );
   assert.equal(
     (await request("/health")).data.application,
@@ -390,6 +442,17 @@ try {
       .status,
     404,
   );
+  assert.equal(
+    (
+      await request(
+        "/pools/" + poolId + "/overview",
+        "GET",
+        undefined,
+        owner.cookie,
+      )
+    ).data.last_photo,
+    null,
+  );
   checks.push("Draft and photo are private");
   assert.equal(
     (
@@ -429,6 +492,28 @@ try {
     ).status,
     404,
   );
+  const overview = (
+    await request(
+      "/pools/" + poolId + "/overview",
+      "GET",
+      undefined,
+      owner.cookie,
+    )
+  ).data;
+  assert.equal(overview.last_photo.id, image.data.id);
+  assert.equal(
+    (
+      await request(
+        "/photos/" + image.data.id,
+        "GET",
+        undefined,
+        coowner.cookie,
+      )
+    ).status,
+    200,
+  );
+  assert.equal(overview.last_visit.id, record.data.id);
+  assert.equal(overview.measurements.ph.value, 7.2);
   checks.push(
     "Published report and R2 photo shared only with authorized client",
   );
@@ -479,7 +564,7 @@ try {
   const join = await request(
     "/connections",
     "POST",
-    { username: owner.username },
+    { email: owner.email },
     pro.cookie,
   );
   assert.equal(join.status, 201);
@@ -505,7 +590,7 @@ try {
     {
       name: "Piscine préparée de recette",
       mode: "pro",
-      client_username: owner.username,
+      client_email: owner.email,
     },
     pro.cookie,
   );
@@ -553,7 +638,7 @@ try {
       await request(
         "/pools/" + prepared.data.id + "/invitations",
         "POST",
-        { kind: "temporary", username: pro.username },
+        { kind: "temporary", email: pro.email },
         owner.cookie,
       )
     ).status,

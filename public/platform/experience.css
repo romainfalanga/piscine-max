@@ -1346,3 +1346,95 @@ dialog form {
 .record .values strong {
   margin-inline: 3px;
 }
+
+/* Keep the professional's real photo beside dated water measurements. */
+.water-overview.with-photo {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 25px;
+  align-items: center;
+}
+.water-photo {
+  margin: 0;
+  min-width: 0;
+}
+.water-photo > a {
+  display: block;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.water-photo img {
+  width: 100%;
+  height: 220px;
+  object-fit: cover;
+  display: block;
+}
+.water-photo figcaption {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  font-size: 11px;
+  color: #c5dce2;
+  padding-top: 10px;
+}
+.with-photo .water-readings {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 22px;
+}
+.with-photo .water-reading + div {
+  padding-left: 0;
+  padding-top: 20px;
+  border-left: 0;
+  border-top: 1px solid #42616c;
+}
+.latest-service {
+  padding: 24px 0;
+  border-bottom: 1px solid #dce8eb;
+  margin-bottom: 24px;
+}
+.latest-service .section-heading {
+  margin: 0 0 13px;
+}
+.latest-service .prose {
+  font-size: 14px;
+  line-height: 1.75;
+  margin: 12px 0;
+}
+.latest-service .task-total {
+  margin: 10px 0;
+}
+.latest-service .btn {
+  margin-top: 10px;
+}
+.classic-profile .profile-name {
+  max-width: 230px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.person-line strong,
+.clients-grid h2,
+.row h3,
+.latest-service p {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 680px) {
+  .water-overview.with-photo {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 22px;
+  }
+  .water-photo img {
+    height: 200px;
+  }
+  .with-photo .water-readings {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 16px;
+  }
+  .with-photo .water-reading + div {
+    padding-top: 0;
+    padding-left: 16px;
+    border-top: 0;
+    border-left: 1px solid #42616c;
+  }
+}

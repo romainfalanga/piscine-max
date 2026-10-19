@@ -8,9 +8,9 @@ Les identifiants locaux de `wrangler.jsonc` restent destinés au développement.
 
 ## Parcours disponibles
 
-- Inscription autonome client ou pisciniste, identifiant/mot de passe et code de récupération sans email. Un professionnel peut aussi gérer sa piscine personnelle.
+- Inscription autonome client ou pisciniste, email/mot de passe et code personnel de récupération. Un professionnel peut aussi gérer sa piscine personnelle.
 - Piscines créées par le client ou par son pisciniste, invitations dans les deux sens et rattachement au dossier existant. Plusieurs copropriétaires possibles, un responsable des accès et un seul pisciniste principal. Aucun autre professionnel ne peut consulter le dossier.
-- Journal commun, analyses autonomes, courbes, comptes rendus avec photos privées, brouillons puis « Terminer et partager ». Corrections traçables, notes professionnelles séparées, export du carnet.
+- Journal commun, analyses autonomes, courbes, comptes rendus avec photos privées, brouillons puis « Terminer et partager ». Corrections traçables, notes professionnelles séparées et tableau de bord avec dernière photo d’entretien.
 - Planning individuel, récurrences, saisons, exceptions, passages réalisés et préparation des produits/matériels. Achat client ou approvisionnement pro, avec notifications distinctes dans la plateforme.
 - Navigation professionnelle : Agenda (arrivée directe), Carte, Clients, Pisciniste. Préparation et statistiques depuis l’Agenda.
 - Code du pisciniste : sessions courtes ou complètes, thèmes, correction et historique privé.

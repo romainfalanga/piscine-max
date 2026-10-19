@@ -38,14 +38,9 @@ try {
     .getByRole("button", { name: "Créer mon compte", exact: true })
     .click();
   const suffix = Date.now().toString().slice(-7);
-  await page.getByLabel("Prénom", { exact: true }).fill("Camille");
-  await page.getByLabel("Nom", { exact: true }).fill("Martin");
   await page
     .getByLabel("Adresse email", { exact: true })
     .fill("camille-client@example.test");
-  await page
-    .getByLabel("Identifiant", { exact: true })
-    .fill("camille-client-" + suffix);
   await page
     .getByLabel("Mot de passe", { exact: true })
     .fill("Browser fixture password only!");
@@ -146,24 +141,44 @@ try {
     await page.getByText("Le prochain passage se prépare ici.").count(),
     0,
   );
-  await page
-    .locator(".pool-heading-actions")
-    .getByRole("button", { name: "Ajouter un pisciniste", exact: true })
-    .click();
   assert.equal(
-    await page.getByLabel("Inviter", { exact: true }).inputValue(),
-    "principal",
+    await page
+      .locator(".pool-heading-actions [data-action=invite-member]")
+      .count(),
+    0,
+  );
+  await page.getByRole("button", { name: "Accès", exact: true }).click();
+  await page.getByRole("button", { name: "Inviter", exact: true }).click();
+  assert.deepEqual(
+    await page
+      .getByLabel("Inviter", { exact: true })
+      .locator("option")
+      .allTextContents(),
+    ["Mon pisciniste", "Copropriétaire"],
   );
   assert.equal(
-    await page.getByLabel("Inviter", { exact: true }).locator("option").count(),
+    await page
+      .getByLabel("Adresse email de la personne", { exact: true })
+      .count(),
     1,
   );
+  assert.equal(await page.locator("[name=username], #pro-search").count(), 0);
   await page.getByRole("button", { name: "Fermer", exact: true }).click();
   await page.getByRole("button", { name: "Le bassin", exact: true }).click();
   await page.getByRole("button", { name: "Modifier", exact: true }).waitFor();
   assert.equal(
     await page.getByRole("button", { name: "Modifier", exact: true }).count(),
     1,
+  );
+  assert.equal(
+    await page.getByText("Exporter mon carnet", { exact: true }).count(),
+    0,
+  );
+  assert.equal(
+    await page
+      .getByText("Informations d’accès privées", { exact: false })
+      .count(),
+    0,
   );
   await page.getByRole("button", { name: "Modifier", exact: true }).click();
   assert.equal(
@@ -183,36 +198,28 @@ try {
     0,
   );
   assert.equal(
-    await page.getByLabel("Prénom", { exact: true }).inputValue(),
-    "Camille",
-  );
-  assert.equal(
-    await page.getByLabel("Nom", { exact: true }).inputValue(),
-    "Martin",
+    await page
+      .locator("[name=username],[name=first_name],[name=last_name]")
+      .count(),
+    0,
   );
   assert.equal(
     await page.getByLabel("Adresse email", { exact: true }).inputValue(),
     "camille-client@example.test",
   );
-  assert.equal(
-    await page
-      .getByLabel("Adresse email", { exact: true })
-      .getAttribute("readonly"),
-    "",
-  );
   await page
-    .getByLabel("Identifiant", { exact: true })
-    .fill("camille-client-updated-" + suffix);
+    .getByLabel("Adresse email", { exact: true })
+    .fill("camille-updated@example.test");
   await page
     .getByLabel("Mot de passe actuel", { exact: true })
     .fill("Browser fixture password only!");
   await page
-    .getByRole("button", { name: "Enregistrer mes informations", exact: true })
+    .getByRole("button", { name: "Enregistrer mon adresse email", exact: true })
     .click();
-  await page.getByText("Informations enregistrées.", { exact: true }).waitFor();
+  await page.getByText("Adresse email enregistrée.", { exact: true }).waitFor();
   assert.equal(
-    await page.getByLabel("Identifiant", { exact: true }).inputValue(),
-    "camille-client-updated-" + suffix,
+    await page.getByLabel("Adresse email", { exact: true }).inputValue(),
+    "camille-updated@example.test",
   );
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({
@@ -247,17 +254,12 @@ try {
   await page
     .getByRole("button", { name: "Créer mon compte", exact: true })
     .click();
-  await page.getByLabel("Prénom", { exact: true }).fill("Camille");
-  await page.getByLabel("Nom", { exact: true }).fill("Martin");
   await page
     .getByLabel("Adresse email", { exact: true })
     .fill("camille-pro@example.test");
   await page
     .getByRole("button", { name: "Je suis pisciniste", exact: true })
     .click();
-  await page
-    .getByLabel("Identifiant", { exact: true })
-    .fill("camille-" + suffix);
   await page
     .getByLabel("Mot de passe", { exact: true })
     .fill("Browser fixture password only!");
@@ -286,9 +288,6 @@ try {
     return response.json();
   };
   await apiPost(ownerContext, "/auth/signup", {
-    username: "olivier-" + suffix,
-    first_name: "Olivier",
-    last_name: "Laurent",
     email: "olivier@example.test",
     password: "Browser fixture password only!",
     role: "client",
@@ -303,7 +302,7 @@ try {
   const invitation = await apiPost(
     ownerContext,
     `/pools/${assigned.id}/invitations`,
-    { username: "camille-" + suffix, kind: "principal" },
+    { email: "camille-pro@example.test", kind: "principal" },
   );
   await apiPost(context, `/invitations/${invitation.id}/respond`, {
     accept: true,
@@ -370,7 +369,7 @@ try {
   await nav.getByRole("link", { name: "Clients", exact: true }).click();
   await page
     .getByRole("heading", {
-      name: "Olivier Laurent",
+      name: "olivier@example.test",
       exact: true,
     })
     .waitFor();
@@ -632,9 +631,6 @@ try {
     locale: "fr-FR",
   });
   await apiPost(linkedContext, "/auth/signup", {
-    username: "lucie-" + suffix,
-    first_name: "Lucie",
-    last_name: "Morel",
     email: "lucie@example.test",
     password: "Browser fixture password only!",
     role: "client",
@@ -656,8 +652,8 @@ try {
     .getByLabel("Nom de la piscine", { exact: true })
     .fill("Le bassin de Lucie");
   await page
-    .getByLabel("Identifiant du client (facultatif)", { exact: true })
-    .fill("lucie-" + suffix);
+    .getByLabel("Adresse email du client (facultatif)", { exact: true })
+    .fill("lucie@example.test");
   await page
     .getByRole("button", { name: "Créer la piscine", exact: true })
     .click();
@@ -698,7 +694,7 @@ try {
   await page.goto("http://127.0.0.1:8788/#clients");
   await page
     .getByRole("heading", {
-      name: "Lucie Morel",
+      name: "lucie@example.test",
       exact: true,
     })
     .waitFor();
@@ -716,8 +712,8 @@ try {
     })
     .click();
   await page
-    .getByLabel("Identifiant du client", { exact: true })
-    .fill("lucie-" + suffix);
+    .getByLabel("Adresse email du client", { exact: true })
+    .fill("lucie@example.test");
   await page
     .getByRole("button", { name: "Envoyer la demande", exact: true })
     .click();
@@ -759,8 +755,8 @@ try {
     .getByRole("button", { name: "Inviter", exact: true })
     .click();
   await clientPage
-    .getByLabel("Identifiant exact de la personne", { exact: true })
-    .fill("camille-" + suffix);
+    .getByLabel("Adresse email de la personne", { exact: true })
+    .fill("camille-pro@example.test");
   await clientPage
     .getByRole("button", { name: "Envoyer l’invitation", exact: true })
     .click();
@@ -827,6 +823,14 @@ try {
     0,
   );
   await page.getByLabel("Nettoyer la ligne d’eau", { exact: true }).check();
+  await page.locator("[name=photos]").setInputFiles({
+    name: "entretien.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=",
+      "base64",
+    ),
+  });
   await page.getByLabel("Conserver un brouillon", { exact: true }).check();
   await page
     .getByRole("button", { name: "Enregistrer le brouillon", exact: true })
@@ -839,6 +843,7 @@ try {
     await clientPage.getByText("Brouillon", { exact: true }).count(),
     0,
   );
+  assert.equal(await clientPage.locator(".water-photo").count(), 0);
   await page
     .getByRole("button", { name: "Reprendre le brouillon", exact: true })
     .click();
@@ -889,11 +894,22 @@ try {
     .click();
   await page.getByText("Partagé", { exact: true }).waitFor();
   await clientPage.reload();
+  await clientPage.locator(".water-photo img").waitFor();
+  await clientPage.locator(".water-photo img").evaluate((img) => img.decode());
+  assert.ok(
+    await clientPage
+      .locator(".water-photo img")
+      .evaluate((img) => img.naturalWidth > 0),
+  );
+  await clientPage
+    .getByRole("heading", { name: "Dernier entretien", exact: true })
+    .waitFor();
   await clientPage
     .getByText(
       "Bassin nettoyé, eau claire. Produits disponibles pour le prochain passage.",
       { exact: true },
     )
+    .first()
     .waitFor();
   await clientPage
     .getByText("Voir les tâches du passage", { exact: true })
@@ -920,6 +936,12 @@ try {
     await clientPage.evaluate(() => document.body.innerText.includes("—")),
     false,
   );
+  await clientPage.setViewportSize({ width: 1440, height: 1080 });
+  await clientPage.evaluate(() => scrollTo(0, 0));
+  await clientPage.screenshot({
+    path: ".test-artifacts/client-photo-desktop.png",
+    fullPage: true,
+  });
   await linkedContext.close();
   assert.deepEqual(errors, []);
   console.log(
@@ -930,7 +952,7 @@ try {
         "client pool creation",
         "self analysis and publication",
         "trends",
-        "client account identity and read-only email",
+        "email-only account and authenticated email update",
         "client routes exclude professional preparation",
         "members",
         "independent professional signup",

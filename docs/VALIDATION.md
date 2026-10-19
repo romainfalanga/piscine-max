@@ -1,3 +1,12 @@
+# Connexion par email et tableau de bord avec photo
+
+- 31 tests métier et droits réussis. Vérification TypeScript et compilation réussies.
+- Parcours navigateur réussi sans erreur JavaScript : inscription et profil sans prénom/nom/identifiant, modification sécurisée de l’email, invitation par email dans Accès, simplification du bassin et photo masquée en brouillon puis visible après publication.
+- Contrôle visuel du compte et du tableau de bord sur mobile. Les images de recette sont synthétiques ; les photos réelles affichées dans l’application proviennent uniquement des uploads autorisés.
+- Le workflow Cloudflare applique la migration additive 0006, teste la connexion par email, l’acceptation des rôles copropriétaire/principal, les dernières mesures et la dernière photo publiée, puis supprime ses données synthétiques.
+
+---
+
 # Vérifications du parcours client, 19 octobre 2026
 
 - 29 tests API/métier réussis : identité privée, modification de l’identifiant, confirmation du mot de passe, migration des comptes sans email, refus d’activation professionnelle, besoins réservés au principal, suivi autonome et publication des entretiens.

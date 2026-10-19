@@ -23,6 +23,8 @@ import {
   requirePro,
   place,
   publicUser,
+  emailAddress,
+  limit,
   jsonParse,
   date,
   cursor,
@@ -41,19 +43,6 @@ pools.get("/places", async (c) => {
   if (!r.ok) fail("La recherche de commune est indisponible.", 503);
   return c.json(await r.json());
 });
-pools.get("/professionals", async (c) => {
-  const q = str(c.req.query("q"), 80);
-  if (q.length < 2) return c.json({ items: [] });
-  return c.json({
-    items: await rows(
-      c,
-      "SELECT id,username,name,company,city,specialties FROM users WHERE is_pro=1 AND disabled=0 AND (username=? OR name LIKE ? OR company LIKE ?) ORDER BY company,name LIMIT 20",
-      q,
-      `%${q.replace(/[%_]/g, "")}%`,
-      `%${q.replace(/[%_]/g, "")}%`,
-    ),
-  });
-});
 pools.get("/pools", async (c) => {
   const { limit, cursor: after } = cursor(c);
   const mode = choice(
@@ -61,7 +50,7 @@ pools.get("/pools", async (c) => {
     ["client", "pro"] as const,
     "client",
   );
-  let q = `SELECT p.id,p.name,p.kind,p.city,p.city_code,p.address,p.latitude,p.longitude,p.location_precision,p.treatment,p.volume,p.winterized,(SELECT user_id FROM pool_members WHERE pool_id=p.id AND kind='principal' AND revoked_at IS NULL) principal_id,m.kind membership,m.manager,(SELECT json_group_array(json_object('id',u.id,'name',u.name,'username',u.username)) FROM pool_members o JOIN users u ON u.id=o.user_id WHERE o.pool_id=p.id AND o.kind='owner' AND o.revoked_at IS NULL AND (o.expires_at IS NULL OR o.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))) owners_json,(SELECT max(r.measured_at) FROM records r WHERE r.pool_id=p.id AND r.published_at IS NOT NULL) last_reading FROM pools p JOIN pool_members m ON m.pool_id=p.id WHERE m.user_id=? AND ${ACTIVE} AND p.archived_at IS NULL AND ${mode === "client" ? "m.kind='owner'" : "m.kind='principal'"}`;
+  let q = `SELECT p.id,p.name,p.kind,p.city,p.city_code,p.address,p.latitude,p.longitude,p.location_precision,p.treatment,p.volume,p.winterized,(SELECT user_id FROM pool_members WHERE pool_id=p.id AND kind='principal' AND revoked_at IS NULL) principal_id,m.kind membership,m.manager,(SELECT json_group_array(json_object('id',u.id,'name',coalesce(u.login_email,'Compte à compléter'),'email',u.login_email)) FROM pool_members o JOIN users u ON u.id=o.user_id WHERE o.pool_id=p.id AND o.kind='owner' AND o.revoked_at IS NULL AND (o.expires_at IS NULL OR o.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))) owners_json,(SELECT max(r.measured_at) FROM records r WHERE r.pool_id=p.id AND r.published_at IS NOT NULL) last_reading FROM pools p JOIN pool_members m ON m.pool_id=p.id WHERE m.user_id=? AND ${ACTIVE} AND p.archived_at IS NULL AND ${mode === "client" ? "m.kind='owner'" : "m.kind='principal'"}`;
   const binds: any[] = [who(c).id];
   if (after) {
     q += " AND p.id>?";
@@ -70,7 +59,7 @@ pools.get("/pools", async (c) => {
   const search = str(c.req.query("q"), 100);
   if (search) {
     q +=
-      " AND (p.name LIKE ? OR p.city LIKE ? OR EXISTS(SELECT 1 FROM pool_members o JOIN users u ON u.id=o.user_id WHERE o.pool_id=p.id AND o.kind='owner' AND o.revoked_at IS NULL AND (o.expires_at IS NULL OR o.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) AND (u.name LIKE ? OR u.username LIKE ?)))";
+      " AND (p.name LIKE ? OR p.city LIKE ? OR EXISTS(SELECT 1 FROM pool_members o JOIN users u ON u.id=o.user_id WHERE o.pool_id=p.id AND o.kind='owner' AND o.revoked_at IS NULL AND (o.expires_at IS NULL OR o.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) AND (u.login_email LIKE ? OR u.company LIKE ?)))";
     binds.push(...Array(4).fill(`%${search.replace(/[%_]/g, "")}%`));
   }
   q += " ORDER BY p.id LIMIT ?";
@@ -88,18 +77,17 @@ pools.post("/pools", async (c) => {
     id = uid();
   const mode = choice(b.mode, ["client", "pro"] as const, "client");
   if (mode === "pro") requirePro(c);
-  const clientUsername = mode === "pro" ? str(b.client_username, 40) : "";
-  const client = clientUsername
+  const clientEmail =
+    mode === "pro" && b.client_email ? emailAddress(b.client_email) : "";
+  const client = clientEmail
     ? await row(
         c,
-        "SELECT id FROM users WHERE username=? AND disabled=0",
-        clientUsername.toLowerCase(),
+        "SELECT id FROM users WHERE login_email=? AND disabled=0",
+        clientEmail.toLowerCase(),
       )
     : null;
-  if (clientUsername && !client)
-    fail(
-      "Client introuvable. Vérifiez son identifiant ou invitez-le après son inscription.",
-    );
+  if (clientEmail && !client)
+    fail("Client introuvable. Vérifiez son adresse email et son inscription.");
   if (client?.id === u.id)
     fail("Utilisez votre espace client pour votre piscine personnelle.");
   const legacy =
@@ -183,20 +171,21 @@ pools.get("/pools/:id", async (c) => {
   const p = await access(c, c.req.param("id"));
   const members = await rows(
     c,
-    `SELECT m.id,m.user_id,m.kind,m.manager,m.expires_at,u.name,u.company,u.username FROM pool_members m JOIN users u ON u.id=m.user_id WHERE m.pool_id=? AND ${ACTIVE}`,
+    `SELECT m.id,m.user_id,m.kind,m.manager,m.expires_at,coalesce(u.login_email,'Compte à compléter') name,u.company,u.login_email email FROM pool_members m JOIN users u ON u.id=m.user_id WHERE m.pool_id=? AND ${ACTIVE}`,
     p.id,
   );
   const pending =
     p.manager || p.claimable
       ? await rows(
           c,
-          "SELECT i.id,i.kind,i.expires_at,u.name,u.username FROM invitations i JOIN users u ON u.id=i.recipient_id WHERE i.pool_id=? AND i.status='pending' AND i.expires_at>?",
+          "SELECT i.id,i.kind,i.expires_at,coalesce(u.login_email,'Compte à compléter') name,u.login_email email FROM invitations i JOIN users u ON u.id=i.recipient_id WHERE i.pool_id=? AND i.status='pending' AND i.expires_at>?",
           p.id,
           now(),
         )
       : [];
   return c.json({
     ...p,
+    access_notes: undefined,
     thresholds: jsonParse(p.thresholds),
     routine: p.membership === "principal" ? p.routine : undefined,
     maintenance_tasks:
@@ -263,7 +252,7 @@ pools.put("/pools/:id", async (c) => {
       loc.lat,
       loc.lng,
       loc.address,
-      str(b.access_notes, 1000),
+      p.access_notes,
       number(b.volume, 0.1, 100000),
       choice(
         b.treatment,
@@ -326,19 +315,22 @@ pools.post("/pools/:id/archive", async (c) => {
 pools.post("/pools/:id/invitations", async (c) => {
   const p = await access(c, c.req.param("id"), true),
     b = await c.req.json();
+  await limit(c, `invitations:${who(c).id}`, 40, 3600);
   const kind = choice(b.kind, ["owner", "principal"] as const);
   if (p.claimable && kind !== "owner")
     fail("Invitez le client : vous êtes déjà le pisciniste principal.");
   const target = await row(
     c,
-    "SELECT id,is_pro,name FROM users WHERE username=? AND disabled=0",
-    str(b.username, 40, true).toLowerCase(),
+    "SELECT id,is_pro,login_email name FROM users WHERE login_email=? AND disabled=0",
+    emailAddress(b.email),
   );
   if (!target)
     fail("Compte introuvable. Cette personne doit d’abord s’inscrire.");
   if (target.id === who(c).id) fail("Vous avez déjà accès à cette piscine.");
   if (kind === "principal" && !target.is_pro)
-    fail("Ce compte doit activer son espace pisciniste.");
+    fail(
+      "Cette adresse correspond à un compte client. Invitez un compte pisciniste.",
+    );
   if (
     await row(
       c,
