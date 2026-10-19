@@ -25,45 +25,46 @@ import {
   confirmAction,
 } from "./ui.js";
 import { needRow, openRecordForm, invitationSection } from "./pools.js";
+import { period, shiftPeriod, calendarDays } from "./calendar.js";
 export const proPages = { planning, preparation };
 let planDate = today(),
   planRange = 0;
 const heading = (eye, title, sub, actions = "") =>
   `<div class="page-heading"><div><div class="eyebrow">${eye}</div><h1>${title}</h1><p>${sub}</p></div>${actions}</div>`;
 function appointmentRow(a) {
-  return `<div class="row"><div class="time">${esc(a.time)}</div><div class="grow"><h3><a href="#pool/${a.pool_id}" style="text-decoration:none">${esc(a.pool_name)}</a></h3><p>${esc(a.title)} · ${esc(a.city || "Commune à compléter")} · ${a.duration} min</p>${a.reason ? `<p>${esc(a.reason)}</p>` : ""}</div>${badge(a.status === "done" ? "Effectué" : a.status === "cancelled" ? "Annulé" : "À venir", a.status === "done" ? "teal" : "")}<div class="actions">${a.status === "planned" ? button("Commencer", "start-appointment", `data-id="${a.id}"`, "primary small") + button("Déplacer", "move-appointment", `data-id="${a.id}"`, "ghost small") : ""}</div></div>`;
+  return `<article class="agenda-visit ${a.status === "cancelled" ? "is-cancelled" : ""}"><div class="agenda-time"><time>${esc(a.time)}</time><span>${a.duration} min</span></div><div class="agenda-visit-body"><div class="agenda-visit-title"><h3><a href="#pool/${a.pool_id}">${esc(a.pool_name)}</a></h3>${badge(a.status === "done" ? "Effectué" : a.status === "cancelled" ? "Annulé" : "À venir", a.status === "done" ? "teal" : "")}</div><p>${esc(a.title)}</p><p class="small-note">${icon("map", 14)} ${esc(a.city || "Commune à compléter")}</p>${a.reason ? `<p>${esc(a.reason)}</p>` : ""}${a.status === "planned" ? `<div class="agenda-visit-actions">${button("Commencer", "start-appointment", `data-id="${a.id}"`, "primary small")}${button("Déplacer", "move-appointment", `data-id="${a.id}"`, "ghost small")}</div>` : ""}</div></article>`;
 }
 async function planning(main) {
-  const to = addDays(planDate, planRange),
+  const { from, to } = period(planDate, planRange),
     [r, inv] = await Promise.all([
-      api("/planning?from=" + planDate + "&to=" + to),
+      api("/planning?from=" + from + "&to=" + to),
       api("/invitations"),
     ]);
+  if (state.route !== "planning") return;
   state.appointments = r.items;
-  main.innerHTML =
-    heading(
-      "VOTRE ORGANISATION",
-      "Agenda",
-      "Récurrences saisonnières, visites ponctuelles et changements de dernière minute.",
-      `<div class="inline wrap"><a href="#preparation" class="btn secondary">${icon("box", 16)} À préparer</a><a href="#stats" class="btn secondary">${icon("chart", 16)} Statistiques</a>${button("Planifier", "new-appointment")}</div>`,
-    ) +
-    `${invitationSection(inv.items)}<div class="card"><div class="inline between wrap toolbar"><div class="inline"><button class="btn secondary small" data-action="plan-prev" aria-label="Période précédente">←</button><input type="date" id="plan-date" value="${planDate}" class="search-input" aria-label="Début de période"><button class="btn secondary small" data-action="plan-next" aria-label="Période suivante">→</button></div><div class="inline">${button("Aujourd’hui", "plan-today", "", "ghost small")}<select id="plan-range" class="search-input" aria-label="Période"><option value="0" ${planRange === 0 ? "selected" : ""}>Jour</option><option value="6" ${planRange === 6 ? "selected" : ""}>Semaine</option><option value="29" ${planRange === 29 ? "selected" : ""}>Mois</option></select></div></div><div style="margin-top:20px">${
-      r.items.length
-        ? [...new Set(r.items.map((a) => a.date))]
-            .map(
-              (day) =>
-                `<div class="section-heading"><h3 style="margin:0">${fmt(day, { weekday: "long" })}</h3>${day === today() ? badge("Aujourd’hui", "teal") : ""}</div>${r.items
-                  .filter((a) => a.date === day)
-                  .map(appointmentRow)
-                  .join("")}`,
-            )
-            .join("")
-        : empty(
-            "Aucun passage prévu",
-            "Ajoutez un passage ponctuel ou une récurrence depuis la fiche d’une piscine.",
-          )
-    }</div></div>`;
+  const selected = r.items
+    .filter((a) => a.date === planDate)
+    .sort((a, b) => a.time.localeCompare(b.time));
+  const count = (day) =>
+    r.items.filter((a) => a.date === day && a.status !== "cancelled").length;
+  const periodTitle =
+    planRange === 29
+      ? fmt(from, { month: "long", year: "numeric", day: undefined })
+      : planRange === 6
+        ? `${fmt(from)} au ${fmt(to, { year: "numeric" })}`
+        : fmt(planDate, { weekday: "long", month: "long", year: "numeric" });
+  const cells = planRange
+    ? calendarDays(planDate, planRange)
+        .map((day) => {
+          const outside = day < from || day > to,
+            n = count(day);
+          return `<button class="calendar-day ${day === planDate ? "is-selected" : ""} ${day === today() ? "is-today" : ""} ${outside ? "is-outside" : ""}" data-action="plan-day" data-date="${day}" aria-pressed="${day === planDate}" ${day === today() ? 'aria-current="date"' : ""} aria-label="${esc(fmt(day, { weekday: "long", month: "long", year: "numeric" }))}, ${outside ? "ouvrir ce mois" : n + " passage" + (n > 1 ? "s" : "")}">${planRange === 6 ? `<span class="calendar-weekday">${fmt(day, { weekday: "short", day: undefined, month: undefined })}</span>` : ""}<span class="calendar-number">${Number(day.slice(8))}</span><span class="calendar-load" aria-hidden="true">${n ? `<span>${n}</span>` : ""}</span></button>`;
+        })
+        .join("")
+    : "";
+  main.innerHTML = `<section class="agenda-heading"><div><h1>Agenda</h1><p>Votre tournée, jour après jour.</p></div>${button(icon("plus", 18) + " Planifier", "new-appointment")}</section><nav class="agenda-shortcuts" aria-label="Organisation de la tournée"><a href="#preparation">${icon("box", 20)}<span><strong>À préparer</strong><small>Produits et matériel</small></span>${icon("arrow", 16)}</a><a href="#stats">${icon("chart", 20)}<span><strong>Statistiques</strong><small>Votre activité</small></span>${icon("arrow", 16)}</a></nav>${invitationSection(inv.items)}<section class="agenda-calendar" aria-label="Calendrier des passages"><div class="agenda-calendar-tools"><div class="calendar-period"><button class="calendar-arrow" data-action="plan-prev" aria-label="Période précédente">‹</button><h2>${periodTitle}</h2><button class="calendar-arrow" data-action="plan-next" aria-label="Période suivante">›</button></div><div class="calendar-controls">${button("Aujourd’hui", "plan-today", "", "ghost small")}<label class="calendar-date">${icon("calendar", 18)}<input type="date" id="plan-date" value="${planDate}" aria-label="Début de période"></label><select id="plan-range" aria-label="Période"><option value="0" ${planRange === 0 ? "selected" : ""}>Jour</option><option value="6" ${planRange === 6 ? "selected" : ""}>Semaine</option><option value="29" ${planRange === 29 ? "selected" : ""}>Mois</option></select></div></div>${planRange ? `<div class="calendar-grid ${planRange === 29 ? "month-grid" : "week-grid"}">${planRange === 29 ? ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"].map((d) => `<span class="calendar-weekday" aria-hidden="true">${d}</span>`).join("") : ""}${cells}</div>` : ""}<section class="agenda-day" aria-label="Passages du jour"><div class="agenda-day-heading"><h2>${fmt(planDate, { weekday: "long", month: "long" })}</h2><span>${selected.length} passage${selected.length > 1 ? "s" : ""}</span></div>${selected.length ? selected.map(appointmentRow).join("") : `<div class="agenda-free">${icon("calendar", 32)}<h3>Aucun passage ce jour</h3><p>Choisissez une autre date ou planifiez un entretien.</p></div>`}</section></section>`;
   $("#plan-date").addEventListener("change", (e) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) return;
     planDate = e.target.value;
     refresh();
   });
@@ -72,12 +73,16 @@ async function planning(main) {
     refresh();
   });
 }
+on("plan-day", (d) => {
+  planDate = d.date;
+  refresh();
+});
 on("plan-prev", () => {
-  planDate = addDays(planDate, -(planRange + 1));
+  planDate = shiftPeriod(planDate, planRange, -1);
   refresh();
 });
 on("plan-next", () => {
-  planDate = addDays(planDate, planRange + 1);
+  planDate = shiftPeriod(planDate, planRange, 1);
   refresh();
 });
 on("plan-today", () => {

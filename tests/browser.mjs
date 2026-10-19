@@ -602,6 +602,63 @@ try {
   });
   await mobileNav.getByRole("link", { name: "Agenda", exact: true }).click();
   await page.getByRole("heading", { name: "Agenda", exact: true }).waitFor();
+  // Exercise the actual controls at narrow phone, tablet and desktop widths.
+  for (const width of [320, 390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 844 });
+    for (const range of ["0", "6", "29"]) {
+      await page.getByLabel("Période", { exact: true }).selectOption(range);
+      await page.waitForFunction(
+        (r) =>
+          document.querySelector("#plan-range")?.value === r &&
+          !!document.querySelector(".calendar-grid") === (r !== "0"),
+        range,
+      );
+      assert.equal(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth > innerWidth,
+        ),
+        false,
+        `Agenda ${range} overflow at ${width}px`,
+      );
+      if (range === "6")
+        assert.equal(await page.locator(".calendar-day").count(), 7);
+      if (range === "29") {
+        await page
+          .getByLabel("Début de période", { exact: true })
+          .fill("2026-02-12");
+        await page
+          .getByLabel("Début de période", { exact: true })
+          .dispatchEvent("change");
+        await page.locator('.calendar-day[data-date="2026-02-28"]').waitFor();
+        assert.equal(await page.locator(".calendar-day").count(), 35);
+        await page.locator('.calendar-day[data-date="2026-02-18"]').click();
+        await page.waitForFunction(
+          () => document.querySelector("#plan-date")?.value === "2026-02-18",
+        );
+        assert.equal(
+          await page
+            .locator('.calendar-day[aria-pressed="true"]')
+            .getAttribute("data-date"),
+          "2026-02-18",
+        );
+        if (width === 390 || width === 1440)
+          await page.screenshot({
+            path: `.test-artifacts/agenda-month-${width}.png`,
+            fullPage: true,
+          });
+        await page
+          .getByRole("button", { name: "Période suivante", exact: true })
+          .click();
+        await page.waitForFunction(
+          () => document.querySelector("#plan-date")?.value === "2026-03-18",
+        );
+      }
+    }
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "Aujourd’hui", exact: true }).click();
+  await page.getByLabel("Période", { exact: true }).selectOption("6");
+  await page.locator(".week-grid").waitFor();
   await page.screenshot({
     path: ".test-artifacts/pro-agenda-mobile.png",
     fullPage: true,
@@ -613,6 +670,89 @@ try {
     false,
     "Pro agenda mobile overflow",
   );
+  const touchContext = await browser.newContext({
+    viewport: { width: 390, height: 640 },
+    isMobile: true,
+    hasTouch: true,
+    locale: "fr-FR",
+    storageState: await context.storageState(),
+  });
+  const touchPage = await touchContext.newPage();
+  touchPage.on("pageerror", (e) => errors.push(e.message));
+  await touchPage.goto("http://127.0.0.1:8788/#map");
+  await touchPage.locator("#map-pool-list .card").first().waitFor();
+  assert.equal(await touchPage.locator("#pool-map").isVisible(), false);
+  assert.equal(await touchPage.locator("#map-pool-list").isVisible(), true);
+  await touchPage.screenshot({
+    path: ".test-artifacts/map-list-mobile.png",
+    fullPage: true,
+  });
+  await touchPage.getByRole("button", { name: "Carte", exact: true }).click();
+  await touchPage.locator(".map-scrollable").waitFor();
+  assert.equal(await touchPage.locator("#pool-map").isVisible(), true);
+  assert.equal(
+    await touchPage
+      .locator("#pool-map")
+      .evaluate((el) => getComputedStyle(el).touchAction),
+    "pan-y",
+  );
+  await touchPage.screenshot({
+    path: ".test-artifacts/map-mobile.png",
+    fullPage: true,
+  });
+  const session = await touchContext.newCDPSession(touchPage);
+  const box = await touchPage.locator("#pool-map").boundingBox();
+  const y = Math.min(box.y + box.height - 15, 540),
+    x = box.x + box.width / 2;
+  await session.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [{ x, y }],
+  });
+  for (let n = 1; n <= 8; n++) {
+    await session.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [{ x, y: y - n * 20 }],
+    });
+    await touchPage.waitForTimeout(20);
+  }
+  await session.send("Input.dispatchTouchEvent", {
+    type: "touchEnd",
+    touchPoints: [],
+  });
+  await touchPage.waitForFunction(() => scrollY > 0);
+  await touchPage
+    .getByRole("button", { name: "Explorer la carte", exact: true })
+    .click();
+  assert.equal(await touchPage.locator(".map-scrollable").count(), 0);
+  await touchPage
+    .getByRole("button", { name: "Terminer l’exploration", exact: true })
+    .click();
+  await touchPage.getByRole("button", { name: "Liste", exact: true }).click();
+  assert.equal(await touchPage.locator("#map-pool-list").isVisible(), true);
+  await touchContext.close();
+  // All six sections must remain visible on a professional pool at every width.
+  await page.goto(`http://127.0.0.1:8788/#pool/${assigned.id}`);
+  await page.locator('.pool-tabs[data-count="6"]').waitFor();
+  for (const width of [320, 390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 844 });
+    const bounds = await page.locator(".pool-tabs button").evaluateAll((els) =>
+      els.map((el) => ({
+        x: el.getBoundingClientRect().x,
+        right: el.getBoundingClientRect().right,
+        height: el.getBoundingClientRect().height,
+      })),
+    );
+    assert.ok(
+      bounds.every((b) => b.x >= 0 && b.right <= width && b.height >= 44),
+      `Pool tabs clipped at ${width}px`,
+    );
+    if (width === 390 || width === 1440)
+      await page.screenshot({
+        path: `.test-artifacts/pool-navigation-${width}.png`,
+        fullPage: false,
+      });
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
   await mobileNav
     .getByRole("link", { name: "Pisciniste", exact: true })
     .click();
@@ -982,6 +1122,22 @@ try {
     path: ".test-artifacts/client-photo-desktop.png",
     fullPage: true,
   });
+  for (const width of [320, 390, 768, 1440]) {
+    await clientPage.setViewportSize({ width, height: 844 });
+    assert.equal(
+      await clientPage.locator('.pool-tabs[data-count="4"] button').count(),
+      4,
+    );
+    const clipped = await clientPage
+      .locator(".pool-tabs button")
+      .evaluateAll((els) =>
+        els.some((el) => {
+          const b = el.getBoundingClientRect();
+          return b.x < 0 || b.right > innerWidth || b.height < 44;
+        }),
+      );
+    assert.equal(clipped, false, `Client pool sections clipped at ${width}px`);
+  }
   await linkedContext.close();
   assert.deepEqual(errors, []);
   console.log(
@@ -1002,6 +1158,9 @@ try {
         "private activity statistics",
         "reference procedures",
         "professional mobile navigation",
+        "day, Monday week and civil month at 320, 390, 768 and 1440px",
+        "touch scrolling over locked map and explicit exploration",
+        "client and professional pool sections remain visible",
         "calculators, guided maintenance and quiz",
         "mobile journal and report",
         "professional pool creation and client claim",

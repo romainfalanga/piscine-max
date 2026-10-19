@@ -143,12 +143,12 @@ try {
   for (let i = 0; i < 20; i++) {
     try {
       const r = await request("/health");
-      if (r.status === 200 && r.data?.release === "brand-v6") {
-        const asset = await fetch(base + "/platform/experience.css", {
+      if (r.status === 200 && r.data?.release === "mobile-v7") {
+        const asset = await fetch(base + "/platform/mobile.css", {
           cache: "no-store",
           signal: AbortSignal.timeout(15000),
         });
-        if (!asset.ok || !(await asset.text()).includes(".brand-wordmark")) {
+        if (!asset.ok || !(await asset.text()).includes(".agenda-calendar")) {
           await new Promise((resolve) => setTimeout(resolve, 3000));
           continue;
         }
@@ -164,6 +164,8 @@ try {
     ["/", "text/html"],
     ["/platform/app.js", "javascript"],
     ["/platform/style.css", "text/css"],
+    ["/platform/mobile.css", "text/css"],
+    ["/platform/calendar.js", "javascript"],
     ["/platform/classic.css", "text/css"],
     ["/platform/experience.css", "text/css"],
     ["/platform/maps.js", "javascript"],

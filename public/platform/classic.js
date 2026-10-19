@@ -18,6 +18,8 @@ let directory = [],
   next = null,
   query = "",
   currentMap = null;
+let mapView = "list",
+  mapExploring = false;
 const routeLink = itinerary;
 const heading = (title, subtitle, action = "") =>
   `<div class="page-heading"><div><h1>${title}</h1><p>${subtitle}</p></div>${action}</div>`;
@@ -117,7 +119,7 @@ async function mapPage(main) {
       "Retrouvez les bassins suivis et ouvrez votre itinéraire.",
     ) +
     toolbar() +
-    `<p class="small-note">Les adresses localisées positionnent chaque bassin. Les anciennes fiches sans adresse précise restent au niveau de la commune.</p><div class="map-layout"><div><div id="pool-map" class="pool-map" role="region" aria-label="Carte des piscines suivies"></div><p id="map-status" class="small-note" role="status"></p></div><div id="map-pool-list" class="map-pool-list"></div></div><div id="directory-more" style="margin-top:20px">${moreButton()}</div>`;
+    `<div class="map-view-switch" role="group" aria-label="Affichage des piscines"><button data-action="map-view" data-view="list" aria-pressed="${mapView === "list"}">${icon("pool", 18)} Liste</button><button data-action="map-view" data-view="map" aria-pressed="${mapView === "map"}">${icon("map", 18)} Carte</button></div><div class="map-layout" data-view="${mapView}"><section class="map-panel" aria-label="Localisation des piscines"><div class="map-interaction-bar"><p>Faites défiler pour parcourir la page.</p><button data-action="map-explore" aria-pressed="false">Explorer la carte</button></div><div id="pool-map" class="pool-map" role="region" aria-label="Carte des piscines suivies"></div><p id="map-status" class="small-note" role="status"></p><p class="map-precision">Les fiches sans adresse précise sont placées au niveau de la commune.</p></section><section class="map-directory" aria-label="Piscines suivies"><h2 class="map-list-title">Vos piscines <span>${directory.length}${next ? "+" : ""}</span></h2><div id="map-pool-list" class="map-pool-list"></div></section></div><div id="directory-more" style="margin-top:20px">${moreButton()}</div>`;
   wireSearch(main, mapPage);
   if (!document.querySelector("[data-leaflet-style]")) {
     const css = document.createElement("link");
@@ -140,10 +142,12 @@ function renderMapContent() {
     currentMap = null;
   }
   const L = window.L;
-  currentMap = L.map("pool-map", { scrollWheelZoom: false }).setView(
-    [46.6, 2.3],
-    5,
-  );
+  currentMap = L.map("pool-map", {
+    scrollWheelZoom: false,
+    dragging: !matchMedia("(max-width: 700px)").matches,
+    touchZoom: false,
+    doubleClickZoom: !matchMedia("(max-width: 700px)").matches,
+  }).setView([46.6, 2.3], 5);
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 18,
     attribution:
@@ -192,8 +196,65 @@ function renderMapContent() {
       )
       .join("") ||
     empty("Aucune piscine suivie", "Vos piscines partagées apparaîtront ici.");
+  mapExploring = false;
+  syncMapInteraction();
   currentMap.invalidateSize();
 }
+function syncMapInteraction() {
+  if (!currentMap) return;
+  const mobile = matchMedia("(max-width: 700px)").matches;
+  const enabled = !mobile || mapExploring;
+  for (const handler of [
+    currentMap.dragging,
+    currentMap.touchZoom,
+    currentMap.doubleClickZoom,
+  ]) {
+    if (enabled) handler.enable();
+    else handler.disable();
+  }
+  currentMap.getContainer().classList.toggle("map-scrollable", !enabled);
+  const control = $('[data-action="map-explore"]');
+  if (control) {
+    control.setAttribute("aria-pressed", String(mapExploring));
+    control.textContent = mapExploring
+      ? "Terminer l’exploration"
+      : "Explorer la carte";
+    control.previousElementSibling.textContent = mapExploring
+      ? "Déplacez ou zoomez la carte."
+      : "Faites défiler pour parcourir la page.";
+  }
+}
+on("map-view", (d) => {
+  mapView = d.view;
+  mapExploring = false;
+  const layout = $(".map-layout");
+  if (!layout || !currentMap) return;
+  layout.dataset.view = mapView;
+  document
+    .querySelectorAll('[data-action="map-view"]')
+    .forEach((b) =>
+      b.setAttribute("aria-pressed", String(b.dataset.view === mapView)),
+    );
+  syncMapInteraction();
+  requestAnimationFrame(() => {
+    if (!currentMap) return;
+    currentMap.invalidateSize();
+    const points = directory
+      .filter((p) => p.latitude != null && p.longitude != null)
+      .map((p) => [p.latitude, p.longitude]);
+    if (points.length)
+      currentMap.fitBounds(points, { padding: [32, 32], maxZoom: 17 });
+  });
+});
+on("map-explore", () => {
+  mapExploring = !mapExploring;
+  syncMapInteraction();
+});
+matchMedia("(max-width: 700px)").addEventListener("change", () => {
+  mapExploring = false;
+  syncMapInteraction();
+  currentMap?.invalidateSize();
+});
 window.addEventListener("hashchange", () => {
   if (location.hash !== "#map" && currentMap) {
     currentMap.remove();
