@@ -54,3 +54,5 @@ Le build n'exécute aucune migration et ne réinitialise aucune base. Ne pas app
 ## Parcours entretien
 
 Création simple, adresses IGN et carte privée, analyses pH/chlore, checklist selon équipements et compte rendu client détaillé. Voir [le plan et les choix de conception](docs/EXPERIENCE-ENTRETIEN.md).
+
+Le parcours propriétaire et les choix de simplification sont décrits dans [docs/PARCOURS-CLIENT.md](docs/PARCOURS-CLIENT.md).

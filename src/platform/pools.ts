@@ -198,7 +198,9 @@ pools.get("/pools/:id", async (c) => {
   return c.json({
     ...p,
     thresholds: jsonParse(p.thresholds),
-    maintenance_tasks: maintenanceTasks(p),
+    routine: p.membership === "principal" ? p.routine : undefined,
+    maintenance_tasks:
+      p.membership === "principal" ? maintenanceTasks(p) : undefined,
     members,
     invitations: pending,
   });
@@ -206,6 +208,15 @@ pools.get("/pools/:id", async (c) => {
 pools.put("/pools/:id", async (c) => {
   const p = await access(c, c.req.param("id"));
   const b = await c.req.json();
+  const professional = p.membership === "principal";
+  if (
+    !professional &&
+    (b.routine !== undefined || b.client_advice !== undefined)
+  )
+    fail(
+      "Les consignes d’entretien et conseils sont renseignés par votre pisciniste.",
+      403,
+    );
   const loc = locationBody(b, p);
   if (!b.location && b.city_code && b.city_code !== p.city_code) {
     const v = await place(str(b.city_code, 5, true));
@@ -261,8 +272,12 @@ pools.put("/pools/:id", async (c) => {
       ),
       str(b.filtration, 200),
       str(b.equipment, 4000),
-      str(b.routine, 2000),
-      str(b.client_advice, 2000),
+      professional && b.routine !== undefined
+        ? str(b.routine, 2000)
+        : p.routine,
+      professional && b.client_advice !== undefined
+        ? str(b.client_advice, 2000)
+        : p.client_advice,
       JSON.stringify(th),
       b.winterized ? 1 : 0,
       loc.precision,

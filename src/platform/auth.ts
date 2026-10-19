@@ -67,6 +67,31 @@ const username = (v: unknown) => {
     );
   return s;
 };
+const emailAddress = (v: unknown) => {
+  const s = str(v, 254, true);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s))
+    fail("Renseignez une adresse email valide.");
+  return s;
+};
+const identity = (b: any) => {
+  const first = str(b.first_name, 40, true),
+    last = str(b.last_name, 40, true);
+  return { first, last, name: `${first} ${last}` };
+};
+async function verifyCurrentPassword(c: C, value: unknown, u: any) {
+  await limit(c, `account-password:${u.id}`, 15, 900);
+  if (
+    !safeEqual(
+      await passwordHash(
+        c,
+        str(value, 128, true),
+        u.password_hash.split("$")[1],
+      ),
+      u.password_hash,
+    )
+  )
+    fail("Mot de passe actuel incorrect.", 401);
+}
 async function session(c: C, id: string) {
   const token = secret();
   await stmt(
@@ -107,7 +132,8 @@ auth.use("*", async (c, next) => {
 });
 auth.post("/signup", async (c) => {
   const b = await c.req.json();
-  const name = str(b.name, 80, true),
+  const profile = identity(b),
+    email = emailAddress(b.email),
     login = username(b.username),
     pwd = password(b.password);
   const role = choice(b.role, ["client", "pro"] as const);
@@ -123,13 +149,16 @@ auth.post("/signup", async (c) => {
   try {
     await stmt(
       c,
-      "INSERT INTO users(id,username,name,password_hash,recovery_hash,is_pro) VALUES(?,?,?,?,?,?)",
+      "INSERT INTO users(id,username,name,password_hash,recovery_hash,is_pro,first_name,last_name,email) VALUES(?,?,?,?,?,?,?,?,?)",
       id,
       login,
-      name,
+      profile.name,
       hash,
       await digest(recovery),
       role === "pro" ? 1 : 0,
+      profile.first,
+      profile.last,
+      email,
     ).run();
   } catch (e) {
     if (String(e).includes("UNIQUE"))
@@ -208,9 +237,24 @@ account.post("/logout", async (c) => {
 account.put("/me", async (c) => {
   const b = await c.req.json(),
     u = who(c);
-  const pro = u.is_pro || b.enable_pro === true ? 1 : 0;
+  if (
+    b.enable_pro === true ||
+    (b.is_pro !== undefined && Number(b.is_pro) !== u.is_pro)
+  )
+    fail("Le type de compte ne se modifie pas depuis le profil.", 403);
+  const profile = identity(b),
+    login = username(b.username ?? u.username),
+    email = u.email || (b.email ? emailAddress(b.email) : null);
+  if (u.email && b.email !== undefined && b.email !== u.email)
+    fail("L’adresse email de ce compte est affichée en lecture seule.");
+  const changedLogin = login !== u.username;
+  if (changedLogin || (!u.email && email)) {
+    const stored = await row<any>(c, "SELECT * FROM users WHERE id=?", u.id);
+    await verifyCurrentPassword(c, b.current_password, stored);
+  }
   let location = null;
-  if (b.city_code) location = await place(str(b.city_code, 5, true));
+  if (u.is_pro && b.city_code)
+    location = await place(str(b.city_code, 5, true));
   const specs = Array.isArray(b.specialties)
     ? b.specialties
         .slice(0, 12)
@@ -226,21 +270,37 @@ account.put("/me", async (c) => {
             "opening",
           ] as const),
         )
-    : [];
-  await stmt(
-    c,
-    "UPDATE users SET name=?,is_pro=?,company=?,city_code=?,city=?,latitude=?,longitude=?,radius_km=?,specialties=? WHERE id=?",
-    str(b.name, 80, true),
-    pro,
-    str(b.company, 100),
-    location?.code || u.city_code,
-    location?.name || u.city,
-    location?.lat ?? u.latitude,
-    location?.lng ?? u.longitude,
-    number(b.radius_km, 5, 150, u.radius_km),
-    JSON.stringify(specs),
-    u.id,
-  ).run();
+    : JSON.parse(u.specialties || "[]");
+  try {
+    await stmt(
+      c,
+      "UPDATE users SET name=?,first_name=?,last_name=?,username=?,email=?,company=?,city_code=?,city=?,latitude=?,longitude=?,radius_km=?,specialties=? WHERE id=?",
+      profile.name,
+      profile.first,
+      profile.last,
+      login,
+      email,
+      u.is_pro && b.company !== undefined ? str(b.company, 100) : u.company,
+      location?.code || u.city_code,
+      location?.name || u.city,
+      location?.lat ?? u.latitude,
+      location?.lng ?? u.longitude,
+      u.is_pro ? number(b.radius_km, 5, 150, u.radius_km) : u.radius_km,
+      u.is_pro ? JSON.stringify(specs) : u.specialties,
+      u.id,
+    ).run();
+  } catch (e) {
+    if (String(e).includes("UNIQUE"))
+      fail("Cet identifiant est déjà utilisé.", 409);
+    throw e;
+  }
+  if (changedLogin)
+    await stmt(
+      c,
+      "DELETE FROM sessions WHERE user_id=? AND token_hash!=?",
+      u.id,
+      c.get("sessionHash"),
+    ).run();
   return c.json(
     publicUser((await row<User>(c, "SELECT * FROM users WHERE id=?", u.id))!),
   );
@@ -248,17 +308,7 @@ account.put("/me", async (c) => {
 account.post("/password", async (c) => {
   const b = await c.req.json(),
     u = await row<any>(c, "SELECT * FROM users WHERE id=?", who(c).id);
-  if (
-    !safeEqual(
-      await passwordHash(
-        c,
-        str(b.current_password, 128, true),
-        u.password_hash.split("$")[1],
-      ),
-      u.password_hash,
-    )
-  )
-    fail("Mot de passe actuel incorrect.", 401);
+  await verifyCurrentPassword(c, b.current_password, u);
   const code = secret();
   await c.env.DB.batch([
     stmt(

@@ -107,7 +107,9 @@ async function completeVisit(env: any, id: string, token: string) {
 async function user(env: any, name: string, role = "client") {
   const r = await request(env, "/auth/signup", "POST", {
     username: name,
-    name,
+    first_name: name,
+    last_name: "Test",
+    email: name + "@example.test",
     password: "Test account long password 2026!",
     role,
   });
@@ -157,13 +159,15 @@ async function invite(
   return r.data.id;
 }
 const measured = () => new Date(Date.now() - 10000).toISOString();
-test("Public registration, no email, password recovery revokes sessions and code cannot be reused", async () => {
+test("Registration stores private identity, password recovery revokes sessions and code cannot be reused", async () => {
   const e = context(),
     a = await user(e, "alice");
   assert.ok(a.recovery_code);
   const noEmail = await request(e, "/me", "GET", undefined, a.token);
   assert.equal(noEmail.status, 200);
-  assert.equal(noEmail.data.email, undefined);
+  assert.equal(noEmail.data.email, "alice@example.test");
+  assert.equal(noEmail.data.first_name, "alice");
+  assert.equal(noEmail.data.last_name, "Test");
   const r = await request(e, "/auth/recover", "POST", {
     username: "alice",
     code: a.recovery_code,
@@ -196,7 +200,9 @@ test("Missing secret fails closed and cross-origin writes are forbidden", async 
     (
       await request(e, "/auth/signup", "POST", {
         username: "nobody",
-        name: "No body",
+        first_name: "No",
+        last_name: "Body",
+        email: "nobody@example.test",
         password: "very long password",
         role: "client",
       })
@@ -529,7 +535,7 @@ test("Supply lifecycle sends differentiated notifications, concurrent revision r
         "/needs/" + need.data.id,
         "PUT",
         { status: "ready", revision: 1 },
-        a.token,
+        p.token,
       )
     ).status,
     200,
@@ -1491,6 +1497,12 @@ test("Only the first accepted principal invitation succeeds and a claim expires 
 });
 test("Migration revokes legacy temporary access and schedules without deleting published history", async () => {
   const e = { ...context(), DB: new LocalD1("0002_guide_progress.sql") },
+    identityMigration = e.DB.db.exec(
+      readFileSync(
+        new URL("../schema/0005_account_identity.sql", import.meta.url),
+        "utf8",
+      ),
+    ),
     owner = await user(e, "alice"),
     pro = await user(e, "paul", "pro"),
     id = crypto.randomUUID();
@@ -1883,4 +1895,344 @@ test("New analyses only accept pH and chlorine while historical readings remain 
   ).data.items[0];
   assert.equal(trend.chlorine, 0);
   assert.equal(trend.salt, undefined);
+});
+
+test("Account identity edits cannot enable a professional role, expose email, or take another username", async () => {
+  const e = context(),
+    a = await user(e, "accountowner"),
+    b = await user(e, "secondowner"),
+    pro = await user(e, "accountpro", "pro");
+  const body = {
+    first_name: "Camille",
+    last_name: "Durand",
+    username: "camille.durand",
+  };
+  assert.equal(
+    (await request(e, "/me", "PUT", { ...body, enable_pro: true }, a.token))
+      .status,
+    403,
+  );
+  assert.equal(
+    (await request(e, "/me", "PUT", { ...body, is_pro: 1 }, a.token)).status,
+    403,
+  );
+  assert.equal((await request(e, "/me", "PUT", body, a.token)).status, 400);
+  assert.equal(
+    (
+      await request(
+        e,
+        "/me",
+        "PUT",
+        { ...body, current_password: "Wrong password long!" },
+        a.token,
+      )
+    ).status,
+    401,
+  );
+  const oldSession = await request(e, "/auth/login", "POST", {
+    username: "accountowner",
+    password: "Test account long password 2026!",
+  });
+  const updated = await request(
+    e,
+    "/me",
+    "PUT",
+    {
+      ...body,
+      current_password: "Test account long password 2026!",
+      company: "Unexpected pro field",
+    },
+    a.token,
+  );
+  assert.equal(updated.status, 200, JSON.stringify(updated.data));
+  assert.equal(updated.data.name, "Camille Durand");
+  assert.equal(updated.data.is_pro, 0);
+  assert.equal(updated.data.company, "");
+  assert.equal(updated.data.email, "accountowner@example.test");
+  assert.equal(
+    (await request(e, "/me", "GET", undefined, oldSession.token)).status,
+    401,
+  );
+  assert.equal(
+    (
+      await request(e, "/auth/login", "POST", {
+        username: "accountowner",
+        password: "Test account long password 2026!",
+      })
+    ).status,
+    401,
+  );
+  assert.equal(
+    (
+      await request(e, "/auth/login", "POST", {
+        username: "camille.durand",
+        password: "Test account long password 2026!",
+      })
+    ).status,
+    200,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        "/me",
+        "PUT",
+        {
+          ...body,
+          username: "secondowner",
+          current_password: "Test account long password 2026!",
+        },
+        a.token,
+      )
+    ).status,
+    409,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        "/me",
+        "PUT",
+        { ...body, email: "changed@example.test" },
+        a.token,
+      )
+    ).status,
+    400,
+  );
+  const id = await pool(e, a);
+  await invite(e, a, pro, id, "principal");
+  await invite(e, a, b, id, "owner");
+  const otherView = await request(
+    e,
+    "/pools/" + id,
+    "GET",
+    undefined,
+    pro.token,
+  );
+  assert.ok(
+    !JSON.stringify(otherView.data).includes("accountowner@example.test"),
+  );
+  assert.ok(
+    !JSON.stringify(
+      (await request(e, "/professionals?q=account", "GET", undefined, b.token))
+        .data,
+    ).includes("accountpro@example.test"),
+  );
+  const passwordChange = await request(
+    e,
+    "/password",
+    "POST",
+    {
+      current_password: "Test account long password 2026!",
+      password: "Changed password very long!",
+    },
+    a.token,
+  );
+  assert.equal(passwordChange.status, 200);
+  assert.ok(passwordChange.data.recovery_code);
+});
+
+test("Legacy accounts retain their name and can add missing identity without fabricated email", async () => {
+  const e = { ...context(), DB: new LocalD1("0004_maintenance_location.sql") };
+  e.DB.db
+    .prepare(
+      "INSERT INTO users(id,username,name,password_hash,recovery_hash) VALUES('legacy-id','legacy.user','Nom composé inconnu','unused','unused')",
+    )
+    .run();
+  e.DB.db.exec(
+    readFileSync(
+      new URL("../schema/0005_account_identity.sql", import.meta.url),
+      "utf8",
+    ),
+  );
+  const old = e.DB.db
+    .prepare(
+      "SELECT name,first_name,last_name,email FROM users WHERE id='legacy-id'",
+    )
+    .get();
+  assert.deepEqual(
+    { ...old },
+    { name: "Nom composé inconnu", first_name: "", last_name: "", email: null },
+  );
+  const a = await user(e, "legacytest");
+  e.DB.db
+    .prepare(
+      "UPDATE users SET email=NULL,first_name='',last_name='' WHERE id=?",
+    )
+    .run(a.user.id);
+  const identity = {
+    first_name: "Anne Marie",
+    last_name: "Le Goff",
+    username: "legacytest",
+    email: "anne@example.test",
+  };
+  assert.equal(
+    (await request(e, "/me", "GET", undefined, a.token)).data.email,
+    null,
+  );
+  assert.equal((await request(e, "/me", "PUT", identity, a.token)).status, 400);
+  const saved = await request(
+    e,
+    "/me",
+    "PUT",
+    { ...identity, current_password: "Test account long password 2026!" },
+    a.token,
+  );
+  assert.equal(saved.status, 200);
+  assert.equal(saved.data.name, "Anne Marie Le Goff");
+  assert.equal(saved.data.email, "anne@example.test");
+});
+
+test("Client remains autonomous while professional preparation is restricted to the current principal", async () => {
+  const e = context(),
+    owner = await user(e, "autonomous"),
+    pro = await user(e, "assignedpro", "pro"),
+    other = await user(e, "unassignedpro", "pro"),
+    id = await pool(e, owner);
+  assert.equal(
+    (await request(e, "/pools/" + id + "/needs", "GET", undefined, owner.token))
+      .status,
+    403,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        "/pools/" + id + "/needs",
+        "POST",
+        { title: "Private prep", responsible: "pro" },
+        owner.token,
+      )
+    ).status,
+    403,
+  );
+  const analysis = await request(
+    e,
+    "/pools/" + id + "/records",
+    "POST",
+    {
+      kind: "analysis",
+      measured_at: measured(),
+      readings: { ph: 7.2, chlorine: 1.3 },
+    },
+    owner.token,
+  );
+  assert.equal(analysis.status, 201);
+  assert.equal(
+    (
+      await request(
+        e,
+        "/records/" + analysis.data.id + "/publish",
+        "POST",
+        {},
+        owner.token,
+      )
+    ).status,
+    200,
+  );
+  await invite(e, owner, pro, id, "principal");
+  const p = (await request(e, "/pools/" + id, "GET", undefined, pro.token))
+    .data;
+  assert.equal(
+    (
+      await request(
+        e,
+        "/pools/" + id,
+        "PUT",
+        {
+          ...p,
+          name: p.name,
+          routine: "Instruction pro",
+          client_advice: "Surveiller la ligne d’eau",
+        },
+        pro.token,
+      )
+    ).status,
+    200,
+  );
+  const clientPool = (
+    await request(e, "/pools/" + id, "GET", undefined, owner.token)
+  ).data;
+  assert.equal(clientPool.maintenance_tasks, undefined);
+  assert.equal(clientPool.routine, undefined);
+  assert.equal(clientPool.client_advice, "Surveiller la ligne d’eau");
+  assert.equal(
+    (
+      await request(
+        e,
+        "/pools/" + id,
+        "PUT",
+        { ...clientPool, name: "Bassin autonome", volume: 42 },
+        owner.token,
+      )
+    ).status,
+    403,
+  ); // professional advice is not client-editable
+  delete clientPool.client_advice;
+  assert.equal(
+    (
+      await request(
+        e,
+        "/pools/" + id,
+        "PUT",
+        { ...clientPool, name: "Bassin autonome", volume: 42 },
+        owner.token,
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (await request(e, "/pools/" + id, "GET", undefined, pro.token)).data
+      .routine,
+    "Instruction pro",
+  );
+  const need = await request(
+    e,
+    "/pools/" + id + "/needs",
+    "POST",
+    { title: "Produit", responsible: "client" },
+    pro.token,
+  );
+  assert.equal(need.status, 201);
+  assert.equal(
+    (
+      await request(
+        e,
+        "/needs/" + need.data.id,
+        "PUT",
+        { status: "ready", revision: 1 },
+        owner.token,
+      )
+    ).status,
+    403,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        "/needs/" + need.data.id,
+        "PUT",
+        { status: "ready", revision: 1 },
+        other.token,
+      )
+    ).status,
+    404,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        "/needs/" + need.data.id,
+        "PUT",
+        { status: "ready", revision: 1 },
+        pro.token,
+      )
+    ).status,
+    200,
+  );
+  assert.ok(
+    (
+      await request(e, "/notifications", "GET", undefined, owner.token)
+    ).data.items.some((n: any) => n.type === "supply"),
+  );
 });

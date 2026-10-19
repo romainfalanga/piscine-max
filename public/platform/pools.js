@@ -49,7 +49,7 @@ const managerKinds = {
   principal: "Pisciniste principal",
 };
 function poolCard(p) {
-  return `<a class="pool-overview" href="#pool/${p.id}"><span class="pool-overview-icon">${icon("pool", 30)}</span><div><h2>${esc(p.name)}</h2><p>${esc(p.city || "Adresse à compléter")}</p><small>${p.last_reading ? "Dernier suivi le " + fmt(p.last_reading) : "Aucun entretien enregistré"}</small></div><span class="pool-open">${icon("arrow")}</span></a>`;
+  return `<a class="pool-overview" href="#pool/${p.id}"><span class="pool-overview-icon">${icon("pool", 30)}</span><div><h2>${esc(p.name)}</h2><p>${esc(p.city || "Adresse à compléter")}</p><small>${p.last_reading ? "Dernier suivi le " + fmt(p.last_reading) : "Aucun suivi enregistré"}</small></div><span class="pool-open">${icon("arrow")}</span></a>`;
 }
 export async function pools(main) {
   const pro = state.mode === "pro";
@@ -59,7 +59,7 @@ export async function pools(main) {
     api("/connections"),
   ]);
   morePoolCursor = r.next;
-  main.innerHTML = `<div class="page-heading"><div><h1>${pro ? "Mes piscines suivies" : "Mes piscines"}</h1><p>${pro ? "Les bassins de votre tournée." : "Vos entretiens, vos analyses et votre pisciniste, au même endroit."}</p></div>${r.items.length ? button(icon("plus", 17) + (pro ? " Ajouter un client" : " Ajouter une piscine"), pro ? "invite-client" : "new-pool") : ""}</div>${invitationSection(inv.items)}${connectionSection(connections.incoming)}${r.items.length ? `<div class="directory-toolbar"><input id="pool-search" class="search-input" placeholder="Rechercher une piscine ou une ville" aria-label="Rechercher une piscine">${button("Rechercher", "search-pools", "", "secondary")}</div><div id="pool-list" class="pool-overviews">${r.items.map(poolCard).join("")}</div>` : `<section class="first-pool"><div class="first-pool-symbol">${icon("pool", 66)}</div><h2>${pro ? "Ajoutez votre premier client" : "Ajoutez votre première piscine"}</h2><p>${pro ? "Créez sa piscine ou rejoignez le dossier qu’il possède déjà." : "Commencez par son nom et son adresse. Vous pourrez ensuite suivre vos analyses et inviter votre pisciniste."}</p>${button(icon("plus", 18) + (pro ? " Ajouter un client" : " Ajouter une piscine"), pro ? "invite-client" : "new-pool")}</section>`}<div id="pool-more">${r.next ? button("Voir davantage de piscines", "more-pools", "", "secondary") : ""}</div>`;
+  main.innerHTML = `<div class="page-heading"><div><h1>${pro ? "Mes piscines suivies" : "Mes piscines"}</h1><p>${pro ? "Les bassins de votre tournée." : "Retrouvez vos analyses et les comptes rendus de vos piscines."}</p></div>${r.items.length ? button(icon("plus", 17) + (pro ? " Ajouter un client" : " Ajouter une piscine"), pro ? "invite-client" : "new-pool") : ""}</div>${invitationSection(inv.items)}${connectionSection(connections.incoming)}${r.items.length ? `<div class="directory-toolbar"><input id="pool-search" class="search-input" placeholder="Rechercher une piscine ou une ville" aria-label="Rechercher une piscine">${button("Rechercher", "search-pools", "", "secondary")}</div><div id="pool-list" class="pool-overviews">${r.items.map(poolCard).join("")}</div>` : `<section class="first-pool"><div class="first-pool-symbol">${icon("pool", 66)}</div><h2>${pro ? "Ajoutez votre premier client" : "Ajoutez votre première piscine"}</h2><p>${pro ? "Créez sa piscine ou rejoignez le dossier qu’il possède déjà." : "Ajoutez votre piscine pour enregistrer vos analyses. Vous pourrez aussi inviter un pisciniste."}</p>${button(icon("plus", 18) + (pro ? " Ajouter un client" : " Ajouter une piscine"), pro ? "invite-client" : "new-pool")}</section>`}<div id="pool-more">${r.next ? button("Voir davantage de piscines", "more-pools", "", "secondary") : ""}</div>`;
 }
 on("search-pools", async () => {
   const r = await api(
@@ -217,32 +217,53 @@ on("new-pool", (d) => {
   wireAddress();
 });
 export async function pool(main, id, tab = "journal") {
-  const [p, r, n] = await Promise.all([
+  const [p, r] = await Promise.all([
     api("/pools/" + id),
     api("/pools/" + id + "/records"),
-    api("/pools/" + id + "/needs"),
   ]);
+  const isPro = p.membership === "principal";
+  const n = isPro ? await api("/pools/" + id + "/needs") : { items: [] };
+  const tabs = isPro
+    ? [
+        ["journal", "Suivi"],
+        ["charts", "Évolution"],
+        ["needs", "À prévoir"],
+        ["planning", "Planning"],
+        ["info", "Le bassin"],
+        ["access", "Accès"],
+      ]
+    : [
+        ["journal", "Suivi"],
+        ["charts", "Évolution"],
+        ["info", "Le bassin"],
+        ["access", "Accès"],
+      ];
+  if (!tabs.some(([key]) => key === tab)) {
+    history.replaceState(null, "", "#pool/" + id);
+    tab = "journal";
+  }
   state.pool = p;
   state.records = r.items;
   state.needs = n.items;
   poolCursor = r.next;
   activeTab = tab;
-  const isPro = p.membership === "principal";
-  main.innerHTML = `<a class="back-link" href="#${isPro ? "clients" : "home"}">${icon("arrow", 14)} ${isPro ? "Mes clients" : "Mes piscines"}</a><section class="pool-heading"><div><h1>${esc(p.name)}</h1><p>${icon("map", 16)} ${esc(p.address || p.city || "Adresse à compléter")}</p></div><div class="pool-heading-actions">${isPro ? button(icon("check", 18) + " Commencer l’entretien", "new-visit", `data-pool="${id}"`) : button(icon("plus", 18) + " Ajouter une analyse", "new-analysis", `data-pool="${id}"`)}${button("Modifier la piscine", "edit-pool", "", "secondary")}</div></section>${p.claimable ? `<div class="claim-banner">Client à associer. ${p.invitations.length ? "Invitation en attente d’acceptation." : button("Inviter le client", "invite-member", "", "secondary small")}</div>` : ""}<div class="tabs pool-tabs" role="navigation" aria-label="Sections de la piscine">${[
-    ["journal", "Suivi"],
-    ["charts", "Évolution"],
-    ["needs", "À prévoir"],
-    ["planning", "Planning"],
-    ["info", "Le bassin"],
-    ["access", "Accès"],
-  ]
-    .map(
-      ([key, label]) =>
-        `<button class="${tab === key ? "active" : ""}" data-action="pool-tab" data-tab="${key}">${label}${key === "needs" && n.items.some((n) => n.status === "needed") ? " (" + n.items.filter((n) => n.status === "needed").length + ")" : ""}</button>`,
-    )
-    .join("")}</div><div id="pool-content"></div>`;
+  const principal = p.members.find((m) => m.kind === "principal"),
+    pending = p.invitations.some((i) => i.kind === "principal");
+  const proAction =
+    p.manager && !principal
+      ? pending
+        ? `<a class="btn secondary" href="#pool/${id}/access">Invitation en attente</a>`
+        : button(
+            "Ajouter un pisciniste",
+            "invite-member",
+            'data-kind="principal"',
+            "secondary",
+          )
+      : "";
+  main.innerHTML = `<a class="back-link" href="#${isPro ? "clients" : "home"}">${icon("arrow", 14)} ${isPro ? "Mes clients" : "Mes piscines"}</a><section class="pool-heading"><div><h1>${esc(p.name)}</h1><p>${icon("map", 16)} ${esc(p.address || p.city || "Adresse à compléter")}</p></div><div class="pool-heading-actions">${isPro ? button(icon("check", 18) + " Commencer l’entretien", "new-visit", `data-pool="${id}"`) + button("Modifier la piscine", "edit-pool", "", "secondary") : button(icon("plus", 18) + " Ajouter une analyse", "new-analysis", `data-pool="${id}"`) + proAction}</div></section>${p.claimable ? `<div class="claim-banner">Client à associer. ${p.invitations.length ? "Invitation en attente d’acceptation." : button("Inviter le client", "invite-member", "", "secondary small")}</div>` : ""}<div class="tabs pool-tabs" role="navigation" aria-label="Sections de la piscine">${tabs.map(([key, label]) => `<button class="${tab === key ? "active" : ""}" data-action="pool-tab" data-tab="${key}">${label}${key === "needs" && n.items.some((n) => n.status === "needed") ? " (" + n.items.filter((n) => n.status === "needed").length + ")" : ""}</button>`).join("")}</div><div id="pool-content"></div>`;
   await renderTab();
 }
+
 on("pool-tab", (d) => go("pool/" + state.pool.id + "/" + d.tab));
 function taskSummary(list) {
   const done = list.filter((t) => t.done).length,
@@ -254,7 +275,7 @@ function taskReport(list) {
 }
 function recordCard(r) {
   const values = Object.entries(r.readings).filter(([k]) => metrics[k]);
-  return `<article class="record"><div class="record-date">${icon(r.kind === "visit" ? "check" : "water", 18)}<time>${fmt(r.measured_at, { year: "numeric", hour: "2-digit", minute: "2-digit" })}</time>${badge(r.published_at ? (r.superseded_by ? "Version corrigée" : r.correction_of ? "Correction" : "Partagé") : "Brouillon", r.published_at ? "teal" : "amber")}</div><h3>${r.kind === "visit" ? "Entretien de la piscine" : "Analyse de l’eau"}</h3><p class="record-author">${esc(r.author_name)}${r.duration ? " • " + r.duration + " min" : ""}</p>${r.checklist.length ? `<p class="task-total">${esc(taskSummary(r.checklist))}</p><details class="record-tasks"><summary>Voir les tâches du passage</summary>${taskReport(r.checklist)}</details>` : ""}${values.length ? `<div class="values">${values.map(([k, v]) => `<span>${metrics[k].label} <strong>${esc(v)}</strong> ${metrics[k].unit}</span>`).join("")}</div>` : ""}${r.notes ? `<p class="body">${esc(r.notes)}</p>` : ""}${r.products ? `<p class="small-note"><strong>Produits ajoutés :</strong> ${esc(r.products)}</p>` : ""}<div class="inline wrap">${button("Voir le détail", "record-detail", `data-id="${r.id}"`, "secondary small")}${r.author_id === state.user.id && !r.published_at ? button("Reprendre le brouillon", "edit-record", `data-id="${r.id}"`, "secondary small") : ""}${r.author_id === state.user.id && r.published_at && !r.superseded_by ? button("Ajouter une correction", "correct-record", `data-id="${r.id}"`, "ghost small") : ""}</div></article>`;
+  return `<article class="record"><div class="record-date">${icon(r.kind === "visit" ? "check" : "water", 18)}<time>${fmt(r.measured_at, { year: "numeric", hour: "2-digit", minute: "2-digit" })}</time>${badge(r.published_at ? (r.superseded_by ? "Version corrigée" : r.correction_of ? "Correction" : r.kind === "visit" ? "Partagé" : "Enregistrée") : "Brouillon", r.published_at ? "teal" : "amber")}</div><h3>${r.kind === "visit" ? "Entretien de la piscine" : "Analyse de l’eau"}</h3><p class="record-author">${esc(r.author_name)}${r.duration ? " • " + r.duration + " min" : ""}</p>${r.checklist.length ? `<p class="task-total">${esc(taskSummary(r.checklist))}</p><details class="record-tasks"><summary>Voir les tâches du passage</summary>${taskReport(r.checklist)}</details>` : ""}${values.length ? `<div class="values">${values.map(([k, v]) => `<span>${metrics[k].label} <strong>${esc(v)}</strong> ${metrics[k].unit}</span>`).join("")}</div>` : ""}${r.notes ? `<p class="body">${esc(r.notes)}</p>` : ""}${r.products ? `<p class="small-note"><strong>Produits ajoutés :</strong> ${esc(r.products)}</p>` : ""}<div class="inline wrap">${button("Voir le détail", "record-detail", `data-id="${r.id}"`, "secondary small")}${r.author_id === state.user.id && !r.published_at ? button("Reprendre le brouillon", "edit-record", `data-id="${r.id}"`, "secondary small") : ""}${r.author_id === state.user.id && r.published_at && !r.superseded_by ? button("Ajouter une correction", "correct-record", `data-id="${r.id}"`, "ghost small") : ""}</div></article>`;
 }
 async function renderTab() {
   const el = $("#pool-content"),
@@ -264,7 +285,6 @@ async function renderTab() {
         (r) => r.published_at && !r.superseded_by,
       ),
       latest = published[0],
-      visit = published.find((r) => r.kind === "visit"),
       pro = p.members.find((m) => m.kind === "principal");
     const readings = Object.keys(metrics)
       .map((k) => {
@@ -272,19 +292,42 @@ async function renderTab() {
         return `<div class="water-reading"><span>${metrics[k].label}</span><strong class="${r ? "" : "unmeasured"}">${r ? esc(r.readings[k]) : "Non mesuré"} <small>${r ? metrics[k].unit : ""}</small></strong><small>${r ? "Mesuré le " + fmt(r.measured_at) : "Ajoutez votre première mesure"}</small></div>`;
       })
       .join("");
-    el.innerHTML = `<div class="pool-layout"><section class="pool-feed"><div class="water-panel"><div class="water-panel-title"><h2>Les dernières mesures</h2>${p.membership === "principal" ? button("Ajouter une analyse", "new-analysis", `data-pool="${p.id}"`, "ghost small") : `<a class="reading-history" href="#pool/${p.id}/charts">Voir l’évolution</a>`}</div><div class="water-readings">${readings}</div></div><div class="section-heading"><h2>Historique des passages</h2><span class="small-note">${latest ? "Dernier suivi le " + fmt(latest.measured_at) : "Votre suivi commence ici"}</span></div>${state.records.length ? state.records.map(recordCard).join("") : empty("Aucun suivi pour le moment", p.membership === "principal" ? "Commencez un entretien pour renseigner les tâches et les analyses." : "Vos analyses et les entretiens de votre pisciniste apparaîtront ici.")}<div id="record-more">${poolCursor ? button("Voir les passages précédents", "more-records", "", "secondary") : ""}</div></section><aside class="pool-aside"><section class="aside-section"><h2>${p.membership === "principal" ? "Votre entretien" : "Votre pisciniste"}</h2>${p.membership === "principal" ? `<p>Retrouvez les gestes à effectuer pour ce bassin et partagez votre compte rendu.</p>${button("Commencer l’entretien", "new-visit", `data-pool="${p.id}"`, "primary full")}` : pro ? `<div class="person-line"><span class="avatar">${esc(pro.name.slice(0, 2).toUpperCase())}</span><div><strong>${esc(pro.company || pro.name)}</strong><small>Pisciniste principal</small></div></div>` : `<p>Invitez votre pisciniste pour partager le suivi de votre piscine.</p>${p.manager ? button("Inviter mon pisciniste", "invite-member", "", "secondary") : ""}`}</section><section class="aside-section"><h2>La piscine</h2><dl class="pool-facts"><div><dt>Volume</dt><dd>${p.volume ? esc(p.volume) + " m³" : "À compléter"}</dd></div><div><dt>Traitement</dt><dd>${p.treatment === "unknown" ? "À compléter" : esc(treatments[p.treatment])}</dd></div><div><dt>Filtre</dt><dd>${filterTypes[p.filter_type] || "À préciser"}</dd></div></dl>${button("Compléter les équipements", "edit-pool", "", "ghost small")}</section>${visit ? `<section class="aside-section"><h2>Dernier entretien</h2><strong>${fmt(visit.measured_at, { day: "numeric", month: "long" })}</strong><p>${esc(taskSummary(visit.checklist))}</p>${button("Ouvrir le compte rendu", "record-detail", `data-id="${visit.id}"`, "secondary small")}</section>` : ""}${p.client_advice ? `<section class="aside-section"><h2>Entre deux passages</h2><p>${esc(p.client_advice)}</p></section>` : ""}<section class="aside-section"><h2>Localisation</h2>${p.latitude != null ? '<div id="dossier-map" class="dossier-map" aria-label="Position de la piscine"></div><p class="small-note" data-map-status role="status"></p>' : ""}<p>${esc(p.address || p.city || "Adresse à compléter")}${p.location_precision === "municipality" ? "<small>Position approximative de la commune</small>" : ""}</p>${p.address || p.city ? `<a class="text-btn" target="_blank" rel="noopener" href="${esc(itinerary(p))}">Ouvrir l’itinéraire</a>` : ""}</section></aside></div>`;
-    if (p.latitude != null)
+    const professional = p.membership === "principal";
+    let upcoming = [];
+    if (!professional && pro) {
+      const agenda = await api(
+        "/planning?pool_id=" +
+          p.id +
+          "&from=" +
+          today() +
+          "&to=" +
+          addDays(today(), 30),
+      );
+      upcoming = agenda.items.filter((a) => a.status === "planned").slice(0, 3);
+    }
+    const accompaniment = professional
+      ? `<section class="aside-section"><h2>Votre entretien</h2><p>Retrouvez les gestes à effectuer pour ce bassin et partagez votre compte rendu.</p>${button("Commencer l’entretien", "new-visit", `data-pool="${p.id}"`, "primary full")}</section>`
+      : `<section class="aside-section client-accompaniment"><h2>${pro ? "Votre pisciniste" : "Votre suivi personnel"}</h2>${pro ? `<div class="person-line"><span class="avatar">${esc(pro.name.slice(0, 2).toUpperCase())}</span><div><strong>${esc(pro.company || pro.name)}</strong><small>Pisciniste principal</small></div></div><p>Ses comptes rendus apparaissent ici après chaque entretien partagé.</p>` : `<p>Enregistrez vos analyses et retrouvez l’évolution de votre eau dans ce suivi.</p>`}</section>`;
+    const nextVisits = upcoming.length
+      ? `<section class="aside-section"><h2>Prochains passages</h2>${upcoming.map((a) => `<div class="client-appointment"><strong>${fmt(a.date, { day: "numeric", month: "long" })} à ${esc(a.time)}</strong><span>${esc(a.title)}</span></div>`).join("")}</section>`
+      : "";
+    const facts = `<section class="aside-section"><h2>La piscine</h2><dl class="pool-facts"><div><dt>Volume</dt><dd>${p.volume ? esc(p.volume) + " m³" : "À renseigner"}</dd></div><div><dt>Traitement</dt><dd>${p.treatment === "unknown" ? "À renseigner" : esc(treatments[p.treatment])}</dd></div><div><dt>Filtre</dt><dd>${filterTypes[p.filter_type] || "À préciser"}</dd></div></dl><a class="text-btn" href="#pool/${p.id}/info">Voir le bassin</a></section>`;
+    const location = professional
+      ? `<section class="aside-section"><h2>Localisation</h2>${p.latitude != null ? '<div id="dossier-map" class="dossier-map" aria-label="Position de la piscine"></div><p class="small-note" data-map-status role="status"></p>' : ""}<p>${esc(p.address || p.city || "Adresse à compléter")}${p.location_precision === "municipality" ? "<small>Position approximative de la commune</small>" : ""}</p>${p.address || p.city ? `<a class="text-btn" target="_blank" rel="noopener" href="${esc(itinerary(p))}">Ouvrir l’itinéraire</a>` : ""}</section>`
+      : "";
+    el.innerHTML = `<div class="pool-layout"><section class="pool-feed"><div class="water-panel"><div class="water-panel-title"><h2>Les dernières mesures</h2>${professional ? button("Ajouter une analyse", "new-analysis", `data-pool="${p.id}"`, "ghost small") : `<a class="reading-history" href="#pool/${p.id}/charts">Voir l’évolution</a>`}</div><div class="water-readings">${readings}</div></div><div class="section-heading"><h2>${professional ? "Historique des passages" : "Historique du suivi"}</h2><span class="small-note">${latest ? "Dernier suivi le " + fmt(latest.measured_at) : "Votre suivi commence ici"}</span></div>${state.records.length ? state.records.map(recordCard).join("") : empty("Aucun suivi pour le moment", professional ? "Commencez un entretien pour renseigner les tâches et les analyses." : pro ? "Les comptes rendus de votre pisciniste apparaîtront ici. Vous pouvez aussi ajouter vos propres analyses." : "Ajoutez une analyse pour commencer le suivi de votre eau.")}<div id="record-more">${poolCursor ? button("Voir les suivis précédents", "more-records", "", "secondary") : ""}</div></section><aside class="pool-aside">${accompaniment}${nextVisits}${facts}${p.client_advice ? `<section class="aside-section"><h2>${pro ? "Conseils de votre pisciniste" : "Conseils pour la piscine"}</h2><p>${esc(p.client_advice)}</p></section>` : ""}${location}</aside></div>`;
+    if (professional && p.latitude != null)
       await mapAt($("#dossier-map"), p.latitude, p.longitude, {
         approximate: p.location_precision !== "address",
       });
   } else if (activeTab === "charts") {
-    el.innerHTML = `<div class="card"><div class="inline between wrap"><div><h2>L’évolution de votre eau</h2><p class="small-note">Moyennes quotidiennes des analyses partagées. Les corrections remplacent les anciennes valeurs dans les courbes.</p></div><select id="chart-days" class="search-input" style="width:auto" aria-label="Période"><option value="30">30 jours</option><option value="180" selected>6 mois</option><option value="365">1 an</option><option value="1825">5 ans</option></select></div><div id="chart-content"></div></div>`;
+    el.innerHTML = `<div class="card"><div class="inline between wrap"><div><h2>L’évolution de votre eau</h2><p class="small-note">Moyennes quotidiennes des analyses enregistrées. Les corrections remplacent les anciennes valeurs dans les courbes.</p></div><select id="chart-days" class="search-input" style="width:auto" aria-label="Période"><option value="30">30 jours</option><option value="180" selected>6 mois</option><option value="365">1 an</option><option value="1825">5 ans</option></select></div><div id="chart-content"></div></div>`;
     $("#chart-days").addEventListener("change", loadCharts);
     await loadCharts();
   } else if (activeTab === "needs") {
     el.innerHTML = `<div class="section-heading"><div><h2>Le prochain passage se prépare ici.</h2><p class="small-note">Ce qui doit être acheté, préparé ou apporté.</p></div>${button(icon("plus", 15) + " Ajouter un besoin", "new-need")}</div><div class="card">${state.needs.length ? state.needs.map(needRow).join("") : empty("Tout est prêt pour le moment", "Un produit ou du matériel manque ? Ajoutez-le ici.")}</div>`;
   } else if (activeTab === "info") {
-    el.innerHTML = `<div class="grid two"><section class="card"><div class="inline between"><h2>Le bassin</h2>${button("Compléter", "edit-pool", "", "secondary small")}</div><dl>${[
+    el.innerHTML = `<div class="grid two"><section class="card"><div class="inline between"><h2>Le bassin</h2>${button("Modifier", "edit-pool", "", "secondary small")}</div><dl>${[
       ["Type", kinds[p.kind]],
       ["Traitement", treatments[p.treatment]],
       ["Volume", p.volume ? p.volume + " m³" : "À préciser"],
@@ -301,7 +344,7 @@ async function renderTab() {
       )
       .join(
         "",
-      )}</dl>${p.membership === "owner" ? `<a class="btn secondary" href="/api/pools/${p.id}/export" download>Exporter mon carnet</a>` : ""}${p.address ? `<a class="btn secondary" href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(p.address + " " + (p.city || ""))}" target="_blank" rel="noopener noreferrer">${icon("map", 17)} Ouvrir l’itinéraire</a>` : ""}</section><div class="stack"><section class="card"><h2>Équipements & routine</h2><h3>Équipements</h3><p class="prose">${esc(p.equipment || "Marques, modèles et références à compléter.")}</p><h3>Routine d’entretien</h3><p class="prose">${esc(p.routine || "Les étapes propres à ce bassin apparaîtront ici.")}</p></section><section class="card"><h3>${icon("lock", 16)} Informations d’accès privées</h3><p class="prose">${esc(p.access_notes || "Aucune consigne renseignée.")}</p><p class="small-note">Privées : uniquement les propriétaires et leur pisciniste principal.</p></section>${p.membership !== "owner" ? `<section class="card"><h3>Vos notes internes</h3><p class="small-note">Ces notes restent privées et ne sont pas partagées avec le client.</p>${button("Ouvrir mes notes", "private-notes", "", "secondary")}</section>` : ""}</div></div>`;
+      )}</dl>${p.membership === "owner" ? `<a class="btn secondary" href="/api/pools/${p.id}/export" download>Exporter mon carnet</a>` : ""}${p.membership === "principal" && p.address ? `<a class="btn secondary" href="${esc(itinerary(p))}" target="_blank" rel="noopener noreferrer">${icon("map", 17)} Ouvrir l’itinéraire</a>` : ""}</section><div class="stack"><section class="card"><h2>Équipements</h2><p class="prose">${esc(p.equipment || "Marques, modèles et références à compléter.")}</p>${p.membership === "principal" ? `<h3>Routine d’entretien</h3><p class="prose">${esc(p.routine || "Les étapes propres à ce bassin apparaîtront ici.")}</p>` : ""}</section><section class="card"><h3>${icon("lock", 16)} Informations d’accès privées</h3><p class="prose">${esc(p.access_notes || "Aucune consigne renseignée.")}</p><p class="small-note">Privées : uniquement les propriétaires et leur pisciniste principal.</p></section>${p.membership !== "owner" ? `<section class="card"><h3>Vos notes internes</h3><p class="small-note">Ces notes restent privées et ne sont pas partagées avec le client.</p>${button("Ouvrir mes notes", "private-notes", "", "secondary")}</section>` : ""}</div></div>`;
   } else if (activeTab === "access") {
     await accessTab(el);
   } else if (activeTab === "planning") {
@@ -329,7 +372,7 @@ on("more-records", async () => {
   const m = $("#record-more");
   m.insertAdjacentHTML("beforebegin", r.items.map(recordCard).join(""));
   m.innerHTML = r.next
-    ? button("Voir les passages précédents", "more-records", "", "secondary")
+    ? button("Voir les suivis précédents", "more-records", "", "secondary")
     : "";
 });
 async function loadCharts() {
@@ -360,7 +403,7 @@ async function loadCharts() {
       `<details style="margin-top:25px"><summary>Consulter les valeurs en tableau</summary><div class="table-wrap"><table><thead><tr><th>Date</th>${keys.map((k) => `<th>${metrics[k].label}</th>`).join("")}</tr></thead><tbody>${d.items.map((v) => `<tr><td>${fmt(v.date)}</td>${keys.map((k) => `<td>${v[k] == null ? "Non renseigné" : v[k].toFixed(2)}</td>`).join("")}</tr>`).join("")}</tbody></table></div></details>`
     : empty(
         "Vos premières courbes bientôt ici",
-        "Partagez une analyse pour visualiser l’évolution de votre piscine.",
+        "Ajoutez une analyse pour visualiser l’évolution de votre eau.",
       );
 }
 async function accessTab(el) {
@@ -378,16 +421,23 @@ on("archive-pool", () =>
     "Archiver",
   ),
 );
-on("invite-member", () => {
+on("invite-member", (d) => {
   const p = state.pool,
     hasPro = p.members.some((m) => m.kind === "principal");
-  const options = p.claimable
-    ? { owner: "Client propriétaire" }
-    : hasPro
-      ? { owner: "Copropriétaire" }
-      : { principal: "Mon pisciniste", owner: "Copropriétaire" };
+  const options =
+    d.kind === "principal" && !hasPro && p.manager
+      ? { principal: "Mon pisciniste" }
+      : p.claimable
+        ? { owner: "Client propriétaire" }
+        : hasPro
+          ? { owner: "Copropriétaire" }
+          : { principal: "Mon pisciniste", owner: "Copropriétaire" };
   modal(
-    p.claimable ? "Inviter le client" : "Partager cette piscine",
+    p.claimable
+      ? "Inviter le client"
+      : d.kind === "principal"
+        ? "Ajouter mon pisciniste"
+        : "Partager cette piscine",
     `${select("Inviter", "kind", options, p.claimable || hasPro ? "owner" : "principal")}${field("Identifiant exact de la personne", "username", "", "text", 'required maxlength="40" autocapitalize="none"')}<div id="find-pro-section" ${p.claimable || hasPro ? "hidden" : ""}><div class="inline"><input id="pro-search" class="search-input" placeholder="Nom du pisciniste" aria-label="Trouver un pisciniste"><button type="button" class="btn secondary" data-action="find-pro">Rechercher</button></div><div id="pro-results"></div></div><p class="small-note">${p.claimable ? "Le client accepte l’invitation depuis son compte." : "L’invitation doit être acceptée. Pour changer de pisciniste, retirez d’abord l’ancien accès."}</p>`,
     async (b) => {
       await api("/pools/" + p.id + "/invitations", "POST", b);
@@ -442,7 +492,7 @@ on("cancel-invite", async (d) => {
 on("edit-pool", () => {
   const p = state.pool;
   modal(
-    "Compléter le dossier piscine",
+    "Modifier la piscine",
     `${field("Nom", "name", p.name, "text", 'required maxlength="80"')}${select("Type de bassin", "kind", kinds, p.kind)}${addressField(p)}<div class="grid two form-two">${field("Volume (m³)", "volume", p.volume, "number", 'min="0.1" max="100000" step="0.1"')}${select("Traitement", "treatment", treatments, p.treatment)}</div>${select("Type de filtre", "filter_type", filterTypes, p.filter_type)}${field("Modèle du filtre (facultatif)", "filtration", p.filtration, "text", 'maxlength="200"')}<fieldset class="equipment-options"><legend>Équipements présents</legend>${[
       ["has_steps", "Marches"],
       ["has_skimmers", "Skimmers"],
@@ -454,7 +504,7 @@ on("edit-pool", () => {
       )
       .join(
         "",
-      )}</fieldset>${area("Équipements, marques et références", "equipment", p.equipment, 'maxlength="4000"')}${area("Tâches supplémentaires (une par ligne)", "routine", p.routine, 'maxlength="2000"')}${area("Conseils au client entre deux passages", "client_advice", p.client_advice, 'maxlength="2000"')}${area("Consignes d’accès privées", "access_notes", p.access_notes, 'maxlength="1000"')}<label class="check"><input type="checkbox" name="winterized" ${p.winterized ? "checked" : ""}> Piscine actuellement hivernée</label><details><summary>Repères de suivi personnalisés</summary><p class="small-note">Renseignez uniquement des plages adaptées à ce bassin et à son usage. Aucun seuil générique ne certifie sa conformité.</p>${Object.entries(
+      )}</fieldset>${area("Équipements, marques et références", "equipment", p.equipment, 'maxlength="4000"')}${p.membership === "principal" ? `${area("Tâches supplémentaires (une par ligne)", "routine", p.routine, 'maxlength="2000"')}${area("Conseils au client entre deux passages", "client_advice", p.client_advice, 'maxlength="2000"')}` : ""}${area("Consignes d’accès privées", "access_notes", p.access_notes, 'maxlength="1000"')}<label class="check"><input type="checkbox" name="winterized" ${p.winterized ? "checked" : ""}> Piscine actuellement hivernée</label><details><summary>Repères de suivi personnalisés</summary><p class="small-note">Renseignez uniquement des plages adaptées à ce bassin et à son usage. Aucun seuil générique ne certifie sa conformité.</p>${Object.entries(
       metrics,
     )
       .filter(([k]) => k !== "water_temp")
@@ -615,7 +665,7 @@ export async function openRecordForm(
     )}</div>${field("Méthode de mesure (facultatif)", "method", record?.method || "", "text", 'maxlength="100" placeholder="Gouttes, photomètre…"')}</section>`;
   const dialog = modal(
     visit ? "Entretien de la piscine" : "Ajouter une analyse",
-    `<p class="form-intro">${esc(p.name)}</p>${record?.correction_of ? '<p class="note">La version originale restera dans l’historique.</p>' : ""}${visit ? `<div class="visit-progress"><span id="task-progress" aria-live="polite"></span><progress id="task-progress-bar" max="${checklist.length}" value="0"></progress></div>` : ""}<div class="${visit ? "visit-workspace" : ""}">${visit ? `<section class="visit-checklist">${p.filter_type === "unknown" ? '<p class="note">Type de filtre à préciser dans la fiche piscine pour adapter les tâches.</p>' : ""}<p class="safety-inline">Arrêtez la pompe avant de changer la position de la vanne. Isolez et dépressurisez avant toute ouverture.</p>${taskMarkup}<a class="text-btn" href="#guide/entretien/${p.id}" target="_blank" rel="noopener">Consulter la procédure d’entretien</a></section>` : ""}<aside class="visit-details">${measurements}${field("Date et heure de la mesure", "measured_at", value, "datetime-local", "required")}${visit ? field("Durée du passage (minutes)", "duration", record?.duration || "", "number", 'min="1" max="1440"') : ""}${area("Produits ajoutés", "products", record?.products || "", 'maxlength="2000" placeholder="Produit, quantité et unité"')}${area("Observations partagées avec le client et son pisciniste", "notes", record?.notes || "", 'maxlength="4000" placeholder="État du bassin, point à surveiller…"')}<label class="field"><span>Photos du bassin (6 maximum, 4 Mo chacune)</span><input type="file" name="photos" multiple accept="image/jpeg,image/png,image/webp"></label>${record?.photos?.length ? `<p class="small-note">${record.photos.length} photo(s) déjà enregistrée(s).</p>` : ""}<p class="small-note">${visit ? "Le client verra les tâches réalisées, les éventuels motifs et les mesures après le partage." : "Vos mesures seront ajoutées au suivi partagé de la piscine."}</p><label class="check"><input type="checkbox" name="draft"> Conserver un brouillon</label></aside></div>`,
+    `<p class="form-intro">${esc(p.name)}</p>${record?.correction_of ? '<p class="note">La version originale restera dans l’historique.</p>' : ""}${visit ? `<div class="visit-progress"><span id="task-progress" aria-live="polite"></span><progress id="task-progress-bar" max="${checklist.length}" value="0"></progress></div>` : ""}<div class="${visit ? "visit-workspace" : ""}">${visit ? `<section class="visit-checklist">${p.filter_type === "unknown" ? '<p class="note">Type de filtre à préciser dans la fiche piscine pour adapter les tâches.</p>' : ""}<p class="safety-inline">Arrêtez la pompe avant de changer la position de la vanne. Isolez et dépressurisez avant toute ouverture.</p>${taskMarkup}<a class="text-btn" href="#guide/entretien/${p.id}" target="_blank" rel="noopener">Consulter la procédure d’entretien</a></section>` : ""}<aside class="visit-details">${measurements}${field("Date et heure de la mesure", "measured_at", value, "datetime-local", "required")}${visit ? field("Durée du passage (minutes)", "duration", record?.duration || "", "number", 'min="1" max="1440"') : ""}${area("Produits ajoutés", "products", record?.products || "", 'maxlength="2000" placeholder="Produit, quantité et unité"')}${area(p.membership === "principal" ? "Observations partagées avec le client" : "Observations", "notes", record?.notes || "", 'maxlength="4000" placeholder="État du bassin, point à surveiller…"')}<label class="field"><span>Photos du bassin (6 maximum, 4 Mo chacune)</span><input type="file" name="photos" multiple accept="image/jpeg,image/png,image/webp"></label>${record?.photos?.length ? `<p class="small-note">${record.photos.length} photo(s) déjà enregistrée(s).</p>` : ""}<p class="small-note">${visit ? "Le client verra les tâches réalisées, les éventuels motifs et les mesures après le partage." : "Vos mesures seront ajoutées à l’historique de votre piscine."}</p><label class="check"><input type="checkbox" name="draft"> Conserver un brouillon</label></aside></div>`,
     async (b, form) => {
       const values = {};
       for (const k of Object.keys(metrics))
@@ -694,7 +744,7 @@ export async function openRecordForm(
       if (location.hash.startsWith("#pool/" + poolId)) refresh();
       else go("pool/" + poolId);
     },
-    "Terminer et partager",
+    visit ? "Terminer et partager" : "Enregistrer l’analyse",
   );
   if (visit) dialog.classList.add("maintenance-dialog");
   const form = $("#mform");
@@ -716,7 +766,9 @@ export async function openRecordForm(
     }
     $("[type=submit]", form).textContent = $("[name=draft]", form).checked
       ? "Enregistrer le brouillon"
-      : "Terminer et partager";
+      : visit
+        ? "Terminer et partager"
+        : "Enregistrer l’analyse";
     for (const row of $$(".maintenance-task", form))
       row.classList.toggle("is-done", $("[type=checkbox]", row).checked);
   };
@@ -801,7 +853,7 @@ on("record-detail", async (d) => {
   const r = await api("/records/" + d.id);
   modal(
     r.kind === "visit" ? "Compte rendu de passage" : "Relevé d’analyse",
-    `<div class="inline between"><p class="small-note">${fmt(r.measured_at, { year: "numeric", hour: "2-digit", minute: "2-digit" })}<br>${esc(r.author_name)}</p>${badge(r.published_at ? "Partagé" : "Brouillon", r.published_at ? "teal" : "amber")}</div><div class="metric-grid">${Object.entries(
+    `<div class="inline between"><p class="small-note">${fmt(r.measured_at, { year: "numeric", hour: "2-digit", minute: "2-digit" })}<br>${esc(r.author_name)}</p>${badge(r.published_at ? (r.kind === "visit" ? "Partagé" : "Enregistrée") : "Brouillon", r.published_at ? "teal" : "amber")}</div><div class="metric-grid">${Object.entries(
       r.readings,
     )
       .map(([k, v]) =>

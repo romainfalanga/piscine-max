@@ -2,7 +2,7 @@
 
 ## Identité et propriété
 
-Une identité possède un espace client ; `is_pro` active l'espace professionnel. Ce drapeau n'autorise jamais l'accès à une piscine à lui seul. Le client et le professionnel peuvent créer un dossier. En mode client, le créateur devient propriétaire responsable ; en mode professionnel, il devient principal, sans propriété client. Aucun compte client n'est créé à sa place.
+Le rôle est choisi à l’inscription. Un compte client ne peut pas activer un espace professionnel depuis son profil ; un compte professionnel peut aussi suivre ses piscines personnelles. Ce drapeau n'autorise jamais l'accès à une piscine à lui seul. Le client et le professionnel peuvent créer un dossier. En mode client, le créateur devient propriétaire responsable ; en mode professionnel, il devient principal, sans propriété client. Aucun compte client n'est créé à sa place.
 
 `pool_members` autorise seulement `owner` et `principal` pour les accès actifs. Les contraintes SQL imposent un principal unique et un responsable client unique. Les anciennes lignes `temporary` sont révoquées par la migration 0003, leurs récurrences arrêtées et leurs rendez-vous futurs annulés ; les comptes rendus publiés sont conservés. Des triggers empêchent la réactivation de ces accès.
 
@@ -21,6 +21,8 @@ Les invitations et demandes expirent après sept jours et requièrent une accept
 | Gérer les accès                 | Non            | Oui                | Premier client uniquement, avant rattachement | Non       |
 | Notes internes personnelles     | Non            | Non                | Ses notes                                     | Non       |
 | Brouillon d'un autre auteur     | Non            | Non                | Non                                           | Non       |
+
+Les besoins d’approvisionnement, la routine et les conseils professionnels se modifient uniquement par le principal actif. Les propriétaires conservent le suivi, les informations du bassin et les notifications pertinentes. Voir [PARCOURS-CLIENT.md](PARCOURS-CLIENT.md).
 
 ## Historique
 
@@ -42,7 +44,7 @@ Les calculateurs sont des fonctions locales sans transmission de données. Les n
 
 - Sessions aléatoires de 256 bits, empreinte SHA-256 en base, cookies Secure/HttpOnly/SameSite=Strict ; expiration et statut du compte vérifiés à chaque requête.
 - Mot de passe avec sel aléatoire, préhachage HMAC par secret serveur et PBKDF2 SHA-256 à 100 000 itérations (limite du runtime Workers). Faire auditer ce choix et le budget CPU avant ouverture large ; une authentification dédiée ou un KDF plus coûteux sur un runtime adapté reste une évolution possible. Le pepper ne remplace pas le coût d'un KDF.
-- Code de récupération aléatoire à usage unique, empreinte en base, rotation et révocation des sessions. Sans email, sa perte avec celle du mot de passe empêche une récupération autonome.
+- Code de récupération aléatoire à usage unique, empreinte en base, rotation et révocation des sessions. La récupération repose toujours sur ce code ; l’email de profil ne déclenche pas de récupération par email.
 - Écritures protégées par vérification Origin, requêtes préparées, validation serveur, limitation par compte et IP sur l'authentification ; CSP et absence de script tiers.
 - Images privées dans R2, contrôle de droits à chaque lecture, aucun bucket public ; formats JPEG/PNG/WebP, limites de taille, retrait des métadonnées connues.
 - Aucun secret par défaut en production. Le runtime refuse l'authentification si le secret manque.

@@ -345,6 +345,7 @@ records.delete("/photos/:id", async (c) => {
 });
 records.get("/pools/:id/needs", async (c) => {
   const p = await access(c, c.req.param("id"));
+  professionalAccess(c, p);
   return c.json({
     items: await rows(
       c,
@@ -356,6 +357,7 @@ records.get("/pools/:id/needs", async (c) => {
 records.post("/pools/:id/needs", async (c) => {
   const p = await access(c, c.req.param("id")),
     b = await c.req.json();
+  professionalAccess(c, p);
   const responsible = choice(b.responsible, ["client", "pro"] as const),
     id = uid();
   const title = str(b.title, 120, true),
@@ -393,7 +395,7 @@ records.put("/needs/:id", async (c) => {
     c.req.param("id"),
   );
   if (!n) fail("Besoin introuvable.", 404);
-  await access(c, n.pool_id);
+  professionalAccess(c, await access(c, n.pool_id));
   const b = await c.req.json(),
     status = choice(b.status, [
       "needed",

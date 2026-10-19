@@ -1267,3 +1267,82 @@ dialog form {
 .water-reading strong {
   white-space: nowrap;
 }
+
+/* Account information has one editable identity form, separated from security. */
+.account-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(260px, 1fr);
+  gap: 24px;
+  align-items: start;
+  max-width: 1050px;
+}
+.account-profile form {
+  margin-top: 22px;
+}
+.account-profile .field-help {
+  margin: -7px 0 19px;
+  font-size: 12px;
+  color: var(--muted, #58717b);
+  line-height: 1.6;
+}
+.account-profile input[readonly] {
+  background: #f3f7f8;
+  color: #58717b;
+}
+.account-profile [hidden] {
+  display: none;
+}
+.account-business {
+  border: 0;
+  border-top: 1px solid #dfe9eb;
+  margin: 25px 0 0;
+  padding: 20px 0 0;
+}
+.account-business legend {
+  padding: 0 12px 0 0;
+  font-weight: 700;
+  font-size: 14px;
+}
+.account-security p,
+.client-accompaniment p {
+  color: #58717b;
+  font-size: 13px;
+  line-height: 1.75;
+}
+.account-security .btn {
+  margin-top: 15px;
+}
+.account-lock {
+  display: block;
+  color: #007d8c;
+  margin-bottom: 15px;
+}
+.client-appointment {
+  display: grid;
+  gap: 4px;
+  padding: 12px 0;
+  border-bottom: 1px solid #e3eded;
+}
+.client-appointment:last-child {
+  border-bottom: 0;
+}
+.client-appointment strong {
+  font-size: 13px;
+}
+.client-appointment span {
+  color: #58717b;
+  font-size: 12px;
+}
+@media (max-width: 760px) {
+  .account-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+  }
+  .account-profile .form-two {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.record .values strong {
+  margin-inline: 3px;
+}

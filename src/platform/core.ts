@@ -4,6 +4,9 @@ export type User = {
   id: string;
   username: string;
   name: string;
+  first_name: string;
+  last_name: string;
+  email: string | null;
   is_pro: number;
   company: string;
   city_code: string | null;
@@ -223,6 +226,9 @@ export const publicUser = (u: User) => ({
   id: u.id,
   username: u.username,
   name: u.name,
+  first_name: u.first_name,
+  last_name: u.last_name,
+  email: u.email,
   is_pro: u.is_pro,
   company: u.company,
   city_code: u.city_code,

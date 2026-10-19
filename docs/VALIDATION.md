@@ -1,3 +1,12 @@
+# Vérifications du parcours client, 19 octobre 2026
+
+- 29 tests API/métier réussis : identité privée, modification de l’identifiant, confirmation du mot de passe, migration des comptes sans email, refus d’activation professionnelle, besoins réservés au principal, suivi autonome et publication des entretiens.
+- Vérification TypeScript et compilation réussies.
+- Parcours navigateur réussi sans erreur JavaScript et sans débordement horizontal mobile. Les scénarios couvrent des inscriptions distinctes client/pro, le compte client simplifié, les quatre onglets client, le bouton d’ajout du pisciniste dans l’en-tête, la modification dans Le bassin, les anciennes URL de préparation et le partage du compte rendu.
+- Le workflow Cloudflare applique la migration additive 0005 et contrôle les identités et les rôles en plus des contrôles existants. Son résultat distant est vérifié après déploiement.
+
+---
+
 # Vérifications du 17 octobre 2026
 
 - 26 tests API et calculs, dont trois nouveaux parcours : adresse privée et remise à zéro des anciennes coordonnées ; checklist selon équipements, validation et conservation de l’historique ; restriction des nouvelles analyses à pH/chlore sans effacer l’ancien suivi.

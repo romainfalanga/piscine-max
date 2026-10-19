@@ -46,7 +46,9 @@ async function signup(label, role) {
   const r = await request("/auth/signup", "POST", {
     username,
     password,
-    name: "Compte de recette " + label,
+    first_name: "Recette",
+    last_name: label,
+    email: username + "@example.test",
     role,
   });
   if (r.status !== 201)
@@ -137,15 +139,12 @@ try {
   for (let i = 0; i < 20; i++) {
     try {
       const r = await request("/health");
-      if (r.status === 200 && r.data?.release === "maintenance-experience-v3") {
+      if (r.status === 200 && r.data?.release === "client-experience-v4") {
         const asset = await fetch(base + "/platform/experience.css", {
           cache: "no-store",
           signal: AbortSignal.timeout(15000),
         });
-        if (
-          !asset.ok ||
-          !(await asset.text()).includes(".maintenance-dialog")
-        ) {
+        if (!asset.ok || !(await asset.text()).includes(".account-layout")) {
           await new Promise((resolve) => setTimeout(resolve, 3000));
           continue;
         }
@@ -191,7 +190,22 @@ try {
   const owner = await signup("owner", "client"),
     pro = await signup("pro", "pro"),
     outsider = await signup("outsider", "client");
-  checks.push("Client/pro signup and recovery codes work on Workers");
+  assert.equal(
+    (await request("/me", "GET", undefined, owner.cookie)).data.email,
+    owner.email,
+  );
+  assert.equal(
+    (
+      await request(
+        "/me",
+        "PUT",
+        { first_name: "Recette", last_name: "owner", enable_pro: true },
+        owner.cookie,
+      )
+    ).status,
+    403,
+  );
+  checks.push("Client identity and fixed account roles work on Workers");
   const addresses = await request(
     "/addresses?q=Place%20de%20la%20Liberte%20Toulon",
     "GET",
@@ -248,6 +262,31 @@ try {
     200,
   );
   checks.push("Invitation and explicit professional access work");
+  assert.equal(
+    (
+      await request(
+        "/pools/" + poolId + "/needs",
+        "GET",
+        undefined,
+        owner.cookie,
+      )
+    ).status,
+    403,
+  );
+  assert.equal(
+    (await request("/pools/" + poolId + "/needs", "GET", undefined, pro.cookie))
+      .status,
+    200,
+  );
+  const clientDossier = (
+    await request("/pools/" + poolId, "GET", undefined, owner.cookie)
+  ).data;
+  assert.equal(clientDossier.maintenance_tasks, undefined);
+  assert.equal(clientDossier.routine, undefined);
+  assert.ok(!JSON.stringify(clientDossier.members).includes("@example.test"));
+  checks.push(
+    "Client dossier excludes professional preparation and private email",
+  );
   assert.equal(
     (await request("/health")).data.application,
     "Peace in Blue App",
