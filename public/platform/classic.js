@@ -18,8 +18,11 @@ let directory = [],
   next = null,
   query = "",
   currentMap = null;
-let mapView = "list",
-  mapExploring = false;
+let mapQuery = "",
+  mapRequest = 0,
+  mapTimer,
+  mapMarkers,
+  mapResize;
 const routeLink = itinerary;
 const heading = (title, subtitle, action = "") =>
   `<div class="page-heading"><div><h1>${title}</h1><p>${subtitle}</p></div>${action}</div>`;
@@ -107,26 +110,27 @@ async function clients(main) {
 on("directory-more", async () => {
   if (!next) return;
   await loadDirectory(true);
-  if (state.route === "map") renderMapContent();
-  else if ($("#client-cards")) $("#client-cards").innerHTML = clientCards();
+  if ($("#client-cards")) $("#client-cards").innerHTML = clientCards();
   if ($("#directory-more")) $("#directory-more").innerHTML = moreButton();
 });
+export function disposeMap(resetSearch = false) {
+  if (resetSearch) mapQuery = "";
+  clearTimeout(mapTimer);
+  mapRequest++;
+  mapResize?.disconnect();
+  mapResize = null;
+  currentMap?.remove();
+  currentMap = null;
+  mapMarkers = null;
+}
 async function mapPage(main) {
-  await loadDirectory();
-  main.innerHTML =
-    heading(
-      "Carte des piscines",
-      "Retrouvez les bassins suivis et ouvrez votre itinéraire.",
-    ) +
-    toolbar() +
-    `<div class="map-view-switch" role="group" aria-label="Affichage des piscines"><button data-action="map-view" data-view="list" aria-pressed="${mapView === "list"}">${icon("pool", 18)} Liste</button><button data-action="map-view" data-view="map" aria-pressed="${mapView === "map"}">${icon("map", 18)} Carte</button></div><div class="map-layout" data-view="${mapView}"><section class="map-panel" aria-label="Localisation des piscines"><div class="map-interaction-bar"><p>Faites défiler pour parcourir la page.</p><button data-action="map-explore" aria-pressed="false">Explorer la carte</button></div><div id="pool-map" class="pool-map" role="region" aria-label="Carte des piscines suivies"></div><p id="map-status" class="small-note" role="status"></p><p class="map-precision">Les fiches sans adresse précise sont placées au niveau de la commune.</p></section><section class="map-directory" aria-label="Piscines suivies"><h2 class="map-list-title">Vos piscines <span>${directory.length}${next ? "+" : ""}</span></h2><div id="map-pool-list" class="map-pool-list"></div></section></div><div id="directory-more" style="margin-top:20px">${moreButton()}</div>`;
-  wireSearch(main, mapPage);
+  disposeMap();
+  main.innerHTML = `<section class="full-map" aria-label="Carte des piscines"><h1 class="sr-only">Carte des piscines</h1><div id="pool-map" role="region" aria-label="Carte des piscines suivies"></div><form id="map-search" class="map-search" role="search">${icon("map", 20)}<input type="search" name="q" maxlength="100" aria-label="Rechercher un client, une piscine ou une ville" placeholder="Client, piscine ou ville…" autocomplete="off" value="${esc(mapQuery)}"><button type="submit" aria-label="Rechercher">${icon("search", 20)}</button></form><p id="map-results" class="sr-only" role="status"></p><p id="map-status" class="map-notice" role="status" hidden></p></section>`;
   if (!document.querySelector("[data-leaflet-style]")) {
     const css = document.createElement("link");
     css.rel = "stylesheet";
     css.href = "/platform/leaflet.css";
     css.dataset.leafletStyle = "true";
-    // Classic overrides must retain precedence over vendor defaults.
     document.head.insertBefore(
       css,
       document.querySelector('link[href="/platform/classic.css"]'),
@@ -134,132 +138,125 @@ async function mapPage(main) {
   }
   await import("./leaflet.js");
   if (state.route !== "map" || !$("#pool-map")) return;
-  renderMapContent();
-}
-function renderMapContent() {
-  if (currentMap) {
-    currentMap.remove();
-    currentMap = null;
-  }
   const L = window.L;
   currentMap = L.map("pool-map", {
-    scrollWheelZoom: false,
-    dragging: !matchMedia("(max-width: 700px)").matches,
-    touchZoom: false,
-    doubleClickZoom: !matchMedia("(max-width: 700px)").matches,
+    scrollWheelZoom: true,
+    dragging: true,
+    touchZoom: true,
+    doubleClickZoom: true,
+    zoomControl: false,
   }).setView([46.6, 2.3], 5);
+  L.control.zoom({ position: "bottomright" }).addTo(currentMap);
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 18,
     attribution:
-      '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
+      '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
     referrerPolicy: "strict-origin-when-cross-origin",
   })
     .on("tileerror", () => {
       const status = $("#map-status");
-      if (status)
+      if (status) {
+        status.hidden = false;
         status.textContent =
-          "Le fond de carte n’a pas pu être chargé. Les fiches et itinéraires restent accessibles.";
+          "Le fond de carte est indisponible. Les repères des piscines restent accessibles.";
+      }
     })
     .addTo(currentMap);
-  const towns = new Map();
-  for (const p of directory) {
-    if (p.latitude == null || p.longitude == null) continue;
-    const key = `${p.latitude},${p.longitude}`;
-    if (!towns.has(key)) towns.set(key, []);
-    towns.get(key).push(p);
-  }
-  const bounds = [];
-  for (const pools of towns.values()) {
-    const p = pools[0],
-      coords = [p.latitude, p.longitude];
-    bounds.push(coords);
-    L.marker(coords, {
-      title: p.location_precision === "address" ? p.name : p.city,
-      icon: L.divIcon({
-        className: "classic-map-marker",
-        html: String(pools.length),
-        iconSize: [32, 32],
-      }),
-    })
-      .bindPopup(
-        `<strong>${esc(p.location_precision === "address" ? p.address : p.city)}</strong>${pools.map(poolLink).join("")}`,
-      )
-      .addTo(currentMap);
-  }
-  if (bounds.length)
-    currentMap.fitBounds(bounds, { padding: [40, 40], maxZoom: 17 });
-  $("#map-pool-list").innerHTML =
-    directory
-      .map(
-        (p) =>
-          `<section class="card"><h3><a href="#pool/${esc(p.id)}">${esc(p.name)}</a></h3><p>${esc((p.owners || []).map((c) => c.name).join(", "))}</p><p>${esc(p.address || "Adresse non renseignée")}${p.city ? " · " + esc(p.city) : ""}</p>${p.city || p.address ? `<a class="btn secondary small" href="${esc(routeLink(p))}" target="_blank" rel="noopener noreferrer">${icon("map", 15)} Itinéraire</a>` : ""}</section>`,
-      )
-      .join("") ||
-    empty("Aucune piscine suivie", "Vos piscines partagées apparaîtront ici.");
-  mapExploring = false;
-  syncMapInteraction();
-  currentMap.invalidateSize();
-}
-function syncMapInteraction() {
-  if (!currentMap) return;
-  const mobile = matchMedia("(max-width: 700px)").matches;
-  const enabled = !mobile || mapExploring;
-  for (const handler of [
-    currentMap.dragging,
-    currentMap.touchZoom,
-    currentMap.doubleClickZoom,
-  ]) {
-    if (enabled) handler.enable();
-    else handler.disable();
-  }
-  currentMap.getContainer().classList.toggle("map-scrollable", !enabled);
-  const control = $('[data-action="map-explore"]');
-  if (control) {
-    control.setAttribute("aria-pressed", String(mapExploring));
-    control.textContent = mapExploring
-      ? "Terminer l’exploration"
-      : "Explorer la carte";
-    control.previousElementSibling.textContent = mapExploring
-      ? "Déplacez ou zoomez la carte."
-      : "Faites défiler pour parcourir la page.";
-  }
-}
-on("map-view", (d) => {
-  mapView = d.view;
-  mapExploring = false;
-  const layout = $(".map-layout");
-  if (!layout || !currentMap) return;
-  layout.dataset.view = mapView;
-  document
-    .querySelectorAll('[data-action="map-view"]')
-    .forEach((b) =>
-      b.setAttribute("aria-pressed", String(b.dataset.view === mapView)),
-    );
-  syncMapInteraction();
-  requestAnimationFrame(() => {
-    if (!currentMap) return;
-    currentMap.invalidateSize();
-    const points = directory
-      .filter((p) => p.latitude != null && p.longitude != null)
-      .map((p) => [p.latitude, p.longitude]);
-    if (points.length)
-      currentMap.fitBounds(points, { padding: [32, 32], maxZoom: 17 });
+  mapMarkers = L.layerGroup().addTo(currentMap);
+  mapResize = new ResizeObserver(() => currentMap?.invalidateSize());
+  mapResize.observe($("#pool-map"));
+  const search = $("#map-search"),
+    input = $("input", search);
+  const filter = () => {
+    clearTimeout(mapTimer);
+    mapQuery = input.value.trim();
+    return filterMap();
+  };
+  search.addEventListener("submit", (e) => {
+    e.preventDefault();
+    filter();
   });
-});
-on("map-explore", () => {
-  mapExploring = !mapExploring;
-  syncMapInteraction();
-});
-matchMedia("(max-width: 700px)").addEventListener("change", () => {
-  mapExploring = false;
-  syncMapInteraction();
-  currentMap?.invalidateSize();
-});
-window.addEventListener("hashchange", () => {
-  if (location.hash !== "#map" && currentMap) {
-    currentMap.remove();
-    currentMap = null;
+  input.addEventListener("input", () => {
+    clearTimeout(mapTimer);
+    mapRequest++; // Ignore a previous response as soon as the text changes.
+    mapTimer = setTimeout(filter, 250);
+  });
+  await filterMap();
+}
+async function filterMap() {
+  const request = ++mapRequest,
+    q = mapQuery;
+  const results = $("#map-results");
+  if (results) results.textContent = "Recherche des piscines…";
+  $("#map-search")?.setAttribute("aria-busy", "true");
+  try {
+    let cursor = null;
+    const pools = [];
+    do {
+      const r = await api(
+        "/pools?mode=pro&limit=50&q=" +
+          encodeURIComponent(q) +
+          (cursor ? "&cursor=" + encodeURIComponent(cursor) : ""),
+      );
+      if (request !== mapRequest || state.route !== "map" || !currentMap)
+        return;
+      pools.push(...r.items);
+      cursor = r.next;
+    } while (cursor);
+    mapMarkers.clearLayers();
+    const groups = new Map();
+    for (const p of pools) {
+      if (p.latitude == null || p.longitude == null) continue;
+      const key = `${p.latitude},${p.longitude}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(p);
+    }
+    const bounds = [];
+    for (const group of groups.values()) {
+      const p = group[0],
+        coords = [p.latitude, p.longitude];
+      bounds.push(coords);
+      window.L.marker(coords, {
+        title: p.location_precision === "address" ? p.name : p.city,
+        icon: window.L.divIcon({
+          className: "classic-map-marker",
+          html: String(group.length),
+          iconSize: [36, 36],
+        }),
+      })
+        .bindPopup(
+          `<strong>${esc(p.location_precision === "address" ? p.address : p.city)}</strong>${group.map((p) => poolLink(p) + (p.address || p.city ? `<a class="map-route-link" href="${esc(routeLink(p))}" target="_blank" rel="noopener noreferrer">${icon("map", 16)} Itinéraire</a>` : "")).join("")}`,
+        )
+        .addTo(mapMarkers);
+    }
+    if (bounds.length)
+      currentMap.fitBounds(bounds, {
+        paddingTopLeft: [30, 95],
+        paddingBottomRight: [45, 55],
+        maxZoom: 17,
+      });
+    results.textContent = `${pools.length} piscine${pools.length > 1 ? "s" : ""} trouvée${pools.length > 1 ? "s" : ""}.`;
+    results.className = pools.length ? "sr-only" : "map-empty";
+    if (!pools.length)
+      results.textContent = q
+        ? "Aucune piscine ne correspond à votre recherche."
+        : "Vos piscines apparaîtront ici une fois ajoutées dans Clients.";
+    else if (!bounds.length) {
+      results.className = "map-empty";
+      results.textContent =
+        "Ajoutez une adresse aux piscines pour les situer sur la carte.";
+    }
+  } catch (err) {
+    if (request !== mapRequest || state.route !== "map") return;
+    results.className = "map-empty";
+    results.textContent = err.message;
+  } finally {
+    if (request === mapRequest)
+      $("#map-search")?.setAttribute("aria-busy", "false");
   }
+}
+window.addEventListener("hashchange", () => {
+  if (location.hash.split("/")[0] !== "#map") disposeMap();
 });
 async function stats(main) {
   const r = await api("/activity-summary"),

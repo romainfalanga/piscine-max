@@ -143,12 +143,12 @@ try {
   for (let i = 0; i < 20; i++) {
     try {
       const r = await request("/health");
-      if (r.status === 200 && r.data?.release === "mobile-v7") {
+      if (r.status === 200 && r.data?.release === "full-map-v8") {
         const asset = await fetch(base + "/platform/mobile.css", {
           cache: "no-store",
           signal: AbortSignal.timeout(15000),
         });
-        if (!asset.ok || !(await asset.text()).includes(".agenda-calendar")) {
+        if (!asset.ok || !(await asset.text()).includes(".full-map")) {
           await new Promise((resolve) => setTimeout(resolve, 3000));
           continue;
         }

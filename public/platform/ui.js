@@ -83,6 +83,7 @@ export const button = (label, action, extra = "", kind = "primary") =>
   `<button class="btn ${kind}" data-action="${action}" ${extra}>${label}</button>`;
 export const icon = (name, size = 20) => {
   const shapes = {
+    search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>',
     water:
       '<path d="M2 8q3-4 6 0t6 0t6 0M2 14q3-4 6 0t6 0t6 0M2 20q3-4 6 0t6 0t6 0"/>',
     home: '<path d="m3 10 9-7 9 7v10H3zM9 20v-7h6v7"/>',

@@ -23,7 +23,7 @@ import {
 import { poolPages } from "./pools.js";
 import { proPages } from "./pro.js";
 import { toolPages } from "./tools.js";
-import { classicPages } from "./classic.js";
+import { classicPages, disposeMap } from "./classic.js";
 const brandImage = `<img class="brand-image" src="/platform/brand-logo.png?v=brand-v6" width="256" height="256" alt="">`;
 const brandWordmark = `<span class="brand-wordmark">Peace in blue<span class="brand-app">App</span></span>`;
 const brand = `<span class="brand-mark">${brandImage}</span>${brandWordmark}`;
@@ -31,6 +31,8 @@ let authTab = "login",
   signupRole = "client",
   renderId = 0;
 function authScreen() {
+  disposeMap(true);
+  document.body.classList.remove("map-page");
   state.user = null;
   document.title = "Peace in Blue App : Gestion d’entretien";
   $("#app").innerHTML =
@@ -273,6 +275,7 @@ async function route() {
     return;
   }
   state.route = name;
+  document.body.classList.toggle("map-page", name === "map");
   const main = $("#main");
   if (!main) return;
   $$("[data-nav]").forEach((a) =>

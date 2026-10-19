@@ -419,6 +419,7 @@ try {
   });
   await nav.getByRole("link", { name: "Carte", exact: true }).click();
   await page.locator(".classic-map-marker").waitFor();
+  await page.locator(".classic-map-marker").first().click();
   assert.equal(
     await page.getByRole("link", { name: "Itinéraire", exact: true }).count(),
     1,
@@ -680,30 +681,72 @@ try {
   const touchPage = await touchContext.newPage();
   touchPage.on("pageerror", (e) => errors.push(e.message));
   await touchPage.goto("http://127.0.0.1:8788/#map");
-  await touchPage.locator("#map-pool-list .card").first().waitFor();
-  assert.equal(await touchPage.locator("#pool-map").isVisible(), false);
-  assert.equal(await touchPage.locator("#map-pool-list").isVisible(), true);
-  await touchPage.screenshot({
-    path: ".test-artifacts/map-list-mobile.png",
-    fullPage: true,
-  });
-  await touchPage.getByRole("button", { name: "Carte", exact: true }).click();
-  await touchPage.locator(".map-scrollable").waitFor();
-  assert.equal(await touchPage.locator("#pool-map").isVisible(), true);
+  await touchPage.locator(".classic-map-marker").first().waitFor();
   assert.equal(
     await touchPage
-      .locator("#pool-map")
-      .evaluate((el) => getComputedStyle(el).touchAction),
-    "pan-y",
+      .locator("#map-pool-list, .map-view-switch, [data-action=map-explore]")
+      .count(),
+    0,
   );
+  assert.equal(await touchPage.locator(".classic-header").isVisible(), false);
+  for (const [width, height] of [
+    [320, 640],
+    [390, 844],
+    [844, 390],
+    [1440, 900],
+  ]) {
+    await touchPage.setViewportSize({ width, height });
+    const box = await touchPage.locator("#pool-map").boundingBox();
+    assert.ok(Math.abs(box.width - width) < 2, `Full map width at ${width}`);
+    const header = await touchPage.locator(".classic-header").boundingBox();
+    const nav = await touchPage.locator(".classic-mobile-nav").boundingBox();
+    assert.ok(
+      Math.abs(
+        box.height - (height - (header?.height || 0) - (nav?.height || 0)),
+      ) < 3,
+      `Full map height at ${width}`,
+    );
+    assert.equal(
+      await touchPage.evaluate(
+        () =>
+          document.documentElement.scrollWidth > innerWidth ||
+          document.documentElement.scrollHeight > innerHeight,
+      ),
+      false,
+    );
+  }
+  await touchPage.setViewportSize({ width: 390, height: 640 });
   await touchPage.screenshot({
-    path: ".test-artifacts/map-mobile.png",
+    path: ".test-artifacts/full-map-mobile.png",
     fullPage: true,
   });
+  const search = touchPage.getByRole("searchbox", {
+    name: "Rechercher un client, une piscine ou une ville",
+    exact: true,
+  });
+  await search.fill("inexistant-sans-resultat");
+  await touchPage
+    .getByText("Aucune piscine ne correspond à votre recherche.", {
+      exact: true,
+    })
+    .waitFor();
+  assert.equal(await touchPage.locator(".classic-map-marker").count(), 0);
+  await search.fill("Pins");
+  await touchPage.locator(".classic-map-marker").first().waitFor();
+  assert.equal(await search.inputValue(), "Pins");
+  await search.fill("");
+  await touchPage.waitForFunction(
+    () =>
+      document.querySelector("#map-search")?.getAttribute("aria-busy") ===
+      "false",
+  );
   const session = await touchContext.newCDPSession(touchPage);
   const box = await touchPage.locator("#pool-map").boundingBox();
-  const y = Math.min(box.y + box.height - 15, 540),
-    x = box.x + box.width / 2;
+  const x = box.x + box.width / 2,
+    y = box.y + box.height * 0.65;
+  const before = await touchPage
+    .locator(".leaflet-map-pane")
+    .getAttribute("style");
   await session.send("Input.dispatchTouchEvent", {
     type: "touchStart",
     touchPoints: [{ x, y }],
@@ -711,7 +754,7 @@ try {
   for (let n = 1; n <= 8; n++) {
     await session.send("Input.dispatchTouchEvent", {
       type: "touchMove",
-      touchPoints: [{ x, y: y - n * 20 }],
+      touchPoints: [{ x: x + n * 12, y: y - n * 8 }],
     });
     await touchPage.waitForTimeout(20);
   }
@@ -719,16 +762,21 @@ try {
     type: "touchEnd",
     touchPoints: [],
   });
-  await touchPage.waitForFunction(() => scrollY > 0);
+  await touchPage.waitForFunction(
+    (before) =>
+      document.querySelector(".leaflet-map-pane")?.getAttribute("style") !==
+      before,
+    before,
+  );
+  assert.equal(await touchPage.evaluate(() => scrollY), 0);
   await touchPage
-    .getByRole("button", { name: "Explorer la carte", exact: true })
+    .getByRole("navigation", { name: "Navigation mobile", exact: true })
+    .getByRole("link", { name: "Agenda", exact: true })
     .click();
-  assert.equal(await touchPage.locator(".map-scrollable").count(), 0);
   await touchPage
-    .getByRole("button", { name: "Terminer l’exploration", exact: true })
-    .click();
-  await touchPage.getByRole("button", { name: "Liste", exact: true }).click();
-  assert.equal(await touchPage.locator("#map-pool-list").isVisible(), true);
+    .getByRole("heading", { name: "Agenda", exact: true })
+    .waitFor();
+  assert.equal(await touchPage.locator(".classic-header").isVisible(), true);
   await touchContext.close();
   // All six sections must remain visible on a professional pool at every width.
   await page.goto(`http://127.0.0.1:8788/#pool/${assigned.id}`);
@@ -1159,7 +1207,7 @@ try {
         "reference procedures",
         "professional mobile navigation",
         "day, Monday week and civil month at 320, 390, 768 and 1440px",
-        "touch scrolling over locked map and explicit exploration",
+        "full-screen map, live filtering and direct touch dragging",
         "client and professional pool sections remain visible",
         "calculators, guided maintenance and quiz",
         "mobile journal and report",
