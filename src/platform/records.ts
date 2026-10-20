@@ -21,6 +21,7 @@ import {
   notifyPool,
   professionalAccess,
   readings,
+  assessments,
   instant,
   jsonParse,
   cursor,
@@ -46,9 +47,16 @@ function recordBody(b: any, template?: any[]) {
           done: v.done === true,
         }))
       : [];
+  const measuredReadings = readings(b.readings),
+    observed = assessments(b.assessments);
+  if (Object.keys(observed).some((k) => measuredReadings[k] != null))
+    fail(
+      "Choisissez une appréciation ou une valeur chiffrée pour chaque paramètre.",
+    );
   return {
+    assessments: JSON.stringify(observed),
     measured: instant(b.measured_at),
-    readings: JSON.stringify(readings(b.readings)),
+    readings: JSON.stringify(measuredReadings),
     method: str(b.method, 100),
     notes: str(b.notes, 4000),
     products: str(b.products, 2000),
@@ -59,6 +67,7 @@ function recordBody(b: any, template?: any[]) {
 const decode = (r: any) => ({
   ...r,
   readings: jsonParse(r.readings),
+  assessments: jsonParse(r.assessments),
   checklist: jsonParse(r.checklist, []),
 });
 records.get("/pools/:id/overview", async (c) => {
@@ -68,12 +77,12 @@ records.get("/pools/:id/overview", async (c) => {
   const [ph, chlorine, visit, photo] = await Promise.all([
     row(
       c,
-      `SELECT r.id record_id,r.measured_at,json_extract(r.readings,'$.ph') value FROM records r WHERE ${current} AND json_extract(r.readings,'$.ph') IS NOT NULL ORDER BY r.measured_at DESC,r.id DESC LIMIT 1`,
+      `SELECT r.id record_id,r.measured_at,json_extract(r.readings,'$.ph') value,json_extract(r.assessments,'$.ph') assessment FROM records r WHERE ${current} AND (json_extract(r.readings,'$.ph') IS NOT NULL OR json_extract(r.assessments,'$.ph') IS NOT NULL) ORDER BY r.measured_at DESC,r.id DESC LIMIT 1`,
       p.id,
     ),
     row(
       c,
-      `SELECT r.id record_id,r.measured_at,json_extract(r.readings,'$.chlorine') value FROM records r WHERE ${current} AND json_extract(r.readings,'$.chlorine') IS NOT NULL ORDER BY r.measured_at DESC,r.id DESC LIMIT 1`,
+      `SELECT r.id record_id,r.measured_at,json_extract(r.readings,'$.chlorine') value,json_extract(r.assessments,'$.chlorine') assessment FROM records r WHERE ${current} AND (json_extract(r.readings,'$.chlorine') IS NOT NULL OR json_extract(r.assessments,'$.chlorine') IS NOT NULL) ORDER BY r.measured_at DESC,r.id DESC LIMIT 1`,
       p.id,
     ),
     row(
@@ -125,12 +134,34 @@ records.get("/pools/:id/trends", async (c) => {
   const start = new Date(Date.now() - days * 86400000).toISOString();
   const list = await rows(
     c,
-    "SELECT substr(r.measured_at,1,10) date,avg(json_extract(r.readings,'$.ph')) ph,avg(json_extract(r.readings,'$.chlorine')) chlorine,count(*) samples FROM records r WHERE r.pool_id=? AND r.published_at IS NOT NULL AND r.measured_at>=? AND NOT EXISTS(SELECT 1 FROM records x WHERE x.correction_of=r.id AND x.published_at IS NOT NULL) GROUP BY substr(r.measured_at,1,10) ORDER BY date LIMIT 1826",
+    "SELECT substr(r.measured_at,1,10) date,avg(json_extract(r.readings,'$.ph')) ph,avg(json_extract(r.readings,'$.chlorine')) chlorine,count(*) samples FROM records r WHERE r.pool_id=? AND r.published_at IS NOT NULL AND r.measured_at>=? AND (json_extract(r.readings,'$.ph') IS NOT NULL OR json_extract(r.readings,'$.chlorine') IS NOT NULL) AND NOT EXISTS(SELECT 1 FROM records x WHERE x.correction_of=r.id AND x.published_at IS NOT NULL) GROUP BY substr(r.measured_at,1,10) ORDER BY date LIMIT 1826",
     p.id,
     start,
   );
+  const after = str(c.req.query("assessment_cursor"), 80);
+  let previous = null;
+  if (after) {
+    previous = await row(
+      c,
+      "SELECT id,measured_at FROM records WHERE id=? AND pool_id=? AND published_at IS NOT NULL",
+      after,
+      p.id,
+    );
+    if (!previous) fail("Page d’appréciations introuvable.");
+  }
+  const observations = await rows(
+    c,
+    `SELECT r.id,r.measured_at,r.assessments FROM records r WHERE r.pool_id=? AND r.published_at IS NOT NULL AND r.measured_at>=? AND r.assessments!='{}' AND NOT EXISTS(SELECT 1 FROM records x WHERE x.correction_of=r.id AND x.published_at IS NOT NULL) ${previous ? "AND (r.measured_at,r.id)<(?,?)" : ""} ORDER BY r.measured_at DESC,r.id DESC LIMIT 51`,
+    p.id,
+    start,
+    ...(previous ? [previous.measured_at, previous.id] : []),
+  );
   return c.json({
     items: list,
+    assessments: observations
+      .slice(0, 50)
+      .map((r) => ({ ...r, assessments: jsonParse(r.assessments) })),
+    assessments_next: observations.length > 50 ? observations[49].id : null,
     aggregation:
       "Moyennes par jour ; les mesures originales restent dans le journal.",
     thresholds: jsonParse(p.thresholds),
@@ -191,7 +222,7 @@ records.post("/pools/:id/records", async (c) => {
   await c.env.DB.batch([
     stmt(
       c,
-      "INSERT INTO records(id,pool_id,author_id,author_name,kind,measured_at,readings,method,notes,products,checklist,duration,appointment_id,correction_of,checklist_version) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      "INSERT INTO records(id,pool_id,author_id,author_name,kind,measured_at,readings,method,notes,products,checklist,duration,appointment_id,correction_of,checklist_version,assessments) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
       id,
       p.id,
       u.id,
@@ -207,6 +238,7 @@ records.post("/pools/:id/records", async (c) => {
       appointment?.id || null,
       correction,
       checklistVersion,
+      v.assessments,
     ),
     audit(c, "record.drafted", p.id, id),
   ]);
@@ -227,14 +259,21 @@ records.put("/records/:id", async (c) => {
     fail("Crée une correction pour modifier un compte rendu publié.", 403);
   const b = await c.req.json(),
     v = recordBody(
-      b,
+      {
+        ...b,
+        assessments:
+          b.assessments === undefined
+            ? jsonParse(r.assessments)
+            : b.assessments,
+      },
       r.checklist_version === 1 ? jsonParse(r.checklist, []) : undefined,
     );
   const res = await stmt(
     c,
-    "UPDATE records SET measured_at=?,readings=?,method=?,notes=?,products=?,checklist=?,duration=?,revision=revision+1 WHERE id=? AND revision=? AND published_at IS NULL",
+    "UPDATE records SET measured_at=?,readings=?,assessments=?,method=?,notes=?,products=?,checklist=?,duration=?,revision=revision+1 WHERE id=? AND revision=? AND published_at IS NULL",
     v.measured,
     v.readings,
+    v.assessments,
     v.method,
     v.notes,
     v.products,
@@ -253,7 +292,11 @@ records.post("/records/:id/publish", async (c) => {
     fail("Seul l’auteur peut partager ce compte rendu.", 403);
   if (r.published_at) return c.json({ ok: true, replayed: true });
   if (r.kind === "visit" && r.checklist_version === 1)
-    validateCompletion(jsonParse(r.checklist, []), jsonParse(r.readings));
+    validateCompletion(
+      jsonParse(r.checklist, []),
+      jsonParse(r.readings),
+      assessments(jsonParse(r.assessments)),
+    );
   const at = now();
   const published = await c.env.DB.batch([
     stmt(

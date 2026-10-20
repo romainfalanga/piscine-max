@@ -636,3 +636,92 @@ dialog {
     font-size: 11px;
   }
 }
+
+/* Water observations remain words, without an artificial numeric scale. */
+.water-reading strong.assessment-value {
+  white-space: normal;
+  font-size: clamp(18px, 2.4vw, 24px);
+  line-height: 1.4;
+  letter-spacing: normal;
+  overflow-wrap: break-word;
+}
+.assessment-label {
+  display: inline-block;
+  line-height: 1.55;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: normal;
+}
+.assessment-value.balanced,
+.assessment-label.balanced {
+  color: #126157;
+}
+.assessment-value.watch,
+.assessment-label.watch {
+  color: #835c16;
+}
+.assessment-value.adjust,
+.assessment-label.adjust {
+  color: #9b4432;
+}
+.assessment-stat strong {
+  font-size: 21px;
+  line-height: 1.4;
+  letter-spacing: normal;
+}
+.assessment-history {
+  margin-top: 26px;
+}
+.assessment-history table {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+.assessment-history th,
+.assessment-history td {
+  padding: 15px 10px;
+  text-align: left;
+  vertical-align: top;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.assessment-history th:first-child,
+.assessment-history td:first-child {
+  padding-left: 0;
+  width: 29%;
+}
+.assessment-history td .text-btn {
+  font-size: 12px;
+  text-align: left;
+  line-height: 1.6;
+  white-space: normal;
+  padding: 0;
+}
+.legacy-charts {
+  margin-top: 28px;
+}
+.legacy-charts > summary {
+  cursor: pointer;
+  line-height: 1.6;
+  padding: 12px 0;
+  font-weight: 600;
+}
+#assessment-more {
+  margin-top: 16px;
+}
+@media (max-width: 420px) {
+  .assessment-label {
+    font-size: 12px;
+  }
+  .assessment-history th,
+  .assessment-history td {
+    padding: 12px 5px;
+  }
+  .assessment-history th:first-child,
+  .assessment-history td:first-child {
+    width: 28%;
+  }
+  .assessment-stat strong {
+    font-size: 18px;
+  }
+}

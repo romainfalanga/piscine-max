@@ -1,3 +1,12 @@
+# Appréciations du pH et du chlore, 20 octobre 2026
+
+- Les formulaires client et entretien utilisent sept appréciations explicites, sans résultat présélectionné. Les tâches, brouillons, corrections, comptes rendus, dernières analyses et exports conservent ces appréciations.
+- Migration additive 0008 : les valeurs numériques existantes restent intactes. Les appréciations sont stockées séparément et ne produisent aucune fausse concentration ni moyenne numérique.
+- Évolution présente une liste datée et paginée des appréciations. Les anciennes courbes chiffrées sont repliées dans une section distincte. Les résultats non publiés et les anciennes versions corrigées sont exclus du tableau de bord et de l’évolution.
+- 43 tests réussis, dont validation des sept états, rejet des valeurs ambiguës, publication d’entretien avec les deux paramètres, confidentialité, corrections, migration et pagination. Parcours navigateur mobile/ordinateur validé sans erreur JavaScript ; contrôles distants adaptés aux nouvelles appréciations.
+
+---
+
 # Activité Peace in Blue réservée à Romain, 20 octobre 2026
 
 - 39 tests API, droits, métier et calculs réussis. TypeScript et compilation de production réussis.

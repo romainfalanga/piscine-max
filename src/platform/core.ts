@@ -285,3 +285,26 @@ export function readings(v: any) {
   }
   return out;
 }
+
+export const ASSESSMENT_LEVELS = [
+  "very_low",
+  "low",
+  "slightly_low",
+  "in_range",
+  "slightly_high",
+  "high",
+  "very_high",
+] as const;
+export function assessments(value: unknown): Record<string, string> {
+  if (value == null) return {};
+  if (typeof value !== "object" || Array.isArray(value))
+    fail("Appréciations invalides.");
+  const out: Record<string, string> = {};
+  for (const [key, level] of Object.entries(value)) {
+    if (!["ph", "chlorine"].includes(key))
+      fail("Seuls le pH et le chlore peuvent être évalués.");
+    if (level === "" || level == null) continue;
+    out[key] = choice(level, ASSESSMENT_LEVELS);
+  }
+  return out;
+}

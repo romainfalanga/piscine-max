@@ -200,8 +200,8 @@ try {
     .first()
     .click();
   assert.equal(await page.locator("[name=method]").count(), 0);
-  await page.getByLabel("pH", { exact: true }).fill("7.3");
-  await page.getByLabel("Chlore (mg/L)", { exact: true }).fill("1.8");
+  await page.getByLabel("pH", { exact: true }).selectOption("in_range");
+  await page.getByLabel("Chlore", { exact: true }).selectOption("slightly_low");
   assert.equal(
     await page.getByLabel("Température (°C)", { exact: true }).count(),
     0,
@@ -223,7 +223,8 @@ try {
   await page
     .getByRole("heading", { name: "L’évolution de votre eau", exact: true })
     .waitFor();
-  await page.locator("svg.chart").first().waitFor();
+  await page.locator(".assessment-history tbody tr").first().waitFor();
+  assert.equal(await page.locator("svg.chart").count(), 0);
   await page.screenshot({
     path: ".test-artifacts/client-trends-desktop.png",
     fullPage: true,
@@ -452,8 +453,8 @@ try {
     fullPage: true,
   });
   await page.getByRole("button", { name: "Commencer", exact: true }).click();
-  await page.getByLabel("pH", { exact: true }).fill("7.2");
-  await page.getByLabel("Chlore (mg/L)", { exact: true }).fill("1.6");
+  await page.getByLabel("pH", { exact: true }).selectOption("in_range");
+  await page.getByLabel("Chlore", { exact: true }).selectOption("slightly_low");
   await page.screenshot({
     path: ".test-artifacts/visit-workspace-desktop.png",
     fullPage: true,
@@ -1283,8 +1284,8 @@ try {
       .getByLabel("Pourquoi ?", { exact: true })
       .fill("Vanne bloquée, entretien du filtre reporté");
   }
-  await page.getByLabel("pH", { exact: true }).fill("7.3");
-  await page.getByLabel("Chlore (mg/L)", { exact: true }).fill("1.7");
+  await page.getByLabel("pH", { exact: true }).selectOption("in_range");
+  await page.getByLabel("Chlore", { exact: true }).selectOption("slightly_low");
   assert.equal(await page.locator("[name=duration]").count(), 0);
   assert.equal(await page.locator("[name=method]").count(), 0);
   assert.equal(
@@ -1324,6 +1325,15 @@ try {
       .evaluate((e) => e.scrollWidth > e.clientWidth),
     false,
   );
+  await page.getByLabel("pH", { exact: true }).scrollIntoViewIfNeeded();
+  assert.equal(
+    await page.getByLabel("pH", { exact: true }).evaluate((el) => el.tagName),
+    "SELECT",
+  );
+  assert.equal(
+    await page.getByLabel("Chlore", { exact: true }).locator("option").count(),
+    8,
+  );
   await page.screenshot({
     path: ".test-artifacts/visit-workspace-mobile.png",
     fullPage: true,
@@ -1360,6 +1370,14 @@ try {
       })
       .count(),
     2,
+  );
+  assert.equal(
+    await clientPage
+      .locator(".water-reading strong.assessment-value")
+      .evaluateAll((elements) =>
+        elements.every((el) => el.scrollWidth <= el.clientWidth),
+      ),
+    true,
   );
   await clientPage.screenshot({
     path: ".test-artifacts/client-maintenance-mobile.png",
@@ -1424,7 +1442,7 @@ try {
         "full-screen map, live filtering and direct touch dragging",
         "client and professional pool sections remain visible",
         "pool header and navigation persist, sections reuse prepared content and retain chart filters",
-        "measurement method removed from client and professional forms",
+        "qualitative pH/chlorine selection and dated client history without fake numeric curves",
         "calculators, guided maintenance and quiz",
         "mobile journal and report",
         "professional pool creation and client claim",

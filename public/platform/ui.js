@@ -202,6 +202,25 @@ export const specs = {
   winter: "Hivernage",
   opening: "Remise en route",
 };
+export const assessmentLabels = {
+  very_low: "Beaucoup trop bas",
+  low: "Trop bas",
+  slightly_low: "Légèrement trop bas",
+  in_range: "Dans la bonne plage",
+  slightly_high: "Légèrement trop élevé",
+  high: "Trop élevé",
+  very_high: "Beaucoup trop élevé",
+};
+export function assessmentText(value) {
+  return assessmentLabels[value] || "Non renseigné";
+}
+export function assessmentTone(value) {
+  return value === "in_range"
+    ? "balanced"
+    : ["slightly_low", "slightly_high"].includes(value)
+      ? "watch"
+      : "adjust";
+}
 export const metrics = {
   ph: { label: "pH", unit: "", max: 14, color: "#0e7e89" },
   chlorine: { label: "Chlore", unit: "mg/L", max: 30, color: "#687abb" },

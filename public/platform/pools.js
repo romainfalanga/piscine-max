@@ -28,6 +28,9 @@ import {
   kinds,
   treatments,
   metrics,
+  assessmentLabels,
+  assessmentText,
+  assessmentTone,
   today,
   addDays,
   confirmAction,
@@ -383,9 +386,18 @@ function taskSummary(list) {
 function taskReport(list) {
   return `<ul class="task-report">${list.map((c) => `<li class="${c.done ? "completed" : c.skipped ? "skipped" : "pending"}"><span class="task-status-icon">${c.done ? icon("check", 15) : icon("close", 15)}</span><div><span>${esc(c.label)}</span>${!c.done ? `<small>${c.skipped ? "Non réalisé : " + esc(c.reason) : "Non renseigné"}</small>` : ""}</div></li>`).join("")}</ul>`;
 }
+function recordValues(r) {
+  return Object.keys(metrics)
+    .filter((k) => r.assessments?.[k] || r.readings?.[k] != null)
+    .map((k) => [
+      k,
+      r.assessments?.[k] ? assessmentText(r.assessments[k]) : r.readings[k],
+      !!r.assessments?.[k],
+    ]);
+}
 function recordCard(r) {
-  const values = Object.entries(r.readings).filter(([k]) => metrics[k]);
-  return `<article class="record"><div class="record-date">${icon(r.kind === "visit" ? "check" : "water", 18)}<time>${fmt(r.measured_at, { year: "numeric", hour: "2-digit", minute: "2-digit" })}</time>${badge(r.published_at ? (r.superseded_by ? "Version corrigée" : r.correction_of ? "Correction" : r.kind === "visit" ? "Partagé" : "Enregistrée") : "Brouillon", r.published_at ? "teal" : "amber")}</div><h3>${r.kind === "visit" ? "Entretien de la piscine" : "Analyse de l’eau"}</h3><p class="record-author">${esc(r.author_name)}${r.duration ? " • " + r.duration + " min" : ""}</p>${r.checklist.length ? `<p class="task-total">${esc(taskSummary(r.checklist))}</p><details class="record-tasks"><summary>Voir les tâches du passage</summary>${taskReport(r.checklist)}</details>` : ""}${values.length ? `<div class="values">${values.map(([k, v]) => `<span>${metrics[k].label} <strong>${esc(v)}</strong> ${metrics[k].unit}</span>`).join("")}</div>` : ""}${r.notes ? `<p class="body">${esc(r.notes)}</p>` : ""}${r.products ? `<p class="small-note"><strong>Produits ajoutés :</strong> ${esc(r.products)}</p>` : ""}<div class="inline wrap">${button("Voir le détail", "record-detail", `data-id="${r.id}"`, "secondary small")}${r.author_id === state.user.id && !r.published_at ? button("Reprendre le brouillon", "edit-record", `data-id="${r.id}"`, "secondary small") : ""}${r.author_id === state.user.id && r.published_at && !r.superseded_by ? button("Ajouter une correction", "correct-record", `data-id="${r.id}"`, "ghost small") : ""}</div></article>`;
+  const values = recordValues(r);
+  return `<article class="record"><div class="record-date">${icon(r.kind === "visit" ? "check" : "water", 18)}<time>${fmt(r.measured_at, { year: "numeric", hour: "2-digit", minute: "2-digit" })}</time>${badge(r.published_at ? (r.superseded_by ? "Version corrigée" : r.correction_of ? "Correction" : r.kind === "visit" ? "Partagé" : "Enregistrée") : "Brouillon", r.published_at ? "teal" : "amber")}</div><h3>${r.kind === "visit" ? "Entretien de la piscine" : "Analyse de l’eau"}</h3><p class="record-author">${esc(r.author_name)}${r.duration ? " • " + r.duration + " min" : ""}</p>${r.checklist.length ? `<p class="task-total">${esc(taskSummary(r.checklist))}</p><details class="record-tasks"><summary>Voir les tâches du passage</summary>${taskReport(r.checklist)}</details>` : ""}${values.length ? `<div class="values">${values.map(([k, v, qualitative]) => `<span>${metrics[k].label} <strong>${esc(v)}</strong> ${qualitative ? "" : metrics[k].unit}</span>`).join("")}</div>` : ""}${r.notes ? `<p class="body">${esc(r.notes)}</p>` : ""}${r.products ? `<p class="small-note"><strong>Produits ajoutés :</strong> ${esc(r.products)}</p>` : ""}<div class="inline wrap">${button("Voir le détail", "record-detail", `data-id="${r.id}"`, "secondary small")}${r.author_id === state.user.id && !r.published_at ? button("Reprendre le brouillon", "edit-record", `data-id="${r.id}"`, "secondary small") : ""}${r.author_id === state.user.id && r.published_at && !r.superseded_by ? button("Ajouter une correction", "correct-record", `data-id="${r.id}"`, "ghost small") : ""}</div></article>`;
 }
 async function renderTab(tab, el) {
   const p = state.pool,
@@ -400,7 +412,7 @@ async function renderTab(tab, el) {
     const readings = Object.keys(metrics)
       .map((k) => {
         const measure = overview.measurements[k];
-        return `<div class="water-reading"><span>${metrics[k].label}</span><strong class="${measure ? "" : "unmeasured"}">${measure ? esc(measure.value) : "Non mesuré"} <small>${measure ? metrics[k].unit : ""}</small></strong><small>${measure ? "Mesuré le " + fmt(measure.measured_at, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "Ajoutez votre première mesure"}</small></div>`;
+        return `<div class="water-reading"><span>${metrics[k].label}</span><strong class="${measure?.assessment ? "assessment-value " + assessmentTone(measure.assessment) : measure ? "" : "unmeasured"}">${measure ? (measure.assessment ? assessmentText(measure.assessment) : esc(measure.value)) : "Non renseigné"} <small>${measure && !measure.assessment ? metrics[k].unit : ""}</small></strong><small>${measure ? (measure.assessment ? "Évalué le " : "Mesuré le ") + fmt(measure.measured_at, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "Ajoutez votre première analyse"}</small></div>`;
       })
       .join("");
     const photo = overview.last_photo,
@@ -434,13 +446,13 @@ async function renderTab(tab, el) {
     const location = professional
       ? `<section class="aside-section"><h2>Localisation</h2>${p.latitude != null ? '<div id="dossier-map" class="dossier-map" aria-label="Position de la piscine"></div><p class="small-note" data-map-status role="status"></p>' : ""}<p>${esc(p.address || p.city || "Adresse à compléter")}${p.location_precision === "municipality" ? "<small>Position approximative de la commune</small>" : ""}</p>${p.address || p.city ? `<a class="text-btn" target="_blank" rel="noopener" href="${esc(itinerary(p))}">Ouvrir l’itinéraire</a>` : ""}</section>`
       : "";
-    el.innerHTML = `<div class="pool-layout"><section class="pool-feed"><div class="water-panel"><div class="water-panel-title"><h2>Les dernières mesures</h2>${professional ? button("Ajouter une analyse", "new-analysis", `data-pool="${p.id}"`, "ghost small") : `<a class="reading-history" href="#pool/${p.id}/charts">Voir l’évolution</a>`}</div><div class="water-overview ${photo ? "with-photo" : ""}">${photoPanel}<div class="water-readings">${readings}</div></div></div>${servicePanel}<div class="section-heading"><h2>${professional ? "Historique des passages" : "Historique du suivi"}</h2><span class="small-note">${latest ? "Dernier suivi le " + fmt(latest.measured_at) : "Votre suivi commence ici"}</span></div>${poolRecords.length ? poolRecords.map(recordCard).join("") : empty("Aucun suivi pour le moment", professional ? "Commencez un entretien pour renseigner les tâches et les analyses." : pro ? "Les comptes rendus de votre pisciniste apparaîtront ici. Vous pouvez aussi ajouter vos propres analyses." : "Ajoutez une analyse pour commencer le suivi de votre eau.")}<div id="record-more">${poolCursor ? button("Voir les suivis précédents", "more-records", "", "secondary") : ""}</div></section><aside class="pool-aside">${accompaniment}${nextVisits}${facts}${p.client_advice ? `<section class="aside-section"><h2>${pro ? "Conseils de votre pisciniste" : "Conseils pour la piscine"}</h2><p>${esc(p.client_advice)}</p></section>` : ""}${location}</aside></div>`;
+    el.innerHTML = `<div class="pool-layout"><section class="pool-feed"><div class="water-panel"><div class="water-panel-title"><h2>La dernière analyse de l’eau</h2>${professional ? button("Ajouter une analyse", "new-analysis", `data-pool="${p.id}"`, "ghost small") : `<a class="reading-history" href="#pool/${p.id}/charts">Voir l’évolution</a>`}</div><div class="water-overview ${photo ? "with-photo" : ""}">${photoPanel}<div class="water-readings">${readings}</div></div></div>${servicePanel}<div class="section-heading"><h2>${professional ? "Historique des passages" : "Historique du suivi"}</h2><span class="small-note">${latest ? "Dernier suivi le " + fmt(latest.measured_at) : "Votre suivi commence ici"}</span></div>${poolRecords.length ? poolRecords.map(recordCard).join("") : empty("Aucun suivi pour le moment", professional ? "Commencez un entretien pour renseigner les tâches et les analyses." : pro ? "Les comptes rendus de votre pisciniste apparaîtront ici. Vous pouvez aussi ajouter vos propres analyses." : "Ajoutez une analyse pour commencer le suivi de votre eau.")}<div id="record-more">${poolCursor ? button("Voir les suivis précédents", "more-records", "", "secondary") : ""}</div></section><aside class="pool-aside">${accompaniment}${nextVisits}${facts}${p.client_advice ? `<section class="aside-section"><h2>${pro ? "Conseils de votre pisciniste" : "Conseils pour la piscine"}</h2><p>${esc(p.client_advice)}</p></section>` : ""}${location}</aside></div>`;
     if (professional && p.latitude != null && el.isConnected)
       await mapAt($("#dossier-map", el), p.latitude, p.longitude, {
         approximate: p.location_precision !== "address",
       });
   } else if (tab === "charts") {
-    el.innerHTML = `<div class="card"><div class="inline between wrap"><div><h2>L’évolution de votre eau</h2><p class="small-note">Moyennes quotidiennes des analyses enregistrées. Les corrections remplacent les anciennes valeurs dans les courbes.</p></div><select id="chart-days" class="search-input" style="width:auto" aria-label="Période"><option value="30">30 jours</option><option value="180" selected>6 mois</option><option value="365">1 an</option><option value="1825">5 ans</option></select></div><div id="chart-content"></div></div>`;
+    el.innerHTML = `<div class="card"><div class="inline between wrap"><div><h2>L’évolution de votre eau</h2><p class="small-note">Retrouvez les appréciations du pH et du chlore au fil des passages. Les anciennes valeurs chiffrées restent consultables séparément.</p></div><select id="chart-days" class="search-input" style="width:auto" aria-label="Période"><option value="30">30 jours</option><option value="180" selected>6 mois</option><option value="365">1 an</option><option value="1825">5 ans</option></select></div><div id="chart-content"></div></div>`;
     $("#chart-days", el).addEventListener("change", () => loadCharts(el, p));
     await loadCharts(el, p);
   } else if (tab === "needs") {
@@ -513,7 +525,7 @@ async function loadCharts(root, pool) {
   const keys = Object.keys(metrics).filter((k) =>
     d.items.some((x) => x[k] != null),
   );
-  $("#chart-content", root).innerHTML = keys.length
+  const numericContent = keys.length
     ? keys
         .map((k) => {
           const values = d.items.filter((x) => x[k] != null),
@@ -531,11 +543,55 @@ async function loadCharts(root, pool) {
         })
         .join("") +
       `<details style="margin-top:25px"><summary>Consulter les valeurs en tableau</summary><div class="table-wrap"><table><thead><tr><th>Date</th>${keys.map((k) => `<th>${metrics[k].label}</th>`).join("")}</tr></thead><tbody>${d.items.map((v) => `<tr><td>${fmt(v.date)}</td>${keys.map((k) => `<td>${v[k] == null ? "Non renseigné" : v[k].toFixed(2)}</td>`).join("")}</tr>`).join("")}</tbody></table></div></details>`
-    : empty(
-        "Aucune analyse sur cette période",
-        "Ajoutez une analyse pour visualiser l’évolution de votre eau.",
-      );
+    : "";
+  $("#chart-content", root).innerHTML =
+    `${d.assessments?.length ? `<section class="assessment-history"><h3>Historique des appréciations</h3><p class="small-note">Chaque résultat correspond à une lecture du test. Il n’est pas converti en valeur chiffrée.</p><div class="table-wrap"><table><thead><tr><th>Date</th><th>pH</th><th>Chlore</th></tr></thead><tbody id="assessment-history-rows">${assessmentRows(d.assessments)}</tbody></table></div><div id="assessment-more">${assessmentMore(d.assessments_next, pool.id)}</div></section>` : ""}${numericContent ? `<details class="legacy-charts"><summary>Consulter les anciennes mesures chiffrées</summary>${numericContent}</details>` : ""}${!d.assessments?.length && !keys.length ? empty("Aucune analyse sur cette période", "Ajoutez une analyse pour commencer le suivi de votre eau.") : ""}`;
 }
+function assessmentRows(items) {
+  return items
+    .map(
+      (r) =>
+        `<tr><td><button class="text-btn" data-action="record-detail" data-id="${esc(r.id)}">${fmt(r.measured_at, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</button></td>${["ph", "chlorine"].map((k) => `<td><span class="assessment-label ${r.assessments[k] ? assessmentTone(r.assessments[k]) : ""}">${assessmentText(r.assessments[k])}</span></td>`).join("")}</tr>`,
+    )
+    .join("");
+}
+function assessmentMore(next, id) {
+  return next
+    ? button(
+        "Voir les analyses précédentes",
+        "more-assessments",
+        `data-cursor="${esc(next)}" data-pool="${esc(id)}"`,
+        "secondary small",
+      )
+    : "";
+}
+on("more-assessments", async (d, target) => {
+  const root = target.closest("[data-pool-panel]"),
+    generation = root.dataset.chartRequest;
+  if (target.disabled) return;
+  target.disabled = true;
+  try {
+    const r = await api(
+      `/pools/${d.pool}/trends?days=${$("#chart-days", root).value}&assessment_cursor=${encodeURIComponent(d.cursor)}`,
+    );
+    if (
+      !root.isConnected ||
+      state.pool?.id !== d.pool ||
+      root.dataset.chartRequest !== generation
+    )
+      return;
+    $("#assessment-history-rows", root)?.insertAdjacentHTML(
+      "beforeend",
+      assessmentRows(r.assessments),
+    );
+    $("#assessment-more", root).innerHTML = assessmentMore(
+      r.assessments_next,
+      d.pool,
+    );
+  } finally {
+    target.disabled = false;
+  }
+});
 function sharedAccess(el) {
   const p = state.pool;
   el.innerHTML = `<div class="section-heading"><div><h2>Propriétaires de la piscine</h2><p class="small-note">Seuls les propriétaires et votre intervenant Peace in Blue ont accès au dossier.</p></div>${p.manager || p.claimable ? button(p.claimable ? "Inviter le client" : "Inviter un copropriétaire", "invite-member") : ""}</div><section class="card">${p.members
@@ -744,17 +800,20 @@ export async function openRecordForm(
   const groups = [
     ...new Set(checklist.map((t) => t.group || "Tâches du passage")),
   ];
-  const measurements = `<section class="visit-measures"><h3>Analyse de l’eau</h3><div class="grid two form-two">${Object.entries(
+  const measurements = `<section class="visit-measures"><h3>Analyse de l’eau</h3><p class="field-help">Comparez la couleur du test à son échelle, puis choisissez votre appréciation pour chaque paramètre.</p><div class="grid two form-two">${Object.entries(
     metrics,
   )
-    .map(([k, m]) =>
-      field(
-        m.label + (m.unit ? " (" + m.unit + ")" : ""),
-        k,
-        record?.readings?.[k] ?? "",
-        "number",
-        `step="0.01" min="0" max="${m.max}" inputmode="decimal" placeholder="Non mesuré"`,
-      ),
+    .map(
+      ([k, m]) =>
+        select(
+          m.label,
+          k,
+          { "": "Choisir un résultat", ...assessmentLabels },
+          record?.assessments?.[k] || "",
+        ) +
+        (record?.readings?.[k] != null
+          ? `<p class="field-help legacy-reading">Valeur existante pour ${m.label} : ${esc(record.readings[k])} ${m.unit}. Elle sera conservée si vous ne choisissez pas d’appréciation.</p>`
+          : ""),
     )
     .join(
       "",
@@ -776,9 +835,12 @@ export async function openRecordForm(
     visit ? "Entretien de la piscine" : "Ajouter une analyse",
     `<p class="form-intro">${esc(p.name)}</p>${record?.correction_of ? '<p class="note">La version originale restera dans l’historique.</p>' : ""}${visit ? `<div class="visit-progress"><span id="task-progress" aria-live="polite"></span><progress id="task-progress-bar" max="${checklist.length}" value="0"></progress></div>` : ""}<div class="${visit ? "visit-workspace" : ""}">${visit ? `<section class="visit-checklist">${p.filter_type === "unknown" ? '<p class="note">Type de filtre à préciser dans la fiche piscine pour adapter les tâches.</p>' : ""}<p class="safety-inline">Arrêtez la pompe avant de changer la position de la vanne. Isolez et dépressurisez avant toute ouverture.</p>${taskMarkup}${!checklist.some((t) => t.id === "analysis") ? measurements : ""}<a class="text-btn" href="#guide/entretien/${p.id}" target="_blank" rel="noopener">Consulter la procédure d’entretien</a></section>` : ""}<section class="visit-details">${visit ? "<h3>Compte rendu du passage</h3>" : measurements}${!visit || !checklist.some((t) => t.id === "treatment") ? area("Produits ajoutés", "products", record?.products || "", 'maxlength="2000" placeholder="Produit, quantité et unité"') : ""}${area(p.membership === "principal" ? "Observations partagées avec le client" : "Observations", "notes", record?.notes || "", 'maxlength="4000" placeholder="État du bassin, point à surveiller…"')}<label class="field"><span>Photos du bassin (6 maximum, 4 Mo chacune)</span><input type="file" name="photos" multiple accept="image/jpeg,image/png,image/webp"></label>${record?.photos?.length ? `<p class="small-note">${record.photos.length} photo(s) déjà enregistrée(s).</p>` : ""}<p class="small-note">${visit ? "Le client verra les tâches réalisées, les éventuels motifs et les mesures après le partage." : "Vos mesures seront ajoutées à l’historique de votre piscine."}</p><label class="check"><input type="checkbox" name="draft"> Conserver un brouillon</label></section></div>`,
     async (b, form) => {
-      const values = {};
-      for (const k of Object.keys(metrics))
-        if (b[k] !== "" && b[k] != null) values[k] = b[k];
+      const values = {},
+        observations = {};
+      for (const k of Object.keys(metrics)) {
+        if (Object.hasOwn(assessmentLabels, b[k])) observations[k] = b[k];
+        else if (record?.readings?.[k] != null) values[k] = record.readings[k];
+      }
       const list = checklist.map((c, i) => ({
         ...c,
         done: b["check_" + i] === "on",
@@ -794,7 +856,8 @@ export async function openRecordForm(
           throw new Error("Précisez les motifs des tâches non réalisées.");
         if (
           list.some((t) => t.id === "analysis" && t.done) &&
-          (values.ph == null || values.chlorine == null)
+          ((values.ph == null && !observations.ph) ||
+            (values.chlorine == null && !observations.chlorine))
         )
           throw new Error(
             "Renseignez le pH et le chlore pour valider l’analyse.",
@@ -805,6 +868,7 @@ export async function openRecordForm(
         kind: actualKind,
         measured_at: new Date(b.measured_at).toISOString(),
         readings: values,
+        assessments: observations,
         method: record?.method || "",
         notes: b.notes,
         products: b.products,
@@ -907,8 +971,10 @@ export async function openRecordForm(
         const ph = $('[name="ph"]', form),
           chlorine = $('[name="chlorine"]', form);
         const complete =
-          ph.value !== "" &&
-          chlorine.value !== "" &&
+          (Object.hasOwn(assessmentLabels, ph.value) ||
+            record?.readings?.ph != null) &&
+          (Object.hasOwn(assessmentLabels, chlorine.value) ||
+            record?.readings?.chlorine != null) &&
           ph.validity.valid &&
           chlorine.validity.valid;
         $(`[name=check_${i}]`, form).checked = complete;
@@ -987,13 +1053,12 @@ on("record-detail", async (d) => {
   const r = await api("/records/" + d.id);
   modal(
     r.kind === "visit" ? "Compte rendu de passage" : "Relevé d’analyse",
-    `<div class="inline between"><p class="small-note">${fmt(r.measured_at, { year: "numeric", hour: "2-digit", minute: "2-digit" })}<br>${esc(r.author_name)}</p>${badge(r.published_at ? (r.kind === "visit" ? "Partagé" : "Enregistrée") : "Brouillon", r.published_at ? "teal" : "amber")}</div><div class="metric-grid">${Object.entries(
-      r.readings,
+    `<div class="inline between"><p class="small-note">${fmt(r.measured_at, { year: "numeric", hour: "2-digit", minute: "2-digit" })}<br>${esc(r.author_name)}</p>${badge(r.published_at ? (r.kind === "visit" ? "Partagé" : "Enregistrée") : "Brouillon", r.published_at ? "teal" : "amber")}</div><div class="metric-grid">${recordValues(
+      r,
     )
-      .map(([k, v]) =>
-        metrics[k]
-          ? `<div class="stat"><span>${metrics[k].label}</span><strong>${esc(v)}</strong><small>${metrics[k].unit}</small></div>`
-          : "",
+      .map(
+        ([k, v, qualitative]) =>
+          `<div class="stat ${qualitative ? "assessment-stat" : ""}"><span>${metrics[k].label}</span><strong>${esc(v)}</strong>${qualitative ? "" : `<small>${metrics[k].unit}</small>`}</div>`,
       )
       .join(
         "",

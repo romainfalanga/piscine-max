@@ -647,7 +647,7 @@ pools.get("/pools/:id/export", async (c) => {
     fail("Export réservé aux copropriétaires.", 403);
   const records = await rows(
     c,
-    "SELECT id,author_name,kind,measured_at,readings,method,notes,products,checklist,published_at,correction_of FROM records WHERE pool_id=? AND published_at IS NOT NULL ORDER BY measured_at LIMIT 10001",
+    "SELECT id,author_name,kind,measured_at,readings,assessments,method,notes,products,checklist,published_at,correction_of FROM records WHERE pool_id=? AND published_at IS NOT NULL ORDER BY measured_at LIMIT 10001",
     p.id,
   );
   if (records.length > 10000)

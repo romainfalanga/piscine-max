@@ -144,7 +144,7 @@ try {
   for (let i = 0; i < 20; i++) {
     try {
       const r = await request("/health");
-      if (r.status === 200 && r.data?.release === "business-v11") {
+      if (r.status === 200 && r.data?.release === "water-assessments-v12") {
         const asset = await fetch(base + "/platform/interface.css", {
           cache: "no-store",
           signal: AbortSignal.timeout(15000),
@@ -304,7 +304,7 @@ try {
     {
       kind: "analysis",
       measured_at: new Date(Date.now() - 1000).toISOString(),
-      readings: { ph: 7.2, chlorine: 1.5 },
+      assessments: { ph: "in_range", chlorine: "slightly_low" },
     },
     owner.cookie,
   );
@@ -342,7 +342,31 @@ try {
     ).status,
     404,
   );
-  checks.push("Client analysis and R2 photos preserve dossier privacy");
+  assert.equal(
+    (
+      await request(
+        `/records/${analysis.data.id}/publish`,
+        "POST",
+        {},
+        owner.cookie,
+      )
+    ).status,
+    200,
+  );
+  const overview = (
+    await request(`/pools/${poolId}/overview`, "GET", undefined, coowner.cookie)
+  ).data;
+  assert.equal(overview.measurements.ph.assessment, "in_range");
+  assert.equal(overview.measurements.ph.value, null);
+  assert.equal(overview.measurements.chlorine.assessment, "slightly_low");
+  const trends = (
+    await request(`/pools/${poolId}/trends`, "GET", undefined, coowner.cookie)
+  ).data;
+  assert.deepEqual(trends.items, []);
+  assert.equal(trends.assessments[0].assessments.ph, "in_range");
+  checks.push(
+    "Qualitative pH/chlorine and private R2 photos are shared without fabricated numeric readings",
+  );
   assert.equal(
     (
       await request(

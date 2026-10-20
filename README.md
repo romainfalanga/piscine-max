@@ -10,7 +10,7 @@ Les identifiants locaux de `wrangler.jsonc` restent destinés au développement.
 
 - Inscription client unique, email/mot de passe et code personnel de récupération. Un seul compte professionnel, réservé au compte existant de Romain et identifié en base, jamais attribué par inscription publique.
 - Piscines créées par le client ou par son pisciniste, demandes d’entretien client avec portable ou proposition de Peace in Blue par email, avec accord du client et rattachement au dossier existant. Plusieurs copropriétaires possibles, un responsable des accès et un seul pisciniste principal. Aucun autre professionnel ne peut consulter le dossier.
-- Journal commun, analyses autonomes, courbes, comptes rendus avec photos privées, brouillons puis « Terminer et partager ». Corrections traçables, notes professionnelles séparées et tableau de bord avec dernière photo d’entretien.
+- Journal commun, analyses autonomes par appréciations du pH et du chlore, historique daté (anciennes mesures chiffrées conservées), comptes rendus avec photos privées, brouillons puis « Terminer et partager ». Corrections traçables, notes professionnelles séparées et tableau de bord avec dernière photo d’entretien.
 - Planning individuel, récurrences, saisons, exceptions, passages réalisés et préparation des produits/matériels. Achat client ou approvisionnement pro, avec notifications distinctes dans la plateforme.
 - Navigation professionnelle : Agenda (arrivée directe), Carte, Clients, Pisciniste. Préparation et tableau de bord depuis l’Agenda. Le tableau de bord distingue comptes inscrits, propriétaires et clients suivis et permet de traiter les demandes d’entretien.
 - Code du pisciniste : sessions courtes ou complètes, thèmes, correction et historique privé.

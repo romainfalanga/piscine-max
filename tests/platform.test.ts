@@ -3184,3 +3184,367 @@ test("Maintenance queue pagination stays stable after resolution and fixture del
     0,
   );
 });
+
+test("Qualitative observations accept only the seven explicit states and never invent numeric readings", async () => {
+  const e = context(),
+    owner = await user(e, "qualowner"),
+    id = await pool(e, owner);
+  const levels = [
+    "very_low",
+    "low",
+    "slightly_low",
+    "in_range",
+    "slightly_high",
+    "high",
+    "very_high",
+  ];
+  for (const level of levels) {
+    const r = await request(
+      e,
+      `/pools/${id}/records`,
+      "POST",
+      {
+        kind: "analysis",
+        measured_at: measured(),
+        assessments: { ph: level, chlorine: level },
+      },
+      owner.token,
+    );
+    assert.equal(r.status, 201, JSON.stringify(r.data));
+    const saved = (
+      await request(e, `/records/${r.data.id}`, "GET", undefined, owner.token)
+    ).data;
+    assert.deepEqual(saved.assessments, { ph: level, chlorine: level });
+    assert.deepEqual(saved.readings, {});
+  }
+  for (const assessments of [
+    { ph: "good" },
+    { ph: 7.2 },
+    { ph: {} },
+    { salt: "in_range" },
+    [],
+    "in_range",
+  ]) {
+    assert.equal(
+      (
+        await request(
+          e,
+          `/pools/${id}/records`,
+          "POST",
+          { kind: "analysis", measured_at: measured(), assessments },
+          owner.token,
+        )
+      ).status,
+      400,
+    );
+  }
+  assert.equal(
+    (
+      await request(
+        e,
+        `/pools/${id}/records`,
+        "POST",
+        {
+          kind: "analysis",
+          measured_at: measured(),
+          readings: { ph: 7.2 },
+          assessments: { ph: "in_range" },
+        },
+        owner.token,
+      )
+    ).status,
+    400,
+  );
+});
+
+test("Latest assessment supersedes the older numeric dashboard value while historical measurements remain separate", async () => {
+  const e = context(),
+    owner = await user(e, "qualowner"),
+    outsider = await user(e, "qualoutside"),
+    id = await pool(e, owner);
+  const old = await request(
+    e,
+    `/pools/${id}/records`,
+    "POST",
+    {
+      kind: "analysis",
+      measured_at: new Date(Date.now() - 60000).toISOString(),
+      readings: { ph: 7.2, chlorine: 1.5 },
+    },
+    owner.token,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        `/records/${old.data.id}/publish`,
+        "POST",
+        {},
+        owner.token,
+      )
+    ).status,
+    200,
+  );
+  const recent = await request(
+    e,
+    `/pools/${id}/records`,
+    "POST",
+    {
+      kind: "analysis",
+      measured_at: measured(),
+      assessments: { ph: "slightly_high", chlorine: "low" },
+    },
+    owner.token,
+  );
+  assert.equal(
+    (await request(e, `/pools/${id}/overview`, "GET", undefined, owner.token))
+      .data.measurements.ph.value,
+    7.2,
+  ); // draft is not published
+  assert.equal(
+    (
+      await request(
+        e,
+        `/records/${recent.data.id}/publish`,
+        "POST",
+        {},
+        owner.token,
+      )
+    ).status,
+    200,
+  );
+  const overview = (
+    await request(e, `/pools/${id}/overview`, "GET", undefined, owner.token)
+  ).data;
+  assert.equal(overview.measurements.ph.assessment, "slightly_high");
+  assert.equal(overview.measurements.ph.value, null);
+  assert.equal(overview.measurements.chlorine.assessment, "low");
+  const trends = (
+    await request(e, `/pools/${id}/trends`, "GET", undefined, owner.token)
+  ).data;
+  assert.equal(trends.items.length, 1);
+  assert.equal(trends.items[0].ph, 7.2);
+  assert.equal(trends.items[0].chlorine, 1.5);
+  assert.equal(trends.items[0].samples, 1);
+  assert.equal(trends.assessments.length, 1);
+  assert.equal(trends.assessments[0].assessments.ph, "slightly_high");
+  const correction = await request(
+    e,
+    `/pools/${id}/records`,
+    "POST",
+    {
+      kind: "analysis",
+      measured_at: measured(),
+      correction_of: recent.data.id,
+      assessments: { ph: "in_range" },
+    },
+    owner.token,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        `/records/${correction.data.id}/publish`,
+        "POST",
+        {},
+        owner.token,
+      )
+    ).status,
+    200,
+  );
+  const corrected = (
+    await request(e, `/pools/${id}/overview`, "GET", undefined, owner.token)
+  ).data;
+  assert.equal(corrected.measurements.ph.assessment, "in_range");
+  assert.equal(corrected.measurements.chlorine.value, 1.5); // excluded superseded low reading
+  assert.equal(
+    (await request(e, `/pools/${id}/trends`, "GET", undefined, owner.token))
+      .data.assessments.length,
+    1,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        `/records/${recent.data.id}`,
+        "GET",
+        undefined,
+        owner.token,
+      )
+    ).data.assessments.chlorine,
+    "low",
+  );
+  assert.equal(
+    (await request(e, `/pools/${id}/trends`, "GET", undefined, outsider.token))
+      .status,
+    404,
+  );
+  const exported = (
+    await request(e, `/pools/${id}/export`, "GET", undefined, owner.token)
+  ).data;
+  assert.ok(
+    exported.records.some(
+      (r: any) => JSON.parse(r.assessments).ph === "in_range",
+    ),
+  );
+});
+
+test("An entretien requires both observations before sharing and keeps qualitative drafts, photos and client records coherent", async () => {
+  const e = context(),
+    owner = await user(e, "qualowner"),
+    admin = await user(e, "qualadmin", "pro"),
+    id = await pool(e, owner);
+  await invite(e, owner, admin, id, "principal");
+  const draft = await request(
+    e,
+    `/pools/${id}/records`,
+    "POST",
+    { kind: "visit", measured_at: measured(), assessments: { ph: "in_range" } },
+    admin.token,
+  );
+  const record = (
+    await request(e, `/records/${draft.data.id}`, "GET", undefined, admin.token)
+  ).data;
+  const checklist = record.checklist.map((t: any) => ({ ...t, done: true }));
+  let saved = await request(
+    e,
+    `/records/${record.id}`,
+    "PUT",
+    { ...record, checklist, assessments: { ph: "in_range" } },
+    admin.token,
+  );
+  assert.equal(saved.status, 200);
+  assert.equal(
+    (await request(e, `/records/${record.id}/publish`, "POST", {}, admin.token))
+      .status,
+    400,
+  );
+  assert.equal(
+    (await request(e, `/records/${record.id}`, "GET", undefined, owner.token))
+      .status,
+    404,
+  );
+  saved = await request(
+    e,
+    `/records/${record.id}`,
+    "PUT",
+    {
+      ...record,
+      revision: saved.data.revision,
+      checklist,
+      assessments: { ph: "in_range", chlorine: "slightly_low" },
+    },
+    admin.token,
+  );
+  assert.equal(saved.status, 200);
+  assert.equal(
+    (await request(e, `/records/${record.id}/publish`, "POST", {}, admin.token))
+      .status,
+    200,
+  );
+  const shared = (
+    await request(e, `/records/${record.id}`, "GET", undefined, owner.token)
+  ).data;
+  assert.deepEqual(shared.assessments, {
+    ph: "in_range",
+    chlorine: "slightly_low",
+  });
+  assert.deepEqual(shared.readings, {});
+  assert.equal(
+    (await request(e, `/pools/${id}/overview`, "GET", undefined, owner.token))
+      .data.last_visit.assessments.chlorine,
+    "slightly_low",
+  );
+});
+
+test("Assessment migration preserves old measurements and the qualitative timeline paginates without duplicate results", async () => {
+  const old = new LocalD1("0007_business_provider.sql");
+  old.db
+    .prepare(
+      "INSERT INTO users(id,username,name,password_hash,recovery_hash) VALUES('legacy','legacy','Legacy','unused','unused')",
+    )
+    .run();
+  old.db
+    .prepare(
+      "INSERT INTO pools(id,name,created_by) VALUES('legacy','Legacy','legacy')",
+    )
+    .run();
+  old.db
+    .prepare(
+      "INSERT INTO records(id,pool_id,author_id,author_name,kind,measured_at,readings,published_at) VALUES('legacy','legacy','legacy','Legacy','analysis',?, ?, ?)",
+    )
+    .run(measured(), JSON.stringify({ ph: 7.3, chlorine: 1.8 }), measured());
+  old.db.exec(
+    readFileSync(
+      new URL("../schema/0008_water_assessments.sql", import.meta.url),
+      "utf8",
+    ),
+  );
+  const legacy = old.db
+    .prepare("SELECT readings,assessments FROM records WHERE id='legacy'")
+    .get()!;
+  assert.equal(legacy.assessments, "{}");
+  assert.deepEqual(JSON.parse(legacy.readings as string), {
+    ph: 7.3,
+    chlorine: 1.8,
+  });
+  const e = context(),
+    owner = await user(e, "qualowner"),
+    id = await pool(e, owner),
+    otherId = await pool(e, owner, "Autre bassin");
+  const insert = e.DB.db.prepare(
+    "INSERT INTO records(id,pool_id,author_id,author_name,kind,measured_at,assessments,published_at) VALUES(?,?,?,'Fixture','analysis',?,?,?)",
+  );
+  for (let i = 0; i < 53; i++)
+    insert.run(
+      crypto.randomUUID(),
+      id,
+      owner.user.id,
+      measured(),
+      JSON.stringify({ ph: "in_range" }),
+      measured(),
+    );
+  const foreignId = crypto.randomUUID();
+  insert.run(
+    foreignId,
+    otherId,
+    owner.user.id,
+    measured(),
+    JSON.stringify({ ph: "high" }),
+    measured(),
+  );
+  const first = (
+    await request(e, `/pools/${id}/trends`, "GET", undefined, owner.token)
+  ).data;
+  assert.equal(first.assessments.length, 50);
+  assert.deepEqual(first.items, []);
+  assert.ok(first.assessments_next);
+  const second = (
+    await request(
+      e,
+      `/pools/${id}/trends?assessment_cursor=${first.assessments_next}`,
+      "GET",
+      undefined,
+      owner.token,
+    )
+  ).data;
+  assert.equal(second.assessments.length, 3);
+  assert.equal(second.assessments_next, null);
+  assert.equal(
+    new Set([...first.assessments, ...second.assessments].map((r: any) => r.id))
+      .size,
+    53,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        `/pools/${id}/trends?assessment_cursor=${foreignId}`,
+        "GET",
+        undefined,
+        owner.token,
+      )
+    ).status,
+    400,
+  );
+});

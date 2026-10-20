@@ -56,7 +56,7 @@ app.get("/api/health", (c) =>
     ok: true,
     application: "Peace in Blue App",
     version: 2,
-    release: "business-v11",
+    release: "water-assessments-v12",
   }),
 );
 app.route("/api/auth", auth);

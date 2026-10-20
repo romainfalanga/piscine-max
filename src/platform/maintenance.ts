@@ -143,7 +143,11 @@ export function taskStates(template: Task[], input: any): Task[] {
     };
   });
 }
-export function validateCompletion(tasks: Task[], readings: any) {
+export function validateCompletion(
+  tasks: Task[],
+  readings: any,
+  assessments: Record<string, string> = {},
+) {
   if (!tasks.length || tasks.some((t) => !t.done && !t.skipped))
     fail(
       "Vérifiez chaque tâche avant de partager : cochez-la ou indiquez pourquoi elle n’a pas été réalisée.",
@@ -152,7 +156,8 @@ export function validateCompletion(tasks: Task[], readings: any) {
     fail("Précisez le motif de chaque tâche non réalisée.");
   if (
     tasks.some((t) => t.id === "analysis" && t.done) &&
-    (readings.ph == null || readings.chlorine == null)
+    ((readings.ph == null && !assessments.ph) ||
+      (readings.chlorine == null && !assessments.chlorine))
   )
     fail("Renseignez le pH et le chlore pour valider l’analyse.");
   if (
