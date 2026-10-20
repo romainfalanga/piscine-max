@@ -4,7 +4,7 @@ import { mkdirSync } from "node:fs";
 import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
 mkdirSync(".test-artifacts", { recursive: true });
-const { server } = await import("./server.ts");
+const { server, provisionProvider } = await import("./server.ts");
 if (!server.listening)
   await new Promise((resolve) => server.once("listening", resolve));
 const browser = await chromium.launch({
@@ -54,7 +54,16 @@ async function verifyPersistentPoolSections(target) {
       reads++;
   };
   target.on("request", countReads);
-  for (const name of ["Le bassin", "Accès", "Suivi", "Évolution"]) {
+  for (const name of [
+    "Le bassin",
+    (await target
+      .getByRole("button", { name: "Intervenant", exact: true })
+      .count())
+      ? "Intervenant"
+      : "Accès",
+    "Suivi",
+    "Évolution",
+  ]) {
     await target.getByRole("button", { name, exact: true }).click();
     await target.waitForFunction(
       (name) =>
@@ -227,7 +236,7 @@ try {
     "Suivi",
     "Évolution",
     "Le bassin",
-    "Accès",
+    "Intervenant",
   ]);
   assert.equal(
     await page
@@ -251,23 +260,13 @@ try {
       .count(),
     0,
   );
-  await page.getByRole("button", { name: "Accès", exact: true }).click();
-  await page.getByRole("button", { name: "Inviter", exact: true }).click();
-  assert.deepEqual(
-    await page
-      .getByLabel("Inviter", { exact: true })
-      .locator("option")
-      .allTextContents(),
-    ["Mon pisciniste", "Copropriétaire"],
-  );
+  await page.getByRole("button", { name: "Intervenant", exact: true }).click();
+  await page.getByLabel("Téléphone portable", { exact: true }).waitFor();
+  assert.equal(await page.locator('[data-action="invite-member"]').count(), 1); // hidden co-owner panel only
   assert.equal(
-    await page
-      .getByLabel("Adresse email de la personne", { exact: true })
-      .count(),
-    1,
+    await page.getByText("Mon pisciniste", { exact: true }).count(),
+    0,
   );
-  assert.equal(await page.locator("[name=username], #pro-search").count(), 0);
-  await page.getByRole("button", { name: "Fermer", exact: true }).click();
   await page.getByRole("button", { name: "Le bassin", exact: true }).click();
   await page.getByRole("button", { name: "Modifier", exact: true }).waitFor();
   assert.equal(
@@ -290,7 +289,12 @@ try {
     0,
   );
   await page.getByRole("button", { name: "Fermer", exact: true }).click();
-  await page.getByRole("button", { name: "Accès", exact: true }).click();
+  await page.getByRole("button", { name: "Le bassin", exact: true }).click();
+  await page
+    .getByText("Partager ma piscine et gérer ses propriétaires", {
+      exact: true,
+    })
+    .click();
   await page.getByText("Responsable des accès", { exact: false }).waitFor();
   await page
     .getByRole("link", { name: "Mon compte", exact: true })
@@ -361,9 +365,12 @@ try {
   await page
     .getByLabel("Adresse email", { exact: true })
     .fill("camille-pro@example.test");
-  await page
-    .getByRole("button", { name: "Je suis pisciniste", exact: true })
-    .click();
+  assert.equal(
+    await page
+      .getByRole("button", { name: "Je suis pisciniste", exact: true })
+      .count(),
+    0,
+  );
   await page
     .getByLabel("Mot de passe", { exact: true })
     .fill("Browser fixture password only!");
@@ -372,6 +379,11 @@ try {
     .click();
   await page.getByLabel("J’ai sauvegardé mon code personnel.").check();
   await page.getByRole("button", { name: "Continuer", exact: true }).click();
+  await page
+    .getByRole("heading", { name: "Mes piscines", exact: true })
+    .waitFor();
+  provisionProvider("camille-pro@example.test");
+  await page.goto("http://127.0.0.1:8788/");
   await page.getByRole("heading", { name: "Agenda", exact: true }).waitFor();
   // A second, independently registered client grants access to the professional.
   const ownerContext = await browser.newContext();
@@ -403,12 +415,12 @@ try {
     volume: 54,
     treatment: "salt",
   });
-  const invitation = await apiPost(
+  const maintenance = await apiPost(
     ownerContext,
-    `/pools/${assigned.id}/invitations`,
-    { email: "camille-pro@example.test", kind: "principal" },
+    `/pools/${assigned.id}/intervenant`,
+    { phone: "0612345678" },
   );
-  await apiPost(context, `/invitations/${invitation.id}/respond`, {
+  await apiPost(context, `/maintenance-requests/${maintenance.id}/respond`, {
     accept: true,
   });
   await ownerContext.close();
@@ -725,13 +737,15 @@ try {
     fullPage: true,
   });
   await nav.getByRole("link", { name: "Agenda", exact: true }).click();
-  await page.getByRole("link", { name: "Statistiques", exact: false }).click();
   await page
-    .getByRole("heading", { name: "Statistiques", exact: true })
+    .getByRole("link", { name: "Tableau de bord", exact: false })
+    .click();
+  await page
+    .getByRole("heading", { name: "Tableau de bord", exact: true })
     .waitFor();
-  assert.equal(await page.locator(".stat strong").first().textContent(), "1");
+  assert.equal(await page.locator(".business-metrics>div").count(), 4);
   await page
-    .getByRole("link", { name: "Retour à l’agenda", exact: true })
+    .getByRole("link", { name: "Ouvrir l’agenda", exact: true })
     .click();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("http://127.0.0.1:8788/#home");
@@ -1039,7 +1053,14 @@ try {
   await clientPage
     .getByRole("heading", { name: "Le bassin de Lucie", exact: true })
     .waitFor();
-  await clientPage.getByRole("button", { name: "Accès", exact: true }).click();
+  await clientPage
+    .getByRole("button", { name: "Le bassin", exact: true })
+    .click();
+  await clientPage
+    .getByText("Partager ma piscine et gérer ses propriétaires", {
+      exact: true,
+    })
+    .click();
   await clientPage
     .getByText("Responsable des accès", { exact: false })
     .waitFor();
@@ -1096,7 +1117,7 @@ try {
     .getByLabel("Piscine à confier", { exact: true })
     .selectOption(existingPool.id);
   await clientPage
-    .getByRole("button", { name: "Accepter le pisciniste", exact: true })
+    .getByRole("button", { name: "Confier ma piscine", exact: true })
     .click();
   await clientPage
     .getByRole("heading", {
@@ -1120,19 +1141,46 @@ try {
     "http://127.0.0.1:8788/#pool/" + invitedPool.id + "/access",
   );
   await clientPage
-    .getByRole("button", { name: "Inviter", exact: true })
+    .getByLabel("Téléphone portable", { exact: true })
+    .fill("0712345678");
+  await clientPage
+    .getByRole("checkbox", { name: "J’autorise Peace in Blue", exact: false })
+    .check();
+  await clientPage
+    .getByRole("button", {
+      name: "Demander un entretien régulier",
+      exact: true,
+    })
     .click();
   await clientPage
-    .getByLabel("Adresse email de la personne", { exact: true })
-    .fill("camille-pro@example.test");
-  await clientPage
-    .getByRole("button", { name: "Envoyer l’invitation", exact: true })
-    .click();
-  await clientPage
-    .getByRole("heading", { name: "Invitations en attente", exact: true })
+    .getByRole("heading", { name: "Demande envoyée", exact: true })
     .waitFor();
-  await page.goto("http://127.0.0.1:8788/#planning");
-  await page.getByRole("button", { name: "Accepter", exact: true }).click();
+  await page.goto("http://127.0.0.1:8788/#stats");
+  await page
+    .getByRole("heading", { name: "Bassin invité par Lucie", exact: true })
+    .waitFor();
+  await page.screenshot({
+    path: ".test-artifacts/business-dashboard-desktop.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.equal(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > innerWidth,
+    ),
+    false,
+  );
+  await page.screenshot({
+    path: ".test-artifacts/business-dashboard-mobile.png",
+    fullPage: true,
+  });
+  await page
+    .getByRole("button", { name: "Prendre en charge", exact: true })
+    .click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Prendre en charge", exact: true })
+    .click();
   await page
     .getByRole("heading", { name: "Bassin invité par Lucie", exact: true })
     .waitFor();
@@ -1167,7 +1215,7 @@ try {
     .waitFor();
   assert.deepEqual(
     await clientPage.locator(".pool-tabs button").allTextContents(),
-    ["Suivi", "Évolution", "Le bassin", "Accès"],
+    ["Suivi", "Évolution", "Le bassin", "Intervenant"],
   );
   assert.equal(
     await clientPage
@@ -1362,7 +1410,7 @@ try {
         "email-only account and authenticated email update",
         "client routes exclude professional preparation",
         "members",
-        "independent professional signup",
+        "public signup stays client; provider is provisioned in trusted local fixture",
         "agenda default and four professional tabs",
         "client directory and map after explicit invitation",
         "plan, perform and publish a visit",
@@ -1381,7 +1429,7 @@ try {
         "mobile journal and report",
         "professional pool creation and client claim",
         "professional request joins existing client pool",
-        "client invitation accepted by principal",
+        "regular maintenance request with mobile, dashboard and provider acceptance",
       ],
       pageErrors: errors,
     }),

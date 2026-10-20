@@ -317,6 +317,8 @@ pools.post("/pools/:id/invitations", async (c) => {
     b = await c.req.json();
   await limit(c, `invitations:${who(c).id}`, 40, 3600);
   const kind = choice(b.kind, ["owner", "principal"] as const);
+  if (kind === "principal")
+    fail("Demandez un entretien régulier depuis la page Intervenant.", 403);
   if (p.claimable && kind !== "owner")
     fail("Invitez le client : vous êtes déjà le pisciniste principal.");
   const target = await row(
@@ -327,10 +329,6 @@ pools.post("/pools/:id/invitations", async (c) => {
   if (!target)
     fail("Compte introuvable. Cette personne doit d’abord s’inscrire.");
   if (target.id === who(c).id) fail("Vous avez déjà accès à cette piscine.");
-  if (kind === "principal" && !target.is_pro)
-    fail(
-      "Cette adresse correspond à un compte client. Invitez un compte pisciniste.",
-    );
   if (
     await row(
       c,
@@ -340,18 +338,6 @@ pools.post("/pools/:id/invitations", async (c) => {
     )
   )
     fail("Cette personne a déjà accès à la piscine.", 409);
-  if (
-    kind === "principal" &&
-    (await row(
-      c,
-      "SELECT id FROM pool_members WHERE pool_id=? AND kind='principal' AND revoked_at IS NULL",
-      p.id,
-    ))
-  )
-    fail(
-      "Cette piscine a déjà un pisciniste. Retirez son accès avant d’en choisir un autre.",
-      409,
-    );
   const id = uid();
   await stmt(
     c,

@@ -46,8 +46,7 @@ export const who = (c: C) => c.get("user");
 export const requirePro = (c: C) => {
   if (!who(c).is_pro) fail("Espace réservé aux piscinistes.", 403);
 };
-export const isAdmin = (c: C) =>
-  Boolean(c.env.ADMIN_USER_ID && who(c).id === c.env.ADMIN_USER_ID);
+export const isAdmin = (c: C) => Boolean(who(c).is_pro);
 export function str(value: unknown, max = 200, required = false): string {
   if (typeof value !== "string") {
     if (required) fail("Champ requis.");

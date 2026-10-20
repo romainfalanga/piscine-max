@@ -28,7 +28,6 @@ const brandImage = `<img class="brand-image" src="/platform/brand-logo.png?v=bra
 const brandWordmark = `<span class="brand-wordmark">Peace in blue<span class="brand-app">App</span></span>`;
 const brand = `<span class="brand-mark">${brandImage}</span>${brandWordmark}`;
 let authTab = "login",
-  signupRole = "client",
   renderId = 0;
 function authScreen() {
   disposeMap(true);
@@ -36,7 +35,7 @@ function authScreen() {
   state.user = null;
   document.title = "Peace in Blue App : Gestion d’entretien";
   $("#app").innerHTML =
-    `<div class="classic-auth"><section class="classic-login"><div class="login-brand"><span class="brand-mark">${brandImage}</span><h1 aria-label="Peace in Blue App">${brandWordmark}</h1><p>Le suivi de votre piscine, au même endroit.</p></div><div class="auth-switch"><button data-action="auth-tab" data-tab="login" class="${authTab === "login" ? "active" : ""}">Se connecter</button><button data-action="auth-tab" data-tab="signup" class="${authTab === "signup" ? "active" : ""}">Créer mon compte</button></div><form id="auth-form">${authTab === "signup" ? `<div class="auth-switch"><button type="button" data-action="signup-role" data-role="client" class="${signupRole === "client" ? "active" : ""}">J’ai une piscine</button><button type="button" data-action="signup-role" data-role="pro" class="${signupRole === "pro" ? "active" : ""}">Je suis pisciniste</button></div>` : ""}${field("Adresse email", "email", "", "email", 'required maxlength="254" autocomplete="username" autocapitalize="none" spellcheck="false"')}${field("Mot de passe", "password", "", "password", `required ${authTab === "signup" ? 'minlength="12" autocomplete="new-password"' : 'autocomplete="current-password"'} maxlength="128"`)}${authTab === "signup" ? '<p class="small-note">12 caractères minimum. Un code de récupération vous sera remis à l’inscription.</p>' : ""}<p class="form-error" role="alert"></p><button class="btn primary full" type="submit">${authTab === "login" ? "Entrer dans mon espace" : "Créer mon compte gratuit"} ${icon("arrow", 17)}</button></form><button class="text-btn" data-action="recover">Mot de passe oublié ou ancien compte sans email ?</button><div class="divider"></div><p class="small-note">Chaque piscine reste privée : ses propriétaires et un seul pisciniste principal.</p></section></div>`;
+    `<div class="classic-auth"><section class="classic-login"><div class="login-brand"><span class="brand-mark">${brandImage}</span><h1 aria-label="Peace in Blue App">${brandWordmark}</h1><p>Le suivi de votre piscine, au même endroit.</p></div><div class="auth-switch"><button data-action="auth-tab" data-tab="login" class="${authTab === "login" ? "active" : ""}">Se connecter</button><button data-action="auth-tab" data-tab="signup" class="${authTab === "signup" ? "active" : ""}">Créer mon compte</button></div><form id="auth-form">${field("Adresse email", "email", "", "email", 'required maxlength="254" autocomplete="username" autocapitalize="none" spellcheck="false"')}${field("Mot de passe", "password", "", "password", `required ${authTab === "signup" ? 'minlength="12" autocomplete="new-password"' : 'autocomplete="current-password"'} maxlength="128"`)}${authTab === "signup" ? '<p class="small-note">12 caractères minimum. Un code de récupération vous sera remis à l’inscription.</p>' : ""}<p class="form-error" role="alert"></p><button class="btn primary full" type="submit">${authTab === "login" ? "Entrer dans mon espace" : "Créer mon compte gratuit"} ${icon("arrow", 17)}</button></form><button class="text-btn" data-action="recover">Mot de passe oublié ou ancien compte sans email ?</button><div class="divider"></div><p class="small-note">Votre carnet reste privé. Suivez votre piscine en autonomie ou demandez un entretien régulier à Peace in Blue.</p></section></div>`;
   $("#auth-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const form = e.target,
@@ -47,7 +46,7 @@ function authScreen() {
     try {
       const r = await api("/auth/" + authTab, "POST", {
         ...b,
-        role: signupRole,
+        role: "client",
       });
       if (r.recovery_code) recovery(r.recovery_code, () => start(r.user));
       else await start(r.user);
@@ -61,13 +60,6 @@ function authScreen() {
 on("auth-tab", (d) => {
   authTab = d.tab;
   authScreen();
-});
-on("signup-role", (d) => {
-  const vals = Object.fromEntries(new FormData($("#auth-form")));
-  signupRole = d.role;
-  authScreen();
-  for (const [key, v] of Object.entries(vals))
-    if ($(`[name=${key}]`)) $(`[name=${key}]`).value = v;
 });
 function recovery(code, next) {
   modal(
@@ -179,7 +171,7 @@ on("notifications", async () => {
       ? state.notices
           .map(
             (n) =>
-              `<div class="notice ${n.read_at ? "read" : ""}"><span class="dot"></span><div class="grow"><h3>${esc(n.title)}</h3><p>${esc(n.body)}</p><small>${fmt(n.created_at, { hour: "2-digit", minute: "2-digit" })}</small>${n.pool_id ? `<div style="margin-top:10px">${button("Consulter", "notice-open", `data-pool="${esc(n.pool_id || "")}"`, "secondary small")}</div>` : ""}</div></div>`,
+              `<div class="notice ${n.read_at ? "read" : ""}"><span class="dot"></span><div class="grow"><h3>${esc(n.title)}</h3><p>${esc(n.body)}</p><small>${fmt(n.created_at, { hour: "2-digit", minute: "2-digit" })}</small>${n.type === "maintenance-request" ? `<div style="margin-top:10px">${button("Voir les demandes", "business-notice", "", "secondary small")}</div>` : ""}${n.pool_id ? `<div style="margin-top:10px">${button("Consulter", "notice-open", `data-pool="${esc(n.pool_id || "")}"`, "secondary small")}</div>` : ""}</div></div>`,
           )
           .join("")
       : empty(
@@ -190,6 +182,10 @@ on("notifications", async () => {
   );
   await api("/notifications/read", "POST", {});
   updateUnread();
+});
+on("business-notice", () => {
+  closeModal();
+  go("stats");
 });
 on("notice-open", (d) => {
   closeModal();

@@ -481,3 +481,158 @@ dialog {
 .split > .card > .pool-symbol {
   display: none;
 }
+
+/* Peace in Blue business dashboard and regular maintenance requests. */
+.business-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-block: 1px solid var(--line, #dde5e9);
+  margin: 28px 0 38px;
+}
+.business-metrics > div {
+  padding: 25px 20px 25px 0;
+}
+.business-metrics strong {
+  font-size: 38px;
+  line-height: 1.2;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: #0a3851;
+}
+.business-metrics h2 {
+  font-size: 14px;
+  margin: 10px 0 6px;
+}
+.business-metrics p {
+  font-size: 12px;
+  color: #566b7b;
+  line-height: 1.6;
+  max-width: 220px;
+}
+.business-requests,
+.business-activity {
+  margin-bottom: 38px;
+}
+.request-count {
+  font-size: 14px;
+  font-weight: 500;
+  margin-left: 10px;
+  color: #566b7b;
+}
+.maintenance-demand {
+  border-top: 1px solid #dde5e9;
+  padding: 24px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+.maintenance-demand h3 {
+  font-size: 19px;
+  margin: 7px 0;
+}
+.maintenance-demand p {
+  overflow-wrap: anywhere;
+  margin: 5px 0;
+  color: #566b7b;
+}
+.maintenance-demand .actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.demand-phone {
+  display: inline-block;
+  margin-top: 9px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.business-empty {
+  padding: 26px 0;
+  color: #566b7b;
+  border-block: 1px solid #dde5e9;
+}
+.intervenant-panel {
+  max-width: 720px;
+  padding: 24px 0;
+}
+.intervenant-panel h2 {
+  font-size: clamp(23px, 4vw, 30px);
+  line-height: 1.3;
+  max-width: 640px;
+  margin: 12px 0 18px;
+}
+.intervenant-panel > p {
+  line-height: 1.8;
+  color: #566b7b;
+}
+.intervenant-panel form {
+  margin-top: 28px;
+  max-width: 530px;
+}
+.intervenant-panel form .check {
+  align-items: flex-start;
+  margin: 24px 0;
+  line-height: 1.6;
+}
+.intervenant-panel form .check input {
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+.service-status {
+  padding: 24px 0;
+  margin: 22px 0;
+  border-block: 1px solid #dde5e9;
+}
+.service-status .btn {
+  margin-top: 16px;
+}
+.service-autonomy {
+  font-size: 13px;
+  margin-top: 30px;
+}
+.coowner-controls {
+  margin-top: 28px;
+  border-top: 1px solid #dde5e9;
+  padding-top: 24px;
+}
+.coowner-controls summary {
+  cursor: pointer;
+  font-weight: 600;
+  line-height: 1.5;
+  padding-bottom: 15px;
+}
+@media (max-width: 800px) {
+  .business-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .business-metrics > div {
+    padding: 20px 15px 20px 0;
+  }
+  .maintenance-demand {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .maintenance-demand .actions {
+    justify-content: flex-start;
+  }
+  .maintenance-demand .actions .btn {
+    white-space: normal;
+  }
+}
+@media (max-width: 420px) {
+  .business-metrics strong {
+    font-size: 32px;
+  }
+  .business-metrics h2 {
+    line-height: 1.5;
+  }
+  .intervenant-panel form .btn {
+    width: 100%;
+    white-space: normal;
+  }
+  .business-metrics p {
+    font-size: 11px;
+  }
+}

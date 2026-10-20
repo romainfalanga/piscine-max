@@ -1,6 +1,6 @@
 # Peace in Blue App
 
-Plateforme de suivi partagé entre propriétaires de piscines et piscinistes. Refonte de `piscine-max`, gratuite pour tous les utilisateurs à ce stade.
+Application de suivi des piscines et d’organisation des entretiens Peace in Blue. Tous les particuliers peuvent utiliser gratuitement leur carnet, avec ou sans entretien régulier par Peace in Blue.
 
 **État : préproduction déployée, pas encore ouverte au grand public.** [Tester la plateforme](https://peaceinblue-recette.pages.dev). Le jeton `CLOUDFLARE_API_TOKEN` ajouté dans GitHub Actions a permis de créer une base D1, un bucket R2 privé et un projet Pages distincts. Le workflow `Cloudflare preview` déploie cette branche dans ce projet de recette ; aucun secret n'est exporté. Le schéma et les parcours API sont vérifiés sur Cloudflare. La base et le site historiques restent en place.
 
@@ -8,11 +8,11 @@ Les identifiants locaux de `wrangler.jsonc` restent destinés au développement.
 
 ## Parcours disponibles
 
-- Inscription autonome client ou pisciniste, email/mot de passe et code personnel de récupération. Un professionnel peut aussi gérer sa piscine personnelle.
-- Piscines créées par le client ou par son pisciniste, invitations dans les deux sens et rattachement au dossier existant. Plusieurs copropriétaires possibles, un responsable des accès et un seul pisciniste principal. Aucun autre professionnel ne peut consulter le dossier.
+- Inscription client unique, email/mot de passe et code personnel de récupération. Un seul compte professionnel, réservé au compte existant de Romain et identifié en base, jamais attribué par inscription publique.
+- Piscines créées par le client ou par son pisciniste, demandes d’entretien client avec portable ou proposition de Peace in Blue par email, avec accord du client et rattachement au dossier existant. Plusieurs copropriétaires possibles, un responsable des accès et un seul pisciniste principal. Aucun autre professionnel ne peut consulter le dossier.
 - Journal commun, analyses autonomes, courbes, comptes rendus avec photos privées, brouillons puis « Terminer et partager ». Corrections traçables, notes professionnelles séparées et tableau de bord avec dernière photo d’entretien.
 - Planning individuel, récurrences, saisons, exceptions, passages réalisés et préparation des produits/matériels. Achat client ou approvisionnement pro, avec notifications distinctes dans la plateforme.
-- Navigation professionnelle : Agenda (arrivée directe), Carte, Clients, Pisciniste. Préparation et statistiques depuis l’Agenda.
+- Navigation professionnelle : Agenda (arrivée directe), Carte, Clients, Pisciniste. Préparation et tableau de bord depuis l’Agenda. Le tableau de bord distingue comptes inscrits, propriétaires et clients suivis et permet de traiter les demandes d’entretien.
 - Code du pisciniste : sessions courtes ou complètes, thèmes, correction et historique privé.
 - 16 calculateurs avec unités explicites, entrées contrôlées et hypothèses affichées. Dosages à partir de la notice réelle, sans cible chimique imposée.
 - Bibliothèque classée en Informations métier, Procédures et fiches personnelles. Huit procédures guidées dont l’entretien courant, variantes sable/verre et cartouche, progression personnelle sauvegardée.
@@ -56,3 +56,5 @@ Le build n'exécute aucune migration et ne réinitialise aucune base. Ne pas app
 Création simple, adresses IGN et carte privée, analyses pH/chlore, checklist selon équipements et compte rendu client détaillé. Voir [le plan et les choix de conception](docs/EXPERIENCE-ENTRETIEN.md).
 
 Le parcours propriétaire et les choix de simplification sont décrits dans [docs/PARCOURS-CLIENT.md](docs/PARCOURS-CLIENT.md).
+
+Le fonctionnement réservé à Peace in Blue, les règles de confidentialité et la migration sont détaillés dans [docs/ACTIVITE-PEACEINBLUE.md](docs/ACTIVITE-PEACEINBLUE.md).

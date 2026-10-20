@@ -11,6 +11,9 @@ import {
   badge,
   fmt,
   refresh,
+  go,
+  toast,
+  confirmAction,
 } from "./ui.js";
 
 export const classicPages = { clients, map: mapPage, stats };
@@ -258,15 +261,91 @@ async function filterMap() {
 window.addEventListener("hashchange", () => {
   if (location.hash.split("/")[0] !== "#map") disposeMap();
 });
+let businessCursor = null;
+function demandRows(items) {
+  return items
+    .map(
+      (r) =>
+        `<article class="maintenance-demand"><div><p class="small-note">Demande du ${fmt(r.created_at)}</p><h3>${esc(r.pool_name)}</h3><p>${esc(r.city || "Commune à préciser")}</p><p>${esc(r.email)}</p><a class="demand-phone" href="tel:${esc(r.phone)}">${esc(r.phone)}</a></div><div class="actions">${button("Prendre en charge", "accept-maintenance", `data-id="${r.id}"`, "primary small")}${button("Ne pas donner suite", "decline-maintenance", `data-id="${r.id}"`, "ghost small")}</div></article>`,
+    )
+    .join("");
+}
 async function stats(main) {
-  const r = await api("/activity-summary"),
-    hours = (m) =>
-      (m / 60).toLocaleString("fr-FR", { maximumFractionDigits: 1 }) + " h";
+  const [b, activity] = await Promise.all([
+    api("/business-summary"),
+    api("/activity-summary"),
+  ]);
+  businessCursor = b.requests.next;
+  const metrics = [
+    [
+      b.platform_accounts,
+      "Comptes clients",
+      "Tous les comptes inscrits, hors votre compte",
+    ],
+    [
+      b.pool_owners,
+      "Propriétaires de piscines",
+      "Au moins une piscine active, chacun compté une fois",
+    ],
+    [
+      b.maintenance_clients,
+      "Mes clients suivis",
+      "Propriétaires des piscines dont vous assurez l’entretien",
+    ],
+    [
+      b.followed_pools,
+      "Piscines en entretien",
+      "Les bassins de votre tournée actuelle",
+    ],
+  ];
   main.innerHTML =
     heading(
-      "Statistiques",
-      "Vos comptes rendus publiés pour les piscines que vous suivez actuellement.",
-      '<a href="#planning" class="btn secondary">Retour à l’agenda</a>',
+      "Tableau de bord",
+      "Votre activité Peace in Blue et les demandes d’entretien régulier.",
+      button("Ajouter un client", "request-client", "", "secondary"),
     ) +
-    `<div class="grid three"><div class="stat"><span>PASSAGES EFFECTUÉS</span><strong>${r.visits}</strong><small>${hours(r.minutes)} d’intervention enregistrées</small></div><div class="stat"><span>PISCINES SUIVIES</span><strong>${r.pools}</strong><small>Accès actifs uniquement</small></div><div class="stat"><span>CLIENTS</span><strong>${r.clients}</strong><small>Chaque copropriétaire est compté une fois</small></div></div><div class="grid two" style="margin-top:20px"><section class="card"><h2>Activité par mois</h2>${r.months.length ? `<table class="stats-table"><thead><tr><th>Mois</th><th>Passages</th><th>Durée</th></tr></thead><tbody>${r.months.map((m) => `<tr><td>${fmt(m.month + "-01", { month: "long", year: "numeric", day: undefined })}</td><td>${m.visits}</td><td>${hours(m.minutes)}</td></tr>`).join("")}</tbody></table>` : empty("Pas encore de passage publié", "Les statistiques se remplissent en terminant vos entretiens.")}</section><section class="card"><h2>Piscines les plus visitées</h2>${r.busiest.map((p) => `<a href="#pool/${esc(p.id)}" class="client-pool"><strong>${esc(p.name)}</strong><span>${p.visits} passage${p.visits > 1 ? "s" : ""} · ${hours(p.minutes)}</span></a>`).join("") || '<p class="small-note">Les visites terminées apparaîtront ici.</p>'}</section></div>`;
+    `<section class="business-metrics" aria-label="Utilisation de la plateforme">${metrics.map(([value, label, help]) => `<div><strong>${value}</strong><h2>${label}</h2><p>${help}</p></div>`).join("")}</section><section class="business-requests"><div class="section-heading"><div><h2>Demandes d’entretien régulier <span class="request-count">${b.pending_requests}</span></h2><p class="small-note">Contactez le client pour convenir des modalités. Prendre en charge ouvre son dossier, sans programmer de passage.</p></div></div><div id="maintenance-demands">${b.requests.items.length ? demandRows(b.requests.items) : '<p class="business-empty">Aucune demande en attente. Les nouvelles demandes apparaîtront ici.</p>'}</div><div id="maintenance-more">${businessCursor ? button("Voir les demandes suivantes", "more-maintenance", "", "secondary") : ""}</div></section><section class="business-activity"><div class="section-heading"><h2>Votre activité d’entretien</h2><a href="#planning" class="btn secondary small">Ouvrir l’agenda</a></div><p><strong>${activity.visits}</strong> passage${activity.visits > 1 ? "s" : ""} publié${activity.visits > 1 ? "s" : ""} sur vos piscines actuellement suivies.</p>${activity.months.length ? `<table class="stats-table"><thead><tr><th>Mois</th><th>Passages</th></tr></thead><tbody>${activity.months.map((m) => `<tr><td>${fmt(m.month + "-01", { month: "long", year: "numeric", day: undefined })}</td><td>${m.visits}</td></tr>`).join("")}</tbody></table>` : '<p class="small-note">Terminez votre premier entretien pour retrouver votre activité ici.</p>'}</section>`;
 }
+on("more-maintenance", async () => {
+  if (!businessCursor) return;
+  const b = await api(
+    "/business-summary?cursor=" + encodeURIComponent(businessCursor),
+  );
+  businessCursor = b.requests.next;
+  $("#maintenance-demands").insertAdjacentHTML(
+    "beforeend",
+    demandRows(b.requests.items),
+  );
+  $("#maintenance-more").innerHTML = businessCursor
+    ? button("Voir les demandes suivantes", "more-maintenance", "", "secondary")
+    : "";
+});
+on("accept-maintenance", (d) =>
+  confirmAction(
+    "Prendre en charge cette piscine ?",
+    "Le client vous a autorisé à accéder à son dossier pour l’entretien régulier. Convenez des modalités avec lui avant de planifier un passage.",
+    async () => {
+      const r = await api(
+        "/maintenance-requests/" + d.id + "/respond",
+        "POST",
+        { accept: true },
+      );
+      toast("Piscine ajoutée à votre tournée.");
+      go("pool/" + r.pool_id);
+    },
+    "Prendre en charge",
+  ),
+);
+on("decline-maintenance", (d) =>
+  confirmAction(
+    "Ne pas donner suite à cette demande ?",
+    "Le client sera informé dans son espace. Son carnet restera autonome.",
+    async () => {
+      await api("/maintenance-requests/" + d.id + "/respond", "POST", {
+        accept: false,
+      });
+      refresh();
+    },
+    "Confirmer",
+  ),
+);

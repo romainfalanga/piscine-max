@@ -98,3 +98,15 @@ export const server = createServer(async (req, res) => {
 }).listen(port, "127.0.0.1", () =>
   console.log(`Local test app: http://127.0.0.1:${port}`),
 );
+
+// Trusted in-process fixture setup. There is no HTTP route for provisioning.
+export function provisionProvider(email: string) {
+  const u = env.DB.db
+    .prepare("SELECT id FROM users WHERE login_email=?")
+    .get(email);
+  if (!u) throw new Error("Fixture account missing");
+  env.DB.db
+    .prepare("UPDATE business_provider SET user_id=? WHERE singleton=1")
+    .run(u.id);
+  env.DB.db.prepare("UPDATE users SET is_pro=1 WHERE id=?").run(u.id);
+}

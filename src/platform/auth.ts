@@ -97,7 +97,7 @@ export async function authenticate(c: C, next: () => Promise<void>) {
   const hash = await digest(token);
   const u = await row<User>(
     c,
-    "SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND u.disabled=0",
+    "SELECT u.*,CASE WHEN EXISTS(SELECT 1 FROM business_provider bp WHERE bp.user_id=u.id) THEN u.is_pro ELSE 0 END AS is_pro FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND u.disabled=0",
     hash,
     Date.now(),
   );
@@ -116,7 +116,7 @@ auth.post("/signup", async (c) => {
   const b = await c.req.json();
   const email = emailAddress(b.email),
     pwd = password(b.password);
-  const role = choice(b.role, ["client", "pro"] as const, "client");
+  // Public accounts are always clients; privileges are assigned only in D1.
   await limit(
     c,
     `signup:${await digest(c.req.header("CF-Connecting-IP") || "local")}`,
@@ -135,7 +135,7 @@ auth.post("/signup", async (c) => {
       email,
       hash,
       await digest(recovery),
-      role === "pro" ? 1 : 0,
+      0,
       email,
       email,
     ).run();
@@ -217,7 +217,7 @@ export const account = new Hono<Env>();
 account.get("/me", (c) =>
   c.json({
     ...publicUser(who(c)),
-    is_admin: Boolean(c.env.ADMIN_USER_ID && who(c).id === c.env.ADMIN_USER_ID),
+    is_admin: Boolean(who(c).is_pro),
   }),
 );
 account.post("/logout", async (c) => {
@@ -239,6 +239,11 @@ account.put("/me", async (c) => {
     fail("Le type de compte ne se modifie pas depuis le profil.", 403);
   const email = emailAddress(b.email ?? u.login_email),
     changedEmail = email !== u.login_email;
+  if (changedEmail && u.is_pro)
+    fail(
+      "L’adresse du compte Peace in Blue ne peut pas être modifiée depuis le profil.",
+      403,
+    );
   if (changedEmail) {
     const stored = await row<any>(c, "SELECT * FROM users WHERE id=?", u.id);
     await verifyCurrentPassword(c, b.current_password, stored);

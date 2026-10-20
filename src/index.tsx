@@ -4,6 +4,7 @@ import { serveStatic } from "hono/cloudflare-workers";
 import { bodyLimit } from "hono/body-limit";
 import { Env, uid, fail, limit, who } from "./platform/core";
 import { auth, account, authenticate } from "./platform/auth";
+import { business } from "./platform/business";
 import { connections } from "./platform/connections";
 import { pools } from "./platform/pools";
 import { records } from "./platform/records";
@@ -55,7 +56,7 @@ app.get("/api/health", (c) =>
     ok: true,
     application: "Peace in Blue App",
     version: 2,
-    release: "clear-interface-v10",
+    release: "business-v11",
   }),
 );
 app.route("/api/auth", auth);
@@ -69,6 +70,7 @@ app.route("/api", account);
 app.route("/api", pools);
 app.route("/api", locations);
 app.route("/api", connections);
+app.route("/api", business);
 app.route("/api", records);
 app.route("/api", planning);
 app.route("/api", resources);

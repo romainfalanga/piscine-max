@@ -69,8 +69,8 @@ connections.post("/connections", async (c) => {
       c,
       target.id,
       "invitation",
-      "Votre pisciniste souhaite vous rejoindre",
-      `${who(c).name} vous demande de choisir la piscine à lui confier.`,
+      "Peace in Blue vous propose un entretien régulier",
+      `Choisissez la piscine à confier à Peace in Blue.`,
     ),
   ]);
   return c.json({ id }, 201);
@@ -167,6 +167,16 @@ connections.post("/connections/:id/respond", async (c) => {
       nonce,
     ),
   );
+  if (poolId)
+    ops.push(
+      stmt(
+        c,
+        `UPDATE maintenance_requests SET status='accepted',resolved_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE pool_id=? AND status='pending' AND ${gate}`,
+        poolId,
+        r.id,
+        nonce,
+      ),
+    );
   const done = await c.env.DB.batch(ops);
   if (!done[0].meta.changes)
     fail("La demande ou les accès ont changé. Actualisez votre espace.", 409);

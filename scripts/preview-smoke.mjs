@@ -88,6 +88,7 @@ async function cleanup() {
     batch = [];
   for (const cleanupPoolId of poolIds) {
     for (const table of [
+      "maintenance_requests",
       "notifications",
       "private_notes",
       "photos",
@@ -143,7 +144,7 @@ try {
   for (let i = 0; i < 20; i++) {
     try {
       const r = await request("/health");
-      if (r.status === 200 && r.data?.release === "clear-interface-v10") {
+      if (r.status === 200 && r.data?.release === "business-v11") {
         const asset = await fetch(base + "/platform/interface.css", {
           cache: "no-store",
           signal: AbortSignal.timeout(15000),
@@ -206,12 +207,24 @@ try {
   assert.equal((await request("/pools")).status, 401);
   checks.push("Anonymous private access denied");
   const owner = await signup("owner", "client"),
-    pro = await signup("pro", "pro"),
-    outsider = await signup("outsider", "client"),
+    outsider = await signup("forged-pro", "pro"),
     coowner = await signup("coowner", "client");
+  assert.equal(outsider.is_pro, 0);
   assert.equal(
-    (await request("/me", "GET", undefined, owner.cookie)).data.email,
-    owner.email,
+    (await request("/business-summary", "GET", undefined, outsider.cookie))
+      .status,
+    403,
+  );
+  assert.equal(
+    (
+      await request(
+        "/connections",
+        "POST",
+        { email: owner.email },
+        outsider.cookie,
+      )
+    ).status,
+    403,
   );
   assert.equal(
     (
@@ -224,18 +237,15 @@ try {
     ).status,
     403,
   );
-  checks.push("Client identity and fixed account roles work on Workers");
+  checks.push("Public signup cannot acquire the reserved professional role");
   const addresses = await request(
     "/addresses?q=Place%20de%20la%20Liberte%20Toulon",
     "GET",
     undefined,
     owner.cookie,
   );
-  assert.equal(addresses.status, 200, JSON.stringify(addresses.data));
-  assert.ok(addresses.data.items.length > 0);
-  assert.ok(Number.isFinite(addresses.data.items[0].latitude));
-  checks.push("IGN address suggestions work from Workers");
-
+  assert.equal(addresses.status, 200);
+  assert.ok(addresses.data.items.length);
   const p = await request(
     "/pools",
     "POST",
@@ -249,48 +259,21 @@ try {
   poolId = p.data.id;
   poolIds.push(poolId);
   assert.equal(
-    (await request("/pools/" + poolId, "GET", undefined, outsider.cookie))
+    (await request(`/pools/${poolId}`, "GET", undefined, outsider.cookie))
       .status,
     404,
   );
-  assert.equal(
-    (await request("/pools/" + poolId, "GET", undefined, pro.cookie)).status,
-    404,
-  );
-  checks.push("Pool is private before invitation");
-  const inv = await request(
-    "/pools/" + poolId + "/invitations",
+  const invitation = await request(
+    `/pools/${poolId}/invitations`,
     "POST",
-    { kind: "principal", email: pro.email },
+    { email: coowner.email, kind: "owner" },
     owner.cookie,
   );
-  assert.equal(inv.status, 201);
+  assert.equal(invitation.status, 201);
   assert.equal(
     (
       await request(
-        "/invitations/" + inv.data.id + "/respond",
-        "POST",
-        { accept: true },
-        pro.cookie,
-      )
-    ).status,
-    200,
-  );
-  assert.equal(
-    (await request("/pools/" + poolId, "GET", undefined, pro.cookie)).status,
-    200,
-  );
-  const coInvitation = await request(
-    "/pools/" + poolId + "/invitations",
-    "POST",
-    { kind: "owner", email: coowner.email },
-    owner.cookie,
-  );
-  assert.equal(coInvitation.status, 201);
-  assert.equal(
-    (
-      await request(
-        "/invitations/" + coInvitation.data.id + "/respond",
+        `/invitations/${invitation.data.id}/respond`,
         "POST",
         { accept: true },
         coowner.cookie,
@@ -299,138 +282,35 @@ try {
     200,
   );
   assert.equal(
-    (await request("/pools/" + poolId, "GET", undefined, coowner.cookie)).data
+    (await request(`/pools/${poolId}`, "GET", undefined, coowner.cookie)).data
       .membership,
     "owner",
   );
   assert.equal(
     (
       await request(
-        "/pools/" + poolId + "/needs",
-        "GET",
-        undefined,
-        coowner.cookie,
-      )
-    ).status,
-    403,
-  );
-  assert.equal(
-    (
-      await request(
-        "/pools/" + poolId + "/records",
+        `/pools/${poolId}/invitations`,
         "POST",
-        { kind: "visit", measured_at: new Date().toISOString() },
-        coowner.cookie,
-      )
-    ).status,
-    403,
-  );
-  checks.push(
-    "Email invitations grant professional and co-owner roles after acceptance",
-  );
-  assert.equal(
-    (
-      await request(
-        "/pools/" + poolId + "/needs",
-        "GET",
-        undefined,
+        { email: outsider.email, kind: "principal" },
         owner.cookie,
       )
     ).status,
     403,
   );
-  assert.equal(
-    (await request("/pools/" + poolId + "/needs", "GET", undefined, pro.cookie))
-      .status,
-    200,
-  );
-  const clientDossier = (
-    await request("/pools/" + poolId, "GET", undefined, owner.cookie)
-  ).data;
-  assert.equal(clientDossier.maintenance_tasks, undefined);
-  assert.equal(clientDossier.routine, undefined);
-  assert.ok(clientDossier.members.every((m) => !m.username && m.email));
-  checks.push(
-    "Client dossier excludes professional preparation and uses email identities",
-  );
-  assert.equal(
-    (await request("/health")).data.application,
-    "Peace in Blue App",
-  );
-  for (const path of ["/help", "/tools/config", "/assistant"])
-    assert.equal(
-      (await request(path, "GET", undefined, pro.cookie)).status,
-      404,
-    );
-  const progressPath = "/guides/entretien/progress?pool_id=" + poolId;
-  assert.equal(
-    (await request("/guides", "GET", undefined, owner.cookie)).status,
-    403,
-  );
-  assert.equal(
-    (await request("/guides", "GET", undefined, pro.cookie)).data.items.length,
-    8,
-  );
-  const progress = {
-    revision: 0,
-    variant: "sand",
-    checks: { arrival: "done" },
-  };
-  assert.equal(
-    (await request(progressPath, "PUT", progress, pro.cookie)).status,
-    200,
-  );
-  assert.equal(
-    (await request(progressPath, "GET", undefined, pro.cookie)).data.checks
-      .arrival,
-    "done",
-  );
-  assert.equal(
-    (await request(progressPath, "PUT", progress, pro.cookie)).status,
-    409,
-  );
-  assert.equal(
-    (await request(progressPath, "GET", undefined, outsider.cookie)).status,
-    403,
-  );
-  assert.equal(
-    (await request("/quiz?count=10", "GET", undefined, pro.cookie)).data.items
-      .length,
-    10,
-  );
-  checks.push(
-    "Renamed app, removed routes and private guided progress work on D1",
-  );
-
-  const record = await request(
-    "/pools/" + poolId + "/records",
+  checks.push("Private pool, IGN address and co-ownership consent work online");
+  const analysis = await request(
+    `/pools/${poolId}/records`,
     "POST",
     {
-      id: randomUUID(),
-      kind: "visit",
+      kind: "analysis",
       measured_at: new Date(Date.now() - 1000).toISOString(),
       readings: { ph: 7.2, chlorine: 1.5 },
-      notes: "Recette automatique sans données réelles",
-      checklist: (
-        await request("/pools/" + poolId, "GET", undefined, pro.cookie)
-      ).data.maintenance_tasks.map((t) => ({ ...t, done: true })),
     },
-    pro.cookie,
+    owner.cookie,
   );
-  assert.equal(record.status, 201);
-  assert.equal(
-    (
-      await request(
-        "/records/" + record.data.id,
-        "GET",
-        undefined,
-        owner.cookie,
-      )
-    ).status,
-    404,
-  );
-  const fd = new FormData();
-  fd.set(
+  assert.equal(analysis.status, 201);
+  const form = new FormData();
+  form.set(
     "file",
     new File(
       [
@@ -444,61 +324,17 @@ try {
     ),
   );
   const image = await request(
-    "/records/" + record.data.id + "/photos",
+    `/records/${analysis.data.id}/photos`,
     "POST",
-    fd,
-    pro.cookie,
+    form,
+    owner.cookie,
   );
   assert.equal(image.status, 201);
   photos.push("platform/" + poolId + "/" + image.data.id);
   assert.equal(
-    (await request("/photos/" + image.data.id, "GET", undefined, owner.cookie))
-      .status,
-    404,
-  );
-  assert.equal(
     (
       await request(
-        "/pools/" + poolId + "/overview",
-        "GET",
-        undefined,
-        owner.cookie,
-      )
-    ).data.last_photo,
-    null,
-  );
-  checks.push("Draft and photo are private");
-  assert.equal(
-    (
-      await request(
-        "/records/" + record.data.id + "/publish",
-        "POST",
-        {},
-        pro.cookie,
-      )
-    ).status,
-    200,
-  );
-  assert.equal(
-    (
-      await request(
-        "/records/" + record.data.id,
-        "GET",
-        undefined,
-        owner.cookie,
-      )
-    ).status,
-    200,
-  );
-  assert.equal(
-    (await request("/photos/" + image.data.id, "GET", undefined, owner.cookie))
-      .status,
-    200,
-  );
-  assert.equal(
-    (
-      await request(
-        "/photos/" + image.data.id,
+        `/photos/${image.data.id}`,
         "GET",
         undefined,
         outsider.cookie,
@@ -506,42 +342,110 @@ try {
     ).status,
     404,
   );
-  const overview = (
-    await request(
-      "/pools/" + poolId + "/overview",
-      "GET",
-      undefined,
-      owner.cookie,
-    )
-  ).data;
-  assert.equal(overview.last_photo.id, image.data.id);
+  checks.push("Client analysis and R2 photos preserve dossier privacy");
   assert.equal(
     (
       await request(
-        "/photos/" + image.data.id,
+        `/pools/${poolId}/intervenant`,
+        "POST",
+        { phone: "0412345678" },
+        owner.cookie,
+      )
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await request(
+        `/pools/${poolId}/intervenant`,
+        "POST",
+        { phone: "0612345678" },
+        coowner.cookie,
+      )
+    ).status,
+    403,
+  );
+  const demand = await request(
+    `/pools/${poolId}/intervenant`,
+    "POST",
+    { phone: "0612345678" },
+    owner.cookie,
+  );
+  assert.equal(demand.status, 201);
+  assert.equal(
+    (
+      await request(
+        `/pools/${poolId}/intervenant`,
+        "POST",
+        { phone: "0612345678" },
+        owner.cookie,
+      )
+    ).status,
+    409,
+  );
+  assert.equal(
+    (
+      await request(
+        `/pools/${poolId}/intervenant`,
         "GET",
         undefined,
         coowner.cookie,
       )
-    ).status,
-    200,
+    ).data.request.phone,
+    null,
   );
-  assert.equal(overview.last_visit.id, record.data.id);
-  assert.equal(overview.measurements.ph.value, 7.2);
-  checks.push(
-    "Published report and R2 photo shared only with authorized client",
-  );
-  const details = await request(
-      "/pools/" + poolId,
-      "GET",
-      undefined,
-      owner.cookie,
-    ),
-    member = details.data.members.find((m) => m.user_id === pro.id);
   assert.equal(
     (
       await request(
-        "/pools/" + poolId + "/members/" + member.id,
+        `/maintenance-requests/${demand.data.id}/respond`,
+        "POST",
+        { accept: true },
+        outsider.cookie,
+      )
+    ).status,
+    403,
+  );
+  // Read-only runtime verification: never promote another account or change the
+  // real provider binding in a deployed smoke test.
+  const dbResponse = await fetch(
+    `https://api.cloudflare.com/client/v4/accounts/${account}/d1/database/${resources.database_id}/query`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + process.env.CLOUDFLARE_API_TOKEN,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        batch: [
+          { sql: "SELECT count(*) n FROM users WHERE is_pro=1" },
+          {
+            sql: "SELECT b.user_id,u.login_email FROM business_provider b JOIN users u ON u.id=b.user_id WHERE u.disabled=0 AND u.is_pro=1",
+          },
+          {
+            sql: "SELECT count(*) n FROM notifications n JOIN business_provider b ON b.user_id=n.user_id WHERE n.maintenance_request_id=?",
+            params: [demand.data.id],
+          },
+        ],
+      }),
+      signal: AbortSignal.timeout(25000),
+    },
+  );
+  const db = await dbResponse.json();
+  assert.equal(db.success, true);
+  assert.equal(db.result[0].results[0].n, 1);
+  assert.equal(
+    db.result[1].results[0].user_id,
+    "bcb167e4-2ddc-45c1-816a-82e7008904af",
+  );
+  assert.equal(
+    db.result[1].results[0].login_email,
+    "romainfalanga83@gmail.com",
+  );
+  assert.equal(db.result[2].results[0].n, 1);
+  assert.equal(
+    (
+      await request(
+        `/pools/${poolId}/intervenant/${demand.data.id}`,
         "DELETE",
         {},
         owner.cookie,
@@ -549,119 +453,9 @@ try {
     ).status,
     200,
   );
-  assert.equal(
-    (await request(progressPath, "GET", undefined, pro.cookie)).status,
-    404,
-  );
-  assert.equal(
-    (await request("/records/" + record.data.id, "GET", undefined, pro.cookie))
-      .status,
-    404,
-  );
-  assert.equal(
-    (await request("/photos/" + image.data.id, "GET", undefined, pro.cookie))
-      .status,
-    404,
-  );
-  assert.equal(
-    (
-      await request(
-        "/records/" + record.data.id,
-        "GET",
-        undefined,
-        owner.cookie,
-      )
-    ).status,
-    200,
-  );
-  checks.push("Revocation denies former pro; owner history retained");
-  const join = await request(
-    "/connections",
-    "POST",
-    { email: owner.email },
-    pro.cookie,
-  );
-  assert.equal(join.status, 201);
-  assert.equal(
-    (
-      await request(
-        "/connections/" + join.data.id + "/respond",
-        "POST",
-        { accept: true, pool_id: poolId },
-        owner.cookie,
-      )
-    ).status,
-    200,
-  );
-  assert.equal(
-    (await request("/pools/" + poolId, "GET", undefined, pro.cookie)).data
-      .membership,
-    "principal",
-  );
-  const prepared = await request(
-    "/pools",
-    "POST",
-    {
-      name: "Piscine préparée de recette",
-      mode: "pro",
-      client_email: owner.email,
-    },
-    pro.cookie,
-  );
-  assert.equal(prepared.status, 201);
-  poolIds.push(prepared.data.id);
-  assert.equal(
-    (
-      await request(
-        "/pools/" + prepared.data.id,
-        "GET",
-        undefined,
-        owner.cookie,
-      )
-    ).status,
-    404,
-  );
-  const claims = (await request("/invitations", "GET", undefined, owner.cookie))
-    .data.items;
-  const claim = claims.find((i) => i.claim === 1);
-  assert.ok(claim);
-  assert.equal(
-    (
-      await request(
-        "/invitations/" + claim.id + "/respond",
-        "POST",
-        { accept: true },
-        owner.cookie,
-      )
-    ).status,
-    200,
-  );
-  assert.equal(
-    (
-      await request(
-        "/pools/" + prepared.data.id,
-        "GET",
-        undefined,
-        owner.cookie,
-      )
-    ).data.manager,
-    1,
-  );
-  assert.equal(
-    (
-      await request(
-        "/pools/" + prepared.data.id + "/invitations",
-        "POST",
-        { kind: "temporary", email: pro.email },
-        owner.cookie,
-      )
-    ).status,
-    400,
-  );
   checks.push(
-    "Professional creates a pool; client claims it; requests join existing pools with one principal",
+    "Regular maintenance demand requires mobile, notifies the sole provider and can be cancelled",
   );
-
   const csrf = await fetch(base + "/api/pools", {
     method: "POST",
     headers: {

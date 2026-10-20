@@ -1,3 +1,13 @@
+# Activité Peace in Blue réservée à Romain, 20 octobre 2026
+
+- 39 tests API, droits, métier et calculs réussis. TypeScript et compilation de production réussis.
+- Parcours navigateur complet réussi sans erreur JavaScript, avec tableau de bord vérifié visuellement sur mobile et ordinateur. Connexion unique, réservation du compte professionnel par provisionnement privilégié, demande avec téléphone, prise en charge depuis le tableau de bord et proposition initiée par email sont couverts.
+- Tests des demandes annulées, archivées ou devenues invalides après transfert de responsabilité, de l’acceptation unique, du refus des faux comptes professionnels, de la confidentialité du téléphone et des compteurs distincts.
+- Migration testée : les autres accès professionnels sont révoqués et leurs récurrences arrêtées ; les rapports publiés restent consultables par les propriétaires. Aucune inscription, même avec l’email réservé sur une installation vide, n’obtient de droits professionnels.
+- Le contrôle distant vérifie le compte unique et la notification de demande dans D1 sans créer un second professionnel ni prendre la place du compte réel. Il supprime ses demandes et leurs notifications de test par relation de clé étrangère.
+
+---
+
 # Connexion par email et tableau de bord avec photo
 
 - 31 tests métier et droits réussis. Vérification TypeScript et compilation réussies.

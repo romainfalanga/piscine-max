@@ -112,6 +112,24 @@ async function user(env: any, name: string, role = "client") {
     role,
   });
   assert.equal(r.status, 201, JSON.stringify(r.data));
+  // Trusted fixture provisioning, never a public signup privilege.
+  if (
+    role === "pro" &&
+    env.DB.db
+      .prepare("SELECT name FROM sqlite_master WHERE name='business_provider'")
+      .get() &&
+    !env.DB.db
+      .prepare("SELECT user_id FROM business_provider WHERE singleton=1")
+      .get().user_id
+  ) {
+    env.DB.db
+      .prepare("UPDATE business_provider SET user_id=? WHERE singleton=1")
+      .run(r.data.user.id);
+    env.DB.db
+      .prepare("UPDATE users SET is_pro=1 WHERE id=?")
+      .run(r.data.user.id);
+    r.data.user.is_pro = 1;
+  }
   return { ...r.data, token: r.token! };
 }
 async function pool(env: any, u: any, name = "Piscine privée") {
@@ -138,6 +156,25 @@ async function invite(
   kind: string,
   until = "2099-01-01",
 ) {
+  if (kind === "principal") {
+    const demand = await request(
+      env,
+      `/pools/${poolId}/intervenant`,
+      "POST",
+      { phone: "0612345678" },
+      owner.token,
+    );
+    assert.equal(demand.status, 201, JSON.stringify(demand.data));
+    const linked = await request(
+      env,
+      `/maintenance-requests/${demand.data.id}/respond`,
+      "POST",
+      { accept: true },
+      target.token,
+    );
+    assert.equal(linked.status, 200, JSON.stringify(linked.data));
+    return demand.data.id;
+  }
   const r = await request(
     env,
     "/pools/" + poolId + "/invitations",
@@ -296,7 +333,7 @@ test("Exactly one principal, no duplicate invitation acceptance, and revocation 
     { email: "quentin@example.test", kind: "principal" },
     a.token,
   );
-  assert.equal(i.status, 409);
+  assert.equal(i.status, 403);
   const r = await request(
     e,
     "/pools/" + id + "/records",
@@ -767,8 +804,8 @@ test("Classic clients, map and activity stats only expose current assignments an
   assert.equal(stats.months[0].visits, 1);
   assert.equal(
     (await request(e, "/activity-summary", "GET", undefined, stranger.token))
-      .data.visits,
-    0,
+      .status,
+    403,
   );
   const detail = await request(
     e,
@@ -899,7 +936,7 @@ test("Guided checklists are personal, scoped to assigned pools, validate variant
   );
   assert.equal(
     (await request(e, path, "GET", undefined, other.token)).status,
-    404,
+    403,
   );
   assert.equal(
     (
@@ -969,9 +1006,8 @@ test("Code du pisciniste supports short themed practice and complete sessions wi
     1,
   );
   assert.equal(
-    (await request(e, "/quiz/history", "GET", undefined, other.token)).data
-      .items.length,
-    0,
+    (await request(e, "/quiz/history", "GET", undefined, other.token)).status,
+    403,
   );
   assert.equal(
     (
@@ -1141,7 +1177,7 @@ test("Professional can create a pool, invite its client and hand ownership over 
         client.token,
       )
     ).status,
-    409,
+    403,
   );
   assert.equal(
     (
@@ -1176,9 +1212,21 @@ test("Professional can create a pool, invite its client and hand ownership over 
       .items.length,
     0,
   );
-  await invite(e, client, other, id, "principal");
   assert.equal(
-    (await request(e, "/pools/" + id, "GET", undefined, other.token)).status,
+    (
+      await request(
+        e,
+        "/connections",
+        "POST",
+        { email: client.user.email },
+        other.token,
+      )
+    ).status,
+    403,
+  );
+  await invite(e, client, pro, id, "principal");
+  assert.equal(
+    (await request(e, "/pools/" + id, "GET", undefined, pro.token)).status,
     200,
   );
 });
@@ -1268,7 +1316,7 @@ test("Professional requests an existing pool; only its client manager can author
     "/connections",
     "POST",
     { email: "alice@example.test" },
-    other.token,
+    pro.token,
   );
   assert.equal(
     (
@@ -1291,7 +1339,7 @@ test("Professional requests an existing pool; only its client manager can author
     "/connections",
     "POST",
     { email: "bob@example.test" },
-    other.token,
+    pro.token,
   );
   assert.equal(
     (
@@ -1305,7 +1353,7 @@ test("Professional requests an existing pool; only its client manager can author
     ).status,
     403,
   );
-  await request(e, "/connections/" + second.data.id, "DELETE", {}, other.token);
+  await request(e, "/connections/" + second.data.id, "DELETE", {}, pro.token);
   assert.equal(
     (
       await request(
@@ -1430,31 +1478,49 @@ test("Existing work on a prepared pool prevents silent merging or loss of histor
     1,
   );
 });
-test("Only the first accepted principal invitation succeeds and a claim expires when its creator leaves", async () => {
+test("Only one maintenance request is pending; acceptance is single-use and an archived claim expires", async () => {
   const e = context(),
     owner = await user(e, "alice"),
     pro = await user(e, "paul", "pro"),
-    other = await user(e, "quentin", "pro"),
+    outsider = await user(e, "quentin", "pro"),
     id = await pool(e, owner);
   const a = await request(
     e,
-    "/pools/" + id + "/invitations",
+    `/pools/${id}/intervenant`,
     "POST",
-    { email: "paul@example.test", kind: "principal" },
+    { phone: "0612345678" },
     owner.token,
   );
-  const b = await request(
-    e,
-    "/pools/" + id + "/invitations",
-    "POST",
-    { email: "quentin@example.test", kind: "principal" },
-    owner.token,
+  assert.equal(a.status, 201);
+  assert.equal(
+    (
+      await request(
+        e,
+        `/pools/${id}/intervenant`,
+        "POST",
+        { phone: "0612345678" },
+        owner.token,
+      )
+    ).status,
+    409,
   );
   assert.equal(
     (
       await request(
         e,
-        "/invitations/" + a.data.id + "/respond",
+        `/maintenance-requests/${a.data.id}/respond`,
+        "POST",
+        { accept: true },
+        outsider.token,
+      )
+    ).status,
+    403,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        `/maintenance-requests/${a.data.id}/respond`,
         "POST",
         { accept: true },
         pro.token,
@@ -1466,13 +1532,13 @@ test("Only the first accepted principal invitation succeeds and a claim expires 
     (
       await request(
         e,
-        "/invitations/" + b.data.id + "/respond",
+        `/maintenance-requests/${a.data.id}/respond`,
         "POST",
         { accept: true },
-        other.token,
+        pro.token,
       )
     ).status,
-    409,
+    404,
   );
   assert.equal(
     e.DB.db
@@ -1491,23 +1557,18 @@ test("Only the first accepted principal invitation succeeds and a claim expires 
       mode: "pro",
       client_email: "alice@example.test",
     },
-    other.token,
+    pro.token,
   );
+  assert.equal(prep.status, 201);
   const claim = (
     await request(e, "/invitations", "GET", undefined, owner.token)
   ).data.items[0];
-  await request(
-    e,
-    "/pools/" + prep.data.id + "/archive",
-    "POST",
-    {},
-    other.token,
-  );
+  await request(e, `/pools/${prep.data.id}/archive`, "POST", {}, pro.token);
   assert.equal(
     (
       await request(
         e,
-        "/invitations/" + claim.id + "/respond",
+        `/invitations/${claim.id}/respond`,
         "POST",
         { accept: true },
         owner.token,
@@ -1568,6 +1629,16 @@ test("Migration revokes legacy temporary access and schedules without deleting p
       "utf8",
     ),
   );
+  e.DB.db.exec(
+    readFileSync(
+      new URL("../schema/0007_business_provider.sql", import.meta.url),
+      "utf8",
+    ),
+  );
+  e.DB.db
+    .prepare("UPDATE business_provider SET user_id=? WHERE singleton=1")
+    .run(pro.user.id);
+  e.DB.db.prepare("UPDATE users SET is_pro=1 WHERE id=?").run(pro.user.id);
   assert.equal(
     (await request(e, "/pools/" + id, "GET", undefined, pro.token)).status,
     404,
@@ -2075,6 +2146,12 @@ test("Email migration preserves legacy accounts, avoids ambiguous duplicates, an
   );
   for (const id of ["two", "three", "four"])
     assert.equal(values.find((x: any) => x.id === id)?.login_email, null);
+  e.DB.db.exec(
+    readFileSync(
+      new URL("../schema/0007_business_provider.sql", import.meta.url),
+      "utf8",
+    ),
+  );
   const legacy = await user(e, "legacycode");
   e.DB.db
     .prepare("UPDATE users SET email=NULL,login_email=NULL WHERE id=?")
@@ -2363,7 +2440,7 @@ test("Email invitations grant the selected role only, after acceptance", async (
         manager.token,
       )
     ).status,
-    400,
+    403,
   );
   await invite(e, manager, pro, id, "principal");
   const professional = (
@@ -2643,5 +2720,467 @@ test("Recurrence edits update future occurrences, preserve completed reports and
       )
     ).data.readings.ph,
     7.2,
+  );
+});
+
+test("Public signup never grants professional rights, even with a forged role or the business email", async () => {
+  const e = context();
+  for (const email of ["romainfalanga83@gmail.com", "otherpro@example.test"]) {
+    const r = await request(e, "/auth/signup", "POST", {
+      email,
+      password: "Long fixture password only!",
+      role: "pro",
+      is_pro: 1,
+      is_admin: true,
+    });
+    assert.equal(r.status, 201);
+    assert.equal(r.data.user.is_pro, 0);
+    for (const path of ["/business-summary", "/activity-summary", "/guides"])
+      assert.equal(
+        (await request(e, path, "GET", undefined, r.token)).status,
+        403,
+      );
+  }
+  assert.equal(
+    e.DB.db.prepare("SELECT user_id FROM business_provider").get()!.user_id,
+    null,
+  );
+  assert.throws(() =>
+    e.DB.db
+      .prepare(
+        "UPDATE users SET is_pro=1 WHERE login_email='romainfalanga83@gmail.com'",
+      )
+      .run(),
+  );
+});
+
+test("Regular maintenance requires a mobile, preserves private dossiers until acceptance and counts distinct clients", async () => {
+  const e = context(),
+    admin = await user(e, "business", "pro"),
+    owner = await user(e, "owner"),
+    co = await user(e, "co"),
+    autonomous = await user(e, "autonomous"),
+    blank = await user(e, "blank"),
+    id = await pool(e, owner);
+  await invite(e, owner, co, id, "owner");
+  await pool(e, autonomous);
+  for (const phone of ["", "hello", "0412345678", "+33412345678", "06123"])
+    assert.equal(
+      (
+        await request(
+          e,
+          `/pools/${id}/intervenant`,
+          "POST",
+          { phone },
+          owner.token,
+        )
+      ).status,
+      400,
+    );
+  assert.equal(
+    (
+      await request(
+        e,
+        `/pools/${id}/intervenant`,
+        "POST",
+        { phone: "0612345678" },
+        co.token,
+      )
+    ).status,
+    403,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        `/pools/${id}/intervenant`,
+        "GET",
+        undefined,
+        autonomous.token,
+      )
+    ).status,
+    404,
+  );
+  const demand = await request(
+    e,
+    `/pools/${id}/intervenant`,
+    "POST",
+    { phone: "06 12 34 56 78" },
+    owner.token,
+  );
+  assert.equal(demand.status, 201);
+  assert.equal(
+    (await request(e, `/pools/${id}`, "GET", undefined, admin.token)).status,
+    404,
+  );
+  const b = (
+    await request(e, "/business-summary", "GET", undefined, admin.token)
+  ).data;
+  assert.equal(b.platform_accounts, 4);
+  assert.equal(b.pool_owners, 3);
+  assert.equal(b.maintenance_clients, 0);
+  assert.equal(b.pending_requests, 1);
+  assert.equal(b.requests.items[0].phone, "+33612345678");
+  assert.equal(b.requests.items[0].address, undefined);
+  assert.equal(b.requests.items[0].pool_id, undefined);
+  assert.equal(
+    (await request(e, `/pools/${id}/intervenant`, "GET", undefined, co.token))
+      .data.request.phone,
+    null,
+  );
+  const notices = (
+    await request(e, "/notifications", "GET", undefined, admin.token)
+  ).data.items;
+  assert.equal(
+    notices.filter((n: any) => n.type === "maintenance-request").length,
+    1,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        `/maintenance-requests/${demand.data.id}/respond`,
+        "POST",
+        { accept: true },
+        admin.token,
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (await request(e, `/pools/${id}`, "GET", undefined, admin.token)).status,
+    200,
+  );
+  assert.equal(
+    (await request(e, "/business-summary", "GET", undefined, admin.token)).data
+      .maintenance_clients,
+    2,
+  );
+  const second = await pool(e, owner, "Deuxième piscine");
+  await invite(e, owner, admin, second, "principal");
+  const summary = (
+    await request(e, "/business-summary", "GET", undefined, admin.token)
+  ).data;
+  assert.equal(summary.maintenance_clients, 2);
+  assert.equal(summary.followed_pools, 2);
+  const p = (await request(e, `/pools/${id}`, "GET", undefined, owner.token))
+    .data;
+  const membership = p.members.find((m: any) => m.kind === "principal");
+  assert.equal(
+    (
+      await request(
+        e,
+        `/pools/${id}/members/${membership.id}`,
+        "DELETE",
+        {},
+        owner.token,
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (await request(e, `/pools/${id}`, "GET", undefined, admin.token)).status,
+    404,
+  );
+  assert.equal(
+    (await request(e, "/business-summary", "GET", undefined, admin.token)).data
+      .maintenance_clients,
+    1,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        "/me",
+        "PUT",
+        {
+          email: "changed@example.test",
+          current_password: "Test account long password 2026!",
+        },
+        admin.token,
+      )
+    ).status,
+    403,
+  );
+});
+
+test("Cancelled, declined, archived and transferred maintenance consent cannot be reused", async () => {
+  const e = context(),
+    admin = await user(e, "business", "pro"),
+    owner = await user(e, "owner"),
+    co = await user(e, "co"),
+    id = await pool(e, owner);
+  await invite(e, owner, co, id, "owner");
+  const demand = async () => {
+    const r = await request(
+      e,
+      `/pools/${id}/intervenant`,
+      "POST",
+      { phone: "0712345678" },
+      owner.token,
+    );
+    assert.equal(r.status, 201, JSON.stringify(r.data));
+    return r.data.id;
+  };
+  const first = await demand();
+  assert.equal(
+    (
+      await request(
+        e,
+        `/pools/${id}/intervenant/${first}`,
+        "DELETE",
+        {},
+        owner.token,
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        `/maintenance-requests/${first}/respond`,
+        "POST",
+        { accept: true },
+        admin.token,
+      )
+    ).status,
+    404,
+  );
+  const second = await demand();
+  assert.equal(
+    (
+      await request(
+        e,
+        `/maintenance-requests/${second}/respond`,
+        "POST",
+        { accept: false },
+        admin.token,
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (await request(e, `/pools/${id}`, "GET", undefined, admin.token)).status,
+    404,
+  );
+  const third = await demand();
+  const p = (await request(e, `/pools/${id}`, "GET", undefined, owner.token))
+    .data;
+  const coMember = p.members.find((m: any) => m.user_id === co.user.id);
+  assert.equal(
+    (
+      await request(
+        e,
+        `/pools/${id}/manager`,
+        "POST",
+        { member_id: coMember.id },
+        owner.token,
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        `/maintenance-requests/${third}/respond`,
+        "POST",
+        { accept: true },
+        admin.token,
+      )
+    ).status,
+    404,
+  );
+  assert.equal(
+    (await request(e, "/business-summary", "GET", undefined, admin.token)).data
+      .pending_requests,
+    0,
+  );
+  const next = await request(
+    e,
+    `/pools/${id}/intervenant`,
+    "POST",
+    { phone: "+33712345678" },
+    co.token,
+  );
+  assert.equal(next.status, 201);
+  e.DB.db
+    .prepare("UPDATE pools SET archived_at=? WHERE id=?")
+    .run(measured(), id);
+  assert.equal(
+    (
+      await request(
+        e,
+        `/maintenance-requests/${next.data.id}/respond`,
+        "POST",
+        { accept: true },
+        admin.token,
+      )
+    ).status,
+    404,
+  );
+});
+
+test("Business migration pins only the pre-existing designated account and revokes all other professionals without deleting reports", async () => {
+  const e = { ...context(), DB: new LocalD1("0006_email_login.sql") },
+    adminId = "bcb167e4-2ddc-45c1-816a-82e7008904af";
+  e.DB.db
+    .prepare(
+      "INSERT INTO users(id,username,name,password_hash,recovery_hash,is_pro,email,login_email) VALUES(?,?,?,'unused','unused',1,?,?)",
+    )
+    .run(
+      adminId,
+      adminId,
+      "Romain",
+      "romainfalanga83@gmail.com",
+      "romainfalanga83@gmail.com",
+    );
+  const owner = await user(e, "owner"),
+    former = await user(e, "former");
+  e.DB.db.prepare("UPDATE users SET is_pro=1 WHERE id=?").run(former.user.id);
+  const id = crypto.randomUUID();
+  e.DB.db
+    .prepare(
+      "INSERT INTO pools(id,name,created_by) VALUES(?,'Bassin existant',?)",
+    )
+    .run(id, owner.user.id);
+  e.DB.db
+    .prepare(
+      "INSERT INTO pool_members(id,pool_id,user_id,kind,manager) VALUES('owner',?,?,'owner',1)",
+    )
+    .run(id, owner.user.id);
+  e.DB.db
+    .prepare(
+      "INSERT INTO pool_members(id,pool_id,user_id,kind) VALUES('former',?,?,'principal')",
+    )
+    .run(id, former.user.id);
+  e.DB.db
+    .prepare(
+      "INSERT INTO schedules(id,pool_id,pro_id,start_date) VALUES('old',?,?,'2026-01-01')",
+    )
+    .run(id, former.user.id);
+  e.DB.db
+    .prepare(
+      "INSERT INTO records(id,pool_id,author_id,author_name,kind,measured_at,published_at) VALUES('kept',?,?,'Ancien intervenant','visit',?,?)",
+    )
+    .run(id, former.user.id, measured(), measured());
+  e.DB.db.exec(
+    readFileSync(
+      new URL("../schema/0007_business_provider.sql", import.meta.url),
+      "utf8",
+    ),
+  );
+  assert.equal(
+    e.DB.db.prepare("SELECT user_id FROM business_provider").get()!.user_id,
+    adminId,
+  );
+  assert.equal(
+    e.DB.db.prepare("SELECT count(*) n FROM users WHERE is_pro=1").get()!.n,
+    1,
+  );
+  assert.equal(
+    e.DB.db.prepare("SELECT active FROM schedules WHERE id='old'").get()!
+      .active,
+    0,
+  );
+  assert.equal(
+    (await request(e, `/pools/${id}`, "GET", undefined, former.token)).status,
+    404,
+  );
+  assert.equal(
+    (await request(e, "/records/kept", "GET", undefined, owner.token)).status,
+    200,
+  );
+  assert.equal(
+    (await request(e, "/business-summary", "GET", undefined, former.token))
+      .status,
+    403,
+  );
+});
+
+test("Maintenance queue pagination stays stable after resolution and fixture deletion removes its notification", async () => {
+  const e = context(),
+    admin = await user(e, "business", "pro"),
+    owner = await user(e, "owner");
+  const ids: string[] = [];
+  for (let i = 0; i < 3; i++) {
+    const id = await pool(e, owner, "Piscine " + i);
+    const r = await request(
+      e,
+      `/pools/${id}/intervenant`,
+      "POST",
+      { phone: "0612345678" },
+      owner.token,
+    );
+    assert.equal(r.status, 201);
+    ids.push(r.data.id);
+  }
+  const first = (
+    await request(e, "/business-summary?limit=1", "GET", undefined, admin.token)
+  ).data;
+  assert.equal(first.pending_requests, 3);
+  assert.equal(first.requests.items.length, 1);
+  assert.ok(first.requests.next);
+  assert.equal(
+    (
+      await request(
+        e,
+        `/maintenance-requests/${first.requests.items[0].id}/respond`,
+        "POST",
+        { accept: false },
+        admin.token,
+      )
+    ).status,
+    200,
+  );
+  const second = (
+    await request(
+      e,
+      "/business-summary?limit=1&cursor=" +
+        encodeURIComponent(first.requests.next),
+      "GET",
+      undefined,
+      admin.token,
+    )
+  ).data;
+  assert.equal(second.requests.items.length, 1);
+  assert.notEqual(second.requests.items[0].id, first.requests.items[0].id);
+  const third = (
+    await request(
+      e,
+      "/business-summary?limit=1&cursor=" +
+        encodeURIComponent(second.requests.next),
+      "GET",
+      undefined,
+      admin.token,
+    )
+  ).data;
+  assert.equal(third.requests.items.length, 1);
+  assert.equal(third.requests.next, null);
+  assert.equal(
+    new Set([first, second, third].map((x) => x.requests.items[0].id)).size,
+    3,
+  );
+  assert.equal(
+    (
+      await request(
+        e,
+        "/business-summary?cursor=bad",
+        "GET",
+        undefined,
+        admin.token,
+      )
+    ).status,
+    400,
+  );
+  e.DB.db.prepare("DELETE FROM maintenance_requests WHERE id=?").run(ids[0]);
+  assert.equal(
+    e.DB.db
+      .prepare(
+        "SELECT count(*) n FROM notifications WHERE maintenance_request_id=?",
+      )
+      .get(ids[0])!.n,
+    0,
   );
 });

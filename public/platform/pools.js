@@ -61,7 +61,7 @@ export async function pools(main) {
     api("/connections"),
   ]);
   morePoolCursor = r.next;
-  main.innerHTML = `<div class="page-heading"><div><h1>${pro ? "Mes piscines suivies" : "Mes piscines"}</h1><p>${pro ? "Les bassins de votre tournée." : "Retrouvez vos analyses et les comptes rendus de vos piscines."}</p></div>${r.items.length ? button(icon("plus", 17) + (pro ? " Ajouter un client" : " Ajouter une piscine"), pro ? "invite-client" : "new-pool") : ""}</div>${invitationSection(inv.items)}${connectionSection(connections.incoming)}${r.items.length ? `<div class="directory-toolbar"><input id="pool-search" class="search-input" placeholder="Rechercher une piscine ou une ville" aria-label="Rechercher une piscine">${button("Rechercher", "search-pools", "", "secondary")}</div><div id="pool-list" class="pool-overviews">${r.items.map(poolCard).join("")}</div>` : `<section class="first-pool"><div class="first-pool-symbol">${icon("pool", 66)}</div><h2>${pro ? "Ajoutez votre premier client" : "Ajoutez votre première piscine"}</h2><p>${pro ? "Créez sa piscine ou rejoignez le dossier qu’il possède déjà." : "Ajoutez votre piscine pour enregistrer vos analyses. Vous pourrez aussi inviter un pisciniste."}</p>${button(icon("plus", 18) + (pro ? " Ajouter un client" : " Ajouter une piscine"), pro ? "invite-client" : "new-pool")}</section>`}<div id="pool-more">${r.next ? button("Voir davantage de piscines", "more-pools", "", "secondary") : ""}</div>`;
+  main.innerHTML = `<div class="page-heading"><div><h1>${pro ? "Mes piscines suivies" : "Mes piscines"}</h1><p>${pro ? "Les bassins de votre tournée." : "Retrouvez vos analyses et les comptes rendus de vos piscines."}</p></div>${r.items.length ? button(icon("plus", 17) + (pro ? " Ajouter un client" : " Ajouter une piscine"), pro ? "invite-client" : "new-pool") : ""}</div>${invitationSection(inv.items)}${connectionSection(connections.incoming)}${r.items.length ? `<div class="directory-toolbar"><input id="pool-search" class="search-input" placeholder="Rechercher une piscine ou une ville" aria-label="Rechercher une piscine">${button("Rechercher", "search-pools", "", "secondary")}</div><div id="pool-list" class="pool-overviews">${r.items.map(poolCard).join("")}</div>` : `<section class="first-pool"><div class="first-pool-symbol">${icon("pool", 66)}</div><h2>${pro ? "Ajoutez votre premier client" : "Ajoutez votre première piscine"}</h2><p>${pro ? "Créez sa piscine ou rejoignez le dossier qu’il possède déjà." : "Ajoutez votre piscine pour enregistrer vos analyses. Vous pourrez aussi demander un entretien régulier à Peace in Blue."}</p>${button(icon("plus", 18) + (pro ? " Ajouter un client" : " Ajouter une piscine"), pro ? "invite-client" : "new-pool")}</section>`}<div id="pool-more">${r.next ? button("Voir davantage de piscines", "more-pools", "", "secondary") : ""}</div>`;
 }
 on("search-pools", async () => {
   const r = await api(
@@ -105,7 +105,7 @@ export function invitationSection(items) {
 }
 export function connectionSection(items) {
   return items.length
-    ? `<section class="card" style="margin-bottom:20px"><h2>Votre pisciniste souhaite vous rejoindre</h2>${items.map((r) => `<div class="row"><div class="grow"><h3>${esc(r.company || r.name)}</h3><p>Choisissez la piscine à lui confier.</p></div><div class="actions">${button("Choisir ma piscine", "accept-connection", `data-id="${r.id}"`, "primary small")}${button("Refuser", "decline-connection", `data-id="${r.id}"`, "ghost small")}</div></div>`).join("")}</section>`
+    ? `<section class="card" style="margin-bottom:20px"><h2>Peace in Blue vous propose un entretien régulier</h2>${items.map((r) => `<div class="row"><div class="grow"><h3>${esc(r.company || r.name)}</h3><p>Choisissez la piscine à lui confier.</p></div><div class="actions">${button("Choisir ma piscine", "accept-connection", `data-id="${r.id}"`, "primary small")}${button("Refuser", "decline-connection", `data-id="${r.id}"`, "ghost small")}</div></div>`).join("")}</section>`
     : "";
 }
 async function ownedPools() {
@@ -124,7 +124,7 @@ async function ownedPools() {
 on("invite-client", () =>
   modal(
     "Ajouter un client",
-    `<p>Un seul dossier par piscine, partagé avec son client.</p><div class="stack">${button("Rejoindre sa piscine existante", "request-client", "", "primary")}${button("Créer une piscine pour un client", "new-pool", 'data-mode="pro"', "secondary")}</div><p class="small-note">Le client peut aussi vous inviter avec votre adresse email : <strong>${esc(state.user.email)}</strong>.</p>`,
+    `<p>Un seul dossier par piscine, partagé avec son client.</p><div class="stack">${button("Rejoindre sa piscine existante", "request-client", "", "primary")}${button("Créer une piscine pour un client", "new-pool", 'data-mode="pro"', "secondary")}</div><p class="small-note">Le client peut aussi demander un entretien régulier depuis sa piscine.</p>`,
     null,
   ),
 );
@@ -155,14 +155,14 @@ on("accept-connection", async (d) => {
   if (!items.length) {
     modal(
       "Choisir une piscine",
-      `<p>Créez votre piscine pour accepter la demande. Si elle a déjà un pisciniste, retirez son accès depuis « Accès ».</p>${button("Créer ma piscine", "new-pool", 'data-mode="client"', "primary")}`,
+      `<p>Créez votre piscine pour accepter la demande. Si elle a déjà un pisciniste, retirez son accès depuis « Intervenant ».</p>${button("Créer ma piscine", "new-pool", 'data-mode="client"', "primary")}`,
       null,
     );
     return;
   }
   modal(
     "Confier ma piscine",
-    `${select("Piscine à confier", "pool_id", Object.fromEntries(items.map((p) => [p.id, p.name])))}<p class="small-note">Ce pisciniste sera le seul professionnel à consulter et suivre cette piscine.</p>`,
+    `${select("Piscine à confier", "pool_id", Object.fromEntries(items.map((p) => [p.id, p.name])))}<p class="small-note">Vous autorisez Peace in Blue à consulter le dossier et à entretenir cette piscine.</p>`,
     async (b) => {
       const r = await api("/connections/" + d.id + "/respond", "POST", {
         accept: true,
@@ -172,7 +172,7 @@ on("accept-connection", async (d) => {
       toast("Votre pisciniste a rejoint la piscine.");
       go("pool/" + r.pool_id);
     },
-    "Accepter le pisciniste",
+    "Confier ma piscine",
   );
 });
 on("invitation", async (d) => {
@@ -293,7 +293,7 @@ export async function pool(main, id, tab = "journal", options = {}) {
         ["journal", "Suivi"],
         ["charts", "Évolution"],
         ["info", "Le bassin"],
-        ["access", "Accès"],
+        ["access", "Intervenant"],
       ];
   if (!tabs.some(([key]) => key === tab)) {
     history.replaceState(null, "", "#pool/" + id);
@@ -464,6 +464,14 @@ async function renderTab(tab, el) {
       .join(
         "",
       )}</dl>${p.membership === "principal" && p.address ? `<a class="btn secondary" href="${esc(itinerary(p))}" target="_blank" rel="noopener noreferrer">${icon("map", 17)} Ouvrir l’itinéraire</a>` : ""}</section><div class="stack"><section class="card"><h2>Équipements</h2><p class="prose">${esc(p.equipment || "Marques, modèles et références à compléter.")}</p>${p.membership === "principal" ? `<h3>Routine d’entretien</h3><p class="prose">${esc(p.routine || "Les étapes propres à ce bassin apparaîtront ici.")}</p>` : ""}</section>${p.membership !== "owner" ? `<section class="card"><h3>Vos notes internes</h3><p class="small-note">Ces notes restent privées et ne sont pas partagées avec le client.</p>${button("Ouvrir mes notes", "private-notes", "", "secondary")}</section>` : ""}</div></div>`;
+    if (p.membership === "owner") {
+      const details = document.createElement("details");
+      details.className = "coowner-controls";
+      details.innerHTML =
+        "<summary>Partager ma piscine et gérer ses propriétaires</summary><div></div>";
+      el.append(details);
+      sharedAccess(details.lastElementChild);
+    }
   } else if (tab === "access") {
     await accessTab(el);
   } else if (tab === "planning") {
@@ -528,9 +536,17 @@ async function loadCharts(root, pool) {
         "Ajoutez une analyse pour visualiser l’évolution de votre eau.",
       );
 }
-async function accessTab(el) {
+function sharedAccess(el) {
   const p = state.pool;
-  el.innerHTML = `<div class="section-heading"><div><h2>Accès à la piscine</h2><p class="small-note">Le dossier est privé : les propriétaires et un seul pisciniste principal.</p></div>${p.manager || p.claimable ? button(p.claimable ? "Inviter le client" : "Inviter", "invite-member") : ""}</div><section class="card">${p.members.map((m) => `<div class="row"><span class="avatar">${esc(m.name.slice(0, 2).toUpperCase())}</span><div class="grow"><h3>${esc(m.name)} ${m.user_id === state.user.id ? "(vous)" : ""}</h3><p>${managerKinds[m.kind]}${m.manager ? " · Responsable des accès" : ""}${m.expires_at ? " · jusqu’au " + fmt(m.expires_at) : ""}</p></div><div class="actions">${p.manager && m.kind === "owner" && !m.manager ? button("Transférer la responsabilité", "transfer-manager", `data-id="${m.id}" data-name="${esc(m.name)}"`, "ghost small") : ""}${!m.manager && !p.claimable && (p.manager || m.user_id === state.user.id) ? button(m.user_id === state.user.id ? "Quitter" : "Retirer l’accès", "remove-member", `data-id="${m.id}" data-name="${esc(m.name)}"`, "ghost small") : ""}</div></div>`).join("")}</section>${p.invitations.length ? `<div class="section-heading"><h2>Invitations en attente</h2></div><section class="card">${p.invitations.map((i) => `<div class="row"><div class="grow"><h3>${esc(i.name)}</h3><p>${managerKinds[i.kind]} · expire le ${fmt(i.expires_at)}</p></div>${button("Annuler", "cancel-invite", `data-id="${i.id}"`, "ghost small")}</div>`).join("")}</section>` : ""}<div class="note" style="margin-top:22px">La suppression d’un accès empêche la consultation du dossier et de ses photos. Votre historique reste attaché à la piscine.</div>${p.claimable ? button("Archiver cette fiche en attente", "archive-pool", "", "ghost") : ""}`;
+  el.innerHTML = `<div class="section-heading"><div><h2>Propriétaires de la piscine</h2><p class="small-note">Seuls les propriétaires et votre intervenant Peace in Blue ont accès au dossier.</p></div>${p.manager || p.claimable ? button(p.claimable ? "Inviter le client" : "Inviter un copropriétaire", "invite-member") : ""}</div><section class="card">${p.members
+    .filter((m) => p.membership !== "owner" || m.kind === "owner")
+    .map(
+      (m) =>
+        `<div class="row"><span class="avatar">${esc(m.name.slice(0, 2).toUpperCase())}</span><div class="grow"><h3>${esc(m.name)} ${m.user_id === state.user.id ? "(vous)" : ""}</h3><p>${managerKinds[m.kind]}${m.manager ? " · Responsable des accès" : ""}${m.expires_at ? " · jusqu’au " + fmt(m.expires_at) : ""}</p></div><div class="actions">${p.manager && m.kind === "owner" && !m.manager ? button("Transférer la responsabilité", "transfer-manager", `data-id="${m.id}" data-name="${esc(m.name)}"`, "ghost small") : ""}${!m.manager && !p.claimable && (p.manager || m.user_id === state.user.id) ? button(m.user_id === state.user.id ? "Quitter" : "Retirer l’accès", "remove-member", `data-id="${m.id}" data-name="${esc(m.name)}"`, "ghost small") : ""}</div></div>`,
+    )
+    .join(
+      "",
+    )}</section>${p.invitations.length ? `<div class="section-heading"><h2>Invitations en attente</h2></div><section class="card">${p.invitations.map((i) => `<div class="row"><div class="grow"><h3>${esc(i.name)}</h3><p>${managerKinds[i.kind]} · expire le ${fmt(i.expires_at)}</p></div>${button("Annuler", "cancel-invite", `data-id="${i.id}"`, "ghost small")}</div>`).join("")}</section>` : ""}<div class="note" style="margin-top:22px">La suppression d’un accès empêche la consultation du dossier et de ses photos. Votre historique reste attaché à la piscine.</div>${p.claimable ? button("Archiver cette fiche en attente", "archive-pool", "", "ghost") : ""}`;
 }
 on("archive-pool", () =>
   confirmAction(
@@ -543,24 +559,11 @@ on("archive-pool", () =>
     "Archiver",
   ),
 );
-on("invite-member", (d) => {
-  const p = state.pool,
-    hasPro = p.members.some((m) => m.kind === "principal");
-  const options =
-    d.kind === "principal" && !hasPro && p.manager
-      ? { principal: "Mon pisciniste" }
-      : p.claimable
-        ? { owner: "Client propriétaire" }
-        : hasPro
-          ? { owner: "Copropriétaire" }
-          : { principal: "Mon pisciniste", owner: "Copropriétaire" };
+on("invite-member", () => {
+  const p = state.pool;
   modal(
-    p.claimable
-      ? "Inviter le client"
-      : d.kind === "principal"
-        ? "Ajouter mon pisciniste"
-        : "Partager cette piscine",
-    `${select("Inviter", "kind", options, p.claimable || hasPro ? "owner" : "principal")}${field("Adresse email de la personne", "email", "", "email", 'required maxlength="254" autocomplete="email" autocapitalize="none"')}<p class="small-note">${p.claimable ? "Le client accepte l’invitation depuis son compte." : "L’invitation doit être acceptée. Pour changer de pisciniste, retirez d’abord l’ancien accès."}</p>`,
+    p.claimable ? "Inviter le client" : "Inviter un copropriétaire",
+    `<input type="hidden" name="kind" value="owner">${field("Adresse email de la personne", "email", "", "email", 'required maxlength="254" autocomplete="email" autocapitalize="none"')}<p class="small-note">La personne doit avoir un compte et accepter l’invitation.</p>`,
     async (b) => {
       await api("/pools/" + p.id + "/invitations", "POST", b);
       closeModal();
@@ -999,3 +1002,42 @@ on("record-detail", async (d) => {
   );
 });
 on("print", () => window.print());
+
+async function accessTab(el) {
+  const p = state.pool;
+  if (p.membership !== "owner") {
+    sharedAccess(el);
+    return;
+  }
+  const { request } = await api("/pools/" + p.id + "/intervenant");
+  const pro = p.members.find((m) => m.kind === "principal");
+  const pending = request?.status === "pending";
+  el.innerHTML = `<section class="intervenant-panel"><p class="eyebrow">PEACE IN BLUE</p><h2>${pro ? "Votre entretien régulier" : "Un intervenant pour l’entretien régulier de votre piscine"}</h2><p>${pro ? "Votre piscine est suivie par Peace in Blue. Retrouvez les tâches réalisées, les analyses et les photos dans votre suivi." : "Confiez l’entretien à Peace in Blue. Après votre demande, nous vous contactons pour vérifier la zone d’intervention et convenir des modalités et des passages."}</p>${pro ? `<p class="service-status">Entretien pris en charge par Peace in Blue</p>${p.manager ? button("Mettre fin au suivi", "remove-member", `data-id="${pro.id}" data-name="Peace in Blue"`, "secondary") : ""}` : pending ? `<div class="service-status"><h3>Demande envoyée</h3><p>Nous vous recontacterons${request.phone ? " au " + esc(request.phone) : ""}. Aucun passage n’est encore programmé.</p>${p.manager ? button("Annuler ma demande", "cancel-maintenance", `data-id="${request.id}"`, "secondary small") : ""}</div>` : p.manager ? `${request?.status === "declined" ? '<p class="small-note">Votre précédente demande n’a pas pu être prise en charge.</p>' : ""}<form id="maintenance-request-form">${field("Téléphone portable", "phone", "", "tel", 'required maxlength="35" autocomplete="tel" placeholder="06 12 34 56 78"')}<p class="field-help">Ce numéro sera communiqué uniquement à Peace in Blue pour votre demande.</p><label class="check"><input type="checkbox" required> J’autorise Peace in Blue à accéder au dossier de cette piscine si ma demande est acceptée.</label><p class="form-error" role="alert"></p><button class="btn primary" type="submit">Demander un entretien régulier</button></form>` : '<p class="small-note">Le responsable de la piscine peut demander un entretien régulier.</p>'}<p class="service-autonomy">Vous pouvez continuer à utiliser gratuitement votre carnet et saisir vos analyses, avec ou sans intervenant.</p></section>`;
+  $("#maintenance-request-form", el)?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = e.target,
+      submit = form.querySelector('[type="submit"]');
+    submit.disabled = true;
+    try {
+      await api(
+        "/pools/" + p.id + "/intervenant",
+        "POST",
+        Object.fromEntries(new FormData(form)),
+      );
+      toast("Votre demande a été envoyée à Peace in Blue.");
+      refresh();
+    } catch (err) {
+      form.querySelector(".form-error").textContent = err.message;
+    } finally {
+      submit.disabled = false;
+    }
+  });
+}
+on("cancel-maintenance", (d) =>
+  confirmAction(
+    "Annuler la demande d’entretien ?",
+    "Vous pourrez envoyer une nouvelle demande plus tard.",
+    () => api("/pools/" + state.pool.id + "/intervenant/" + d.id, "DELETE", {}),
+    "Annuler ma demande",
+  ),
+);
