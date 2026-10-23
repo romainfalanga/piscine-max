@@ -1,0 +1,38 @@
+{
+  "id": "/",
+  "name": "Peace in Blue App",
+  "short_name": "Peace in Blue",
+  "description": "Le suivi de votre piscine et l’organisation de votre pisciniste.",
+  "lang": "fr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#F4FAFB",
+  "theme_color": "#0A2540",
+  "icons": [
+    {
+      "src": "/platform/icon-192.png?v=brand-v6",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/platform/icon-512.png?v=brand-v6",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/platform/icon-maskable-192.png?v=brand-v6",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/platform/icon-maskable-512.png?v=brand-v6",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

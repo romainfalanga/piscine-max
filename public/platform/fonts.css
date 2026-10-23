@@ -1,0 +1,15 @@
+@font-face {
+  font-family: Manrope;
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url("/platform/manrope-latin.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Sora Brand";
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url("/platform/brand-sora.woff2") format("woff2");
+}

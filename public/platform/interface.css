@@ -1,0 +1,754 @@
+/* Peace in Blue: clear working documents, measured colour, real pool photography. */
+:root {
+  --ink: #0a2540;
+  --muted: #566b7b;
+  --line: #dde5e9;
+  background: #fff;
+}
+body {
+  background: #fff;
+  color: #0a2540;
+}
+h1,
+h2,
+h3 {
+  color: #0a2540;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+}
+h1,
+.page-heading h1 {
+  font-size: clamp(27px, 3vw, 34px);
+  font-weight: 650;
+}
+h2 {
+  font-size: 19px;
+}
+h3 {
+  font-size: 15px;
+}
+.classic-shell .main {
+  max-width: 1180px;
+  padding-top: 32px;
+}
+.classic-header {
+  border-bottom: 1px solid #e6edf0;
+}
+.classic-header-inner {
+  max-width: 1180px;
+}
+.classic-nav a {
+  font-weight: 550;
+}
+.btn {
+  border-radius: 6px;
+  font-weight: 650;
+}
+.btn.primary {
+  background: #0a3851;
+  border-color: #0a3851;
+}
+.btn.primary:hover {
+  background: #0a2540;
+  border-color: #0a2540;
+}
+.btn.secondary {
+  border-color: #ccd8df;
+  color: #0a3851;
+}
+.card,
+.stat {
+  border-radius: 8px;
+  box-shadow: none;
+  background: #fff;
+}
+.badge {
+  font-weight: 600;
+  border-radius: 4px;
+}
+.eyebrow {
+  text-transform: none;
+  letter-spacing: 0;
+  color: #566b7b;
+}
+.page-heading {
+  align-items: center;
+  margin-bottom: 28px;
+}
+.page-heading p {
+  max-width: 64ch;
+}
+.pool-heading {
+  margin-bottom: 18px;
+}
+.pool-heading h1 {
+  font-size: clamp(28px, 3vw, 36px);
+  font-weight: 650;
+}
+.pool-heading p > svg {
+  display: none;
+}
+.pool-heading-actions .btn {
+  font-weight: 650;
+}
+.tabs.pool-tabs,
+.tabs.pool-tabs[data-count="6"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 26px;
+  padding: 0;
+  margin: 0 0 30px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid #d8e2e7;
+  border-radius: 0;
+  overflow: visible;
+}
+.tabs.pool-tabs button {
+  position: relative;
+  flex: 0 0 auto;
+  min-height: 49px;
+  padding: 13px 2px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: #566b7b;
+  font-size: 14px;
+  font-weight: 500;
+  box-shadow: none;
+}
+.tabs.pool-tabs button.active,
+.tabs.pool-tabs button.active:hover {
+  background: none;
+  color: #0a2540;
+  font-weight: 700;
+  box-shadow: none;
+}
+.tabs.pool-tabs button.active::after {
+  content: "";
+  position: absolute;
+  height: 2px;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  background: #0a3851;
+}
+.tabs.pool-tabs button:hover {
+  background: none;
+  color: #0a2540;
+}
+[data-pool-panel][hidden] {
+  display: none !important;
+}
+.section-pending {
+  color: #566b7b;
+  padding: 24px 0;
+}
+.water-panel {
+  border: 0;
+  border-radius: 0;
+  background: #fff;
+  color: #0a2540;
+  padding: 0 0 26px;
+  border-bottom: 1px solid #d8e2e7;
+}
+.water-panel h2 {
+  color: #0a2540;
+  font-size: 18px;
+  font-weight: 650;
+}
+.water-panel-title {
+  margin-bottom: 22px;
+}
+.water-panel .btn.ghost,
+.water-panel .reading-history {
+  color: #0a3851;
+}
+.water-readings {
+  gap: 30px;
+}
+.water-reading {
+  padding: 0;
+  color: #0a2540;
+}
+.water-reading + div,
+.with-photo .water-reading + div {
+  border-color: #d8e2e7;
+}
+.water-reading > span {
+  color: #566b7b;
+  font-size: 13px;
+}
+.water-reading strong {
+  color: #0a2540;
+  font-weight: 600;
+  font-size: 42px;
+  letter-spacing: -1.5px;
+}
+.water-reading strong small {
+  color: #566b7b;
+  font-size: 15px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.water-reading > small {
+  color: #566b7b;
+  font-size: 11px;
+}
+.water-reading strong.unmeasured {
+  font-size: 22px;
+  letter-spacing: -0.3px;
+  color: #6c7d89;
+}
+.water-photo img {
+  border-radius: 7px;
+}
+.water-photo figcaption {
+  color: #566b7b;
+}
+.water-photo figcaption .btn {
+  color: #0a3851;
+}
+.pool-aside {
+  border-color: #e1e8ec;
+}
+.aside-section h2 {
+  font-size: 15px;
+  font-weight: 650;
+}
+.aside-section p {
+  font-size: 13px;
+}
+.record {
+  background: #fff;
+  padding: 24px 0;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid #dde5e9;
+  box-shadow: none;
+}
+.record::before {
+  display: none;
+}
+.record h3 {
+  font-size: 17px;
+  font-weight: 650;
+}
+.record-date > svg {
+  display: none;
+}
+.record .values > span {
+  background: #f4f7f9;
+  border-radius: 4px;
+  color: #0a3851;
+}
+.record .values strong {
+  color: #0a2540;
+}
+.pool-overviews {
+  display: block;
+  border-top: 1px solid #dde5e9;
+}
+.pool-overview {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  background: white;
+  padding: 26px 0;
+  border: 0;
+  border-bottom: 1px solid #dde5e9;
+  border-radius: 0;
+  box-shadow: none;
+}
+.pool-overview:hover {
+  background: #f8fafb;
+  border-color: #dde5e9;
+}
+.pool-overview h2 {
+  font-size: 20px;
+  font-weight: 600;
+}
+.pool-open {
+  color: #0a3851;
+  font-size: 13px;
+  font-weight: 600;
+}
+.pool-overview p {
+  margin: 6px 0;
+}
+.pool-overview-icon {
+  display: none;
+}
+.first-pool {
+  background: #f7fafb;
+  border: 1px solid #e3eaee;
+  border-radius: 8px;
+}
+.first-pool-symbol,
+.empty-ripple {
+  display: none;
+}
+.empty {
+  padding: 30px 16px;
+  background: none;
+}
+.empty h3 {
+  font-weight: 600;
+}
+.empty p {
+  color: #566b7b;
+  max-width: 52ch;
+  margin-inline: auto;
+}
+.clients-grid {
+  gap: 24px;
+}
+.clients-grid > .card {
+  border: 0;
+  border-top: 1px solid #d8e2e7;
+  border-radius: 0;
+  padding: 22px 0;
+}
+.client-avatar {
+  display: none;
+}
+.client-pool {
+  border-color: #e3eaee;
+}
+.account-lock {
+  display: none;
+}
+.account-profile,
+.account-security {
+  border-radius: 8px;
+}
+.tool-hub {
+  gap: 24px;
+}
+.tool-hub .tool-feature {
+  display: block;
+  background: #f4f8fa;
+  border: 1px solid #dce6eb;
+  border-radius: 8px;
+  padding: 32px;
+}
+.tool-feature h2 {
+  font-size: 28px;
+  font-weight: 650;
+  margin-top: 0;
+}
+.tool-feature p {
+  max-width: 62ch;
+  color: #566b7b;
+}
+.tool-hub .tool-entry {
+  border: 0;
+  border-top: 1px solid #ccd8df;
+  border-radius: 0;
+  padding: 24px 0;
+  background: white;
+  box-shadow: none;
+}
+.tool-entry h2 {
+  margin: 0 0 12px;
+  font-size: 21px;
+}
+.tool-entry:hover,
+.calculator-tile:hover {
+  box-shadow: none;
+}
+.library-tile,
+.calculator-tile {
+  border-radius: 7px;
+  box-shadow: none;
+}
+.routine-feature {
+  background: #f4f8fa;
+  border-color: #dce6eb;
+  border-radius: 8px;
+}
+.agenda-calendar {
+  border-radius: 9px;
+  border-color: #dce6eb;
+}
+.agenda-shortcuts > a > svg {
+  display: none;
+}
+.agenda-shortcuts a {
+  padding: 0 4px;
+}
+.calendar-day {
+  border-radius: 5px;
+}
+.calendar-day.is-selected {
+  background: #0a3851;
+}
+.stat {
+  background: #f7fafb !important;
+}
+.stat span {
+  text-transform: none;
+  letter-spacing: 0;
+}
+.maintenance-group legend > span {
+  background: #eef4f7;
+  color: #0a3851;
+}
+.visit-measures {
+  background: #f1f6f8;
+  border-radius: 6px;
+}
+dialog {
+  border-radius: 10px;
+}
+@media (max-width: 700px) {
+  .classic-shell .main {
+    padding: 25px 18px 90px;
+  }
+  .classic-shell.client-shell .main {
+    padding-bottom: 30px;
+  }
+  .pool-heading h1 {
+    font-size: 29px;
+  }
+  .pool-heading-actions {
+    gap: 8px;
+  }
+  .pool-heading-actions .btn {
+    flex: auto;
+  }
+  .tabs.pool-tabs {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0;
+    margin-bottom: 26px;
+  }
+  .tabs.pool-tabs[data-count="6"] {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0 12px;
+  }
+  .tabs.pool-tabs button {
+    width: 100%;
+    min-height: 48px;
+    padding: 12px 1px;
+    font-size: 12px;
+  }
+  .pool-layout {
+    margin-top: 0;
+  }
+  .water-panel {
+    padding-bottom: 24px;
+  }
+  .water-panel h2 {
+    font-size: 17px;
+  }
+  .water-reading strong {
+    font-size: 36px;
+  }
+  .water-readings {
+    gap: 18px;
+  }
+  .water-reading > small {
+    font-size: 10px;
+    line-height: 1.6;
+  }
+  .record {
+    padding: 22px 0;
+  }
+  .pool-overview {
+    padding: 23px 0;
+  }
+  .pool-overview h2 {
+    font-size: 18px;
+  }
+  .pool-open {
+    font-size: 12px;
+  }
+  .tool-hub .tool-feature {
+    padding: 24px 20px;
+  }
+  .tool-feature h2 {
+    font-size: 25px;
+  }
+  .agenda-calendar {
+    border-radius: 8px;
+  }
+}
+.avatar,
+.tool-hub .pool-symbol,
+.routine-feature .pool-symbol,
+.split > .card > .pool-symbol {
+  display: none;
+}
+
+/* Peace in Blue business dashboard and regular maintenance requests. */
+.business-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-block: 1px solid var(--line, #dde5e9);
+  margin: 28px 0 38px;
+}
+.business-metrics > div {
+  padding: 25px 20px 25px 0;
+}
+.business-metrics strong {
+  font-size: 38px;
+  line-height: 1.2;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: #0a3851;
+}
+.business-metrics h2 {
+  font-size: 14px;
+  margin: 10px 0 6px;
+}
+.business-metrics p {
+  font-size: 12px;
+  color: #566b7b;
+  line-height: 1.6;
+  max-width: 220px;
+}
+.business-requests,
+.business-activity {
+  margin-bottom: 38px;
+}
+.request-count {
+  font-size: 14px;
+  font-weight: 500;
+  margin-left: 10px;
+  color: #566b7b;
+}
+.maintenance-demand {
+  border-top: 1px solid #dde5e9;
+  padding: 24px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+.maintenance-demand h3 {
+  font-size: 19px;
+  margin: 7px 0;
+}
+.maintenance-demand p {
+  overflow-wrap: anywhere;
+  margin: 5px 0;
+  color: #566b7b;
+}
+.maintenance-demand .actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.demand-phone {
+  display: inline-block;
+  margin-top: 9px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.business-empty {
+  padding: 26px 0;
+  color: #566b7b;
+  border-block: 1px solid #dde5e9;
+}
+.intervenant-panel {
+  max-width: 720px;
+  padding: 24px 0;
+}
+.intervenant-panel h2 {
+  font-size: clamp(23px, 4vw, 30px);
+  line-height: 1.3;
+  max-width: 640px;
+  margin: 12px 0 18px;
+}
+.intervenant-panel > p {
+  line-height: 1.8;
+  color: #566b7b;
+}
+.intervenant-panel form {
+  margin-top: 28px;
+  max-width: 530px;
+}
+.intervenant-panel form .check {
+  align-items: flex-start;
+  margin: 24px 0;
+  line-height: 1.6;
+}
+.intervenant-panel form .check input {
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+.service-status {
+  padding: 24px 0;
+  margin: 22px 0;
+  border-block: 1px solid #dde5e9;
+}
+.service-status .btn {
+  margin-top: 16px;
+}
+.service-autonomy {
+  font-size: 13px;
+  margin-top: 30px;
+}
+.coowner-controls {
+  margin-top: 28px;
+  border-top: 1px solid #dde5e9;
+  padding-top: 24px;
+}
+.coowner-controls summary {
+  cursor: pointer;
+  font-weight: 600;
+  line-height: 1.5;
+  padding-bottom: 15px;
+}
+@media (max-width: 800px) {
+  .business-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .business-metrics > div {
+    padding: 20px 15px 20px 0;
+  }
+  .maintenance-demand {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .maintenance-demand .actions {
+    justify-content: flex-start;
+  }
+  .maintenance-demand .actions .btn {
+    white-space: normal;
+  }
+}
+@media (max-width: 420px) {
+  .business-metrics strong {
+    font-size: 32px;
+  }
+  .business-metrics h2 {
+    line-height: 1.5;
+  }
+  .intervenant-panel form .btn {
+    width: 100%;
+    white-space: normal;
+  }
+  .business-metrics p {
+    font-size: 11px;
+  }
+}
+
+/* Water observations remain words, without an artificial numeric scale. */
+.water-reading strong.assessment-value {
+  white-space: normal;
+  font-size: clamp(18px, 2.4vw, 24px);
+  line-height: 1.4;
+  letter-spacing: normal;
+  overflow-wrap: break-word;
+}
+.assessment-label {
+  display: inline-block;
+  line-height: 1.55;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: normal;
+}
+.assessment-value.balanced,
+.assessment-label.balanced {
+  color: #126157;
+}
+.assessment-value.watch,
+.assessment-label.watch {
+  color: #835c16;
+}
+.assessment-value.adjust,
+.assessment-label.adjust {
+  color: #9b4432;
+}
+.assessment-stat strong {
+  font-size: 21px;
+  line-height: 1.4;
+  letter-spacing: normal;
+}
+.assessment-history {
+  margin-top: 26px;
+}
+.assessment-history table {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+.assessment-history th,
+.assessment-history td {
+  padding: 15px 10px;
+  text-align: left;
+  vertical-align: top;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.assessment-history th:first-child,
+.assessment-history td:first-child {
+  padding-left: 0;
+  width: 29%;
+}
+.assessment-history td .text-btn {
+  font-size: 12px;
+  text-align: left;
+  line-height: 1.6;
+  white-space: normal;
+  padding: 0;
+}
+.legacy-charts {
+  margin-top: 28px;
+}
+.legacy-charts > summary {
+  cursor: pointer;
+  line-height: 1.6;
+  padding: 12px 0;
+  font-weight: 600;
+}
+#assessment-more {
+  margin-top: 16px;
+}
+@media (max-width: 420px) {
+  .assessment-label {
+    font-size: 12px;
+  }
+  .assessment-history th,
+  .assessment-history td {
+    padding: 12px 5px;
+  }
+  .assessment-history th:first-child,
+  .assessment-history td:first-child {
+    width: 28%;
+  }
+  .assessment-stat strong {
+    font-size: 18px;
+  }
+}
+
+/* Pool-specific maintenance configuration */
+.pool-task-summary {
+  padding-left: 20px;
+  line-height: 1.6;
+}
+.pool-task-summary li {
+  margin: 7px 0;
+}
+.routine-edit-row {
+  border-bottom: 1px solid var(--line, #dce5eb);
+  padding: 16px 0;
+}
+.routine-edit-row .field {
+  margin-bottom: 10px;
+}
+.routine-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+}
+@media (max-width: 760px) {
+  .classic-mobile-nav {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

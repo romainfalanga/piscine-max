@@ -1,0 +1,65 @@
+name: Cloudflare preview
+on:
+  push:
+    branches: [codex/peaceinblue-platform]
+    paths:
+      - ".github/workflows/cloudflare-preview.yml"
+      - "scripts/cloudflare-preview.mjs"
+      - "scripts/preview-smoke.mjs"
+      - "public/**"
+      - "src/**"
+      - "tests/**"
+      - "schema/**"
+      - "package*.json"
+      - "vite.config.*"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: peaceinblue-cloudflare-preview
+  cancel-in-progress: false
+jobs:
+  preview:
+    if: github.repository == 'romainfalanga/piscine-max' && github.ref == 'refs/heads/codex/peaceinblue-platform'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_ACCOUNT_ID: 834ee251038ce2f923cba9847f973c40
+      WRANGLER_SEND_METRICS: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - name: Verify Cloudflare access and create isolated preview resources
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: node scripts/cloudflare-preview.mjs
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run test:browser
+      - run: npm run build
+      - name: Select preview-only bindings
+        run: cp preview.wrangler.jsonc wrangler.jsonc
+      - name: Apply schema to preview database
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler d1 migrations apply peaceinblue-platform-preview --remote
+      - name: Deploy isolated preview
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler pages deploy dist --project-name peaceinblue-recette --branch codex/peaceinblue-platform
+      - name: Verify client flows, sole provider and private photos
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: node scripts/preview-smoke.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cloudflare-preview-report
+          path: |
+            preview-resources.json
+            preview-validation.json
+          if-no-files-found: ignore
