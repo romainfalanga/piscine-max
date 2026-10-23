@@ -144,7 +144,7 @@ try {
   for (let i = 0; i < 20; i++) {
     try {
       const r = await request("/health");
-      if (r.status === 200 && r.data?.release === "water-assessments-v12") {
+      if (r.status === 200 && r.data?.release === "pool-routines-v13") {
         const asset = await fetch(base + "/platform/interface.css", {
           cache: "no-store",
           signal: AbortSignal.timeout(15000),

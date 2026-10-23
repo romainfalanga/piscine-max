@@ -725,3 +725,30 @@ dialog {
     font-size: 18px;
   }
 }
+
+/* Pool-specific maintenance configuration */
+.pool-task-summary {
+  padding-left: 20px;
+  line-height: 1.6;
+}
+.pool-task-summary li {
+  margin: 7px 0;
+}
+.routine-edit-row {
+  border-bottom: 1px solid var(--line, #dce5eb);
+  padding: 16px 0;
+}
+.routine-edit-row .field {
+  margin-bottom: 10px;
+}
+.routine-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+}
+@media (max-width: 760px) {
+  .classic-mobile-nav {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

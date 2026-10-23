@@ -3548,3 +3548,167 @@ test("Assessment migration preserves old measurements and the qualitative timeli
     400,
   );
 });
+
+test("Pool maintenance tasks are editable only by the assigned provider and preserve visit history", async () => {
+  const env = context();
+  const owner = await user(env, "routine-owner");
+  const pro = await user(env, "routine-pro", "pro");
+  const outsider = await user(env, "routine-outsider");
+  const id = await pool(env, owner);
+  await invite(env, owner, pro, id, "principal");
+  env.DB.db
+    .prepare("UPDATE pools SET treatment='salt',filter_type='sand' WHERE id=?")
+    .run(id);
+  const path = `/pools/${id}/maintenance-tasks`;
+  const initial = await request(env, path, "GET", undefined, pro.token);
+  assert.equal(initial.status, 200);
+  assert.ok(initial.data.tasks.some((t: any) => t.id === "ph_pump"));
+  assert.ok(!initial.data.tasks.some((t: any) => t.id === "tablets"));
+  for (const u of [owner, outsider]) {
+    assert.ok(
+      [403, 404].includes(
+        (await request(env, path, "GET", undefined, u.token)).status,
+      ),
+    );
+    assert.ok(
+      [403, 404].includes(
+        (
+          await request(
+            env,
+            path,
+            "PUT",
+            { tasks: initial.data.tasks, revision: 1 },
+            u.token,
+          )
+        ).status,
+      ),
+    );
+  }
+  const clientPool = await request(
+    env,
+    `/pools/${id}`,
+    "GET",
+    undefined,
+    owner.token,
+  );
+  assert.equal(clientPool.data.maintenance_config, undefined);
+  assert.equal(clientPool.data.maintenance_tasks, undefined);
+  const old = await request(
+    env,
+    `/pools/${id}/records`,
+    "POST",
+    { kind: "visit", measured_at: new Date().toISOString() },
+    pro.token,
+  );
+  assert.equal(old.status, 201, JSON.stringify(old.data));
+  const tasks = initial.data.tasks
+    .filter((t: any) => t.id !== "walls")
+    .map((t: any) =>
+      t.id === "backwash"
+        ? { ...t, label: "Laver le filtre du local technique" }
+        : t,
+    );
+  tasks.push({
+    id: "extra_cover",
+    group: "Avant de partir",
+    label: "Vérifier la couverture",
+  });
+  const save = (list: any, revision = initial.data.revision) =>
+    request(env, path, "PUT", { tasks: list, revision }, pro.token);
+  assert.equal((await save(tasks)).status, 200);
+  assert.equal((await save(tasks)).status, 409);
+  const invalid = tasks.filter((t: any) => t.id !== "rinse");
+  assert.equal((await save(invalid, 2)).status, 400);
+  assert.equal((await save([], 2)).status, 400);
+  assert.equal((await save([...tasks, tasks[0]], 2)).status, 400);
+  assert.equal(
+    (await save([{ id: "invented", group: "Traitement", label: "x" }], 2))
+      .status,
+    400,
+  );
+  const next = await request(
+    env,
+    `/pools/${id}/records`,
+    "POST",
+    {
+      kind: "visit",
+      measured_at: new Date().toISOString(),
+      maintenance_revision: 2,
+    },
+    pro.token,
+  );
+  assert.equal(next.status, 201, JSON.stringify(next.data));
+  const nextRecord = await request(
+    env,
+    `/records/${next.data.id}`,
+    "GET",
+    undefined,
+    pro.token,
+  );
+  assert.ok(!nextRecord.data.checklist.some((t: any) => t.id === "walls"));
+  assert.equal(
+    nextRecord.data.checklist.find((t: any) => t.id === "backwash").label,
+    "Laver le filtre du local technique",
+  );
+  assert.ok(nextRecord.data.checklist.some((t: any) => t.id === "extra_cover"));
+  const oldRecord = await request(
+    env,
+    `/records/${old.data.id}`,
+    "GET",
+    undefined,
+    pro.token,
+  );
+  assert.ok(oldRecord.data.checklist.some((t: any) => t.id === "walls"));
+  assert.ok(!oldRecord.data.checklist.some((t: any) => t.id === "extra_cover"));
+  await completeVisit(env, next.data.id, pro.token);
+  assert.equal(
+    (
+      await request(
+        env,
+        `/records/${next.data.id}/publish`,
+        "POST",
+        {},
+        pro.token,
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (await request(env, path, "PUT", { reset: true, revision: 2 }, pro.token))
+      .status,
+    200,
+  );
+  const published = await request(
+    env,
+    `/records/${next.data.id}`,
+    "GET",
+    undefined,
+    owner.token,
+  );
+  assert.ok(
+    published.data.checklist.some((t: any) => t.id === "extra_cover" && t.done),
+  );
+  env.DB.db
+    .prepare(
+      "UPDATE pools SET treatment='chlorine',filter_type='cartridge' WHERE id=?",
+    )
+    .run(id);
+  const changed = await request(env, path, "GET", undefined, pro.token);
+  assert.ok(changed.data.tasks.some((t: any) => t.id === "tablets"));
+  assert.ok(changed.data.tasks.some((t: any) => t.id === "cartridge"));
+  assert.ok(
+    !changed.data.tasks.some((t: any) =>
+      ["ph_pump", "electrolyser", "backwash", "extra_cover"].includes(t.id),
+    ),
+  );
+  env.DB.db
+    .prepare(
+      "UPDATE pool_members SET revoked_at='2026-01-01' WHERE pool_id=? AND kind='principal'",
+    )
+    .run(id);
+  assert.equal(
+    (await request(env, path, "PUT", { reset: true, revision: 3 }, pro.token))
+      .status,
+    404,
+  );
+});

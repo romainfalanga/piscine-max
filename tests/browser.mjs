@@ -433,7 +433,6 @@ try {
     "Agenda",
     "Carte",
     "Clients",
-    "Pisciniste",
   ]);
   await nav.getByRole("link", { name: "Agenda", exact: true }).click();
   await page.getByRole("heading", { name: "Agenda", exact: true }).waitFor();
@@ -583,26 +582,7 @@ try {
   await page.getByRole("button", { name: "Fermer", exact: true }).click();
   await page.getByRole("button", { name: "Aujourd’hui", exact: true }).click();
   await page.setViewportSize({ width: 1440, height: 1080 });
-  await nav.getByRole("link", { name: "Pisciniste", exact: true }).click();
-
-  await page
-    .getByRole("link", { name: "Code du pisciniste", exact: false })
-    .waitFor();
-  await page.screenshot({
-    path: ".test-artifacts/pro-workbench-desktop.png",
-    fullPage: true,
-  });
-  assert.equal(
-    await page.getByText("Assistant documentaire", { exact: true }).count(),
-    0,
-  );
-  assert.equal(
-    await page.getByRole("link", { name: "Entraide", exact: true }).count(),
-    0,
-  );
-  await page
-    .getByRole("link", { name: "Outils de calcul", exact: false })
-    .click();
+  await page.goto("http://127.0.0.1:8788/#calculators");
   await page.locator(".calculator-tile").first().waitFor();
   assert.equal(await page.locator(".calculator-tile").count(), 16);
   await page
@@ -956,16 +936,65 @@ try {
       });
   }
   await page.setViewportSize({ width: 390, height: 844 });
-  await mobileNav
-    .getByRole("link", { name: "Pisciniste", exact: true })
+  assert.deepEqual(await mobileNav.locator("a").allTextContents(), [
+    "Agenda",
+    "Carte",
+    "Clients",
+  ]);
+  await page.goto("http://127.0.0.1:8788/#tools");
+  await page.getByRole("heading", { name: "Agenda", exact: true }).waitFor();
+  await page.goto("http://127.0.0.1:8788/#pool/" + assigned.id + "/info");
+  await page
+    .getByRole("button", { name: "Tâches d’entretien", exact: true })
+    .click();
+  const editor = page.getByRole("dialog");
+  const firstTask = editor.locator("[data-task-id]").first();
+  const previousLabel = await firstTask
+    .getByLabel("Tâche", { exact: true })
+    .inputValue();
+  await firstTask
+    .getByLabel("Tâche", { exact: true })
+    .fill("Vérifier le niveau avant nettoyage");
+  await editor
+    .getByRole("button", { name: "Ajouter une tâche", exact: true })
+    .click();
+  await editor
+    .locator("[data-task-id]")
+    .last()
+    .getByLabel("Tâche", { exact: true })
+    .fill("Contrôler la couverture du bassin");
+  await editor
+    .getByRole("button", { name: "Enregistrer", exact: true })
     .click();
   await page
-    .getByRole("heading", { name: "Pisciniste", exact: true })
-    .waitFor();
+    .getByRole("button", { name: "Tâches d’entretien", exact: true })
+    .click();
+  assert.equal(
+    await editor
+      .locator("[data-task-id]")
+      .first()
+      .getByLabel("Tâche", { exact: true })
+      .inputValue(),
+    "Vérifier le niveau avant nettoyage",
+  );
   await page.screenshot({
-    path: ".test-artifacts/pro-workbench-mobile.png",
-    fullPage: true,
+    path: ".test-artifacts/pool-tasks-mobile.png",
+    fullPage: false,
   });
+  await editor
+    .locator("[data-task-id]")
+    .last()
+    .getByRole("button", { name: "Supprimer", exact: true })
+    .click();
+  await editor
+    .locator("[data-task-id]")
+    .first()
+    .getByLabel("Tâche", { exact: true })
+    .fill(previousLabel);
+  await editor
+    .getByRole("button", { name: "Enregistrer", exact: true })
+    .click();
+  await editor.waitFor({ state: "hidden" });
   await page.goto("http://127.0.0.1:8788/#guide/entretien/" + assigned.id);
   await page.getByLabel("Type de filtre", { exact: true }).waitFor();
   await page.screenshot({
@@ -1429,7 +1458,7 @@ try {
         "client routes exclude professional preparation",
         "members",
         "public signup stays client; provider is provisioned in trusted local fixture",
-        "agenda default and four professional tabs",
+        "agenda default and three professional tabs",
         "client directory and map after explicit invitation",
         "plan, perform and publish a visit",
         "inline analysis and products in maintenance task order, no duration field",
@@ -1437,7 +1466,7 @@ try {
         "client account access in header without navigation menus",
         "private activity statistics",
         "reference procedures",
-        "professional mobile navigation",
+        "professional mobile navigation and per-pool maintenance task editing",
         "day, Monday week and civil month at 320, 390, 768 and 1440px",
         "full-screen map, live filtering and direct touch dragging",
         "client and professional pool sections remain visible",

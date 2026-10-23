@@ -112,7 +112,6 @@ function shell() {
         ["planning", "calendar", "Agenda"],
         ["map", "map", "Carte"],
         ["clients", "users", "Clients"],
-        ["tools", "book", "Pisciniste"],
       ]
     : [];
   const links = nav
@@ -261,7 +260,7 @@ async function route(event) {
     return;
   }
   if (
-    ["help", "request", "assistant", "dashboard"].includes(name) ||
+    ["help", "request", "assistant", "dashboard", "tools"].includes(name) ||
     (name === "home" && state.mode === "pro")
   ) {
     go(state.mode === "pro" ? "planning" : "home");

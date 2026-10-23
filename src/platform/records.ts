@@ -185,6 +185,13 @@ records.post("/pools/:id/records", async (c) => {
       fail("Identifiant déjà utilisé.", 409);
     return c.json({ id, replayed: true });
   }
+  if (
+    kind === "visit" &&
+    !b.correction_of &&
+    b.maintenance_revision !== undefined &&
+    b.maintenance_revision !== p.maintenance_revision
+  )
+    fail("Les tâches de ce bassin ont changé. Rouvrez l’entretien.", 409);
   let template = kind === "visit" ? maintenanceTasks(p) : undefined;
   let checklistVersion = kind === "visit" ? 1 : 0;
   let appointment = null;

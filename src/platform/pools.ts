@@ -1,4 +1,9 @@
-import { maintenanceTasks } from "./maintenance";
+import {
+  maintenanceTasks,
+  defaultMaintenanceTasks,
+  maintenanceConfig,
+  taskGroups,
+} from "./maintenance";
 import { locationBody } from "./locations";
 import { Hono } from "hono";
 import {
@@ -21,6 +26,7 @@ import {
   MANAGES,
   CLAIMABLE,
   requirePro,
+  professionalAccess,
   place,
   publicUser,
   emailAddress,
@@ -186,6 +192,9 @@ pools.get("/pools/:id", async (c) => {
   return c.json({
     ...p,
     access_notes: undefined,
+    maintenance_config: undefined,
+    maintenance_revision:
+      p.membership === "principal" ? p.maintenance_revision : undefined,
     thresholds: jsonParse(p.thresholds),
     routine: p.membership === "principal" ? p.routine : undefined,
     maintenance_tasks:
@@ -193,6 +202,40 @@ pools.get("/pools/:id", async (c) => {
     members,
     invitations: pending,
   });
+});
+pools.get("/pools/:id/maintenance-tasks", async (c) => {
+  const p = await access(c, c.req.param("id"));
+  professionalAccess(c, p);
+  return c.json({
+    tasks: maintenanceTasks(p),
+    defaults: defaultMaintenanceTasks(p),
+    groups: taskGroups,
+    revision: p.maintenance_revision,
+  });
+});
+pools.put("/pools/:id/maintenance-tasks", async (c) => {
+  const p = await access(c, c.req.param("id"));
+  professionalAccess(c, p);
+  const b = await c.req.json();
+  if (!Number.isInteger(b.revision)) fail("Version de la liste manquante.");
+  const config =
+    b.reset === true
+      ? "{}"
+      : maintenanceConfig(
+          b.restore_defaults === true ? { ...p, maintenance_config: "{}" } : p,
+          b.tasks,
+        );
+  const result = await stmt(
+    c,
+    "UPDATE pools SET maintenance_config=?,maintenance_revision=maintenance_revision+1 WHERE id=? AND maintenance_revision=?",
+    config,
+    p.id,
+    b.revision,
+  ).run();
+  if (!result.meta.changes)
+    fail("La liste a été modifiée. Rouvrez-la avant de réessayer.", 409);
+  await audit(c, "pool.maintenance", p.id, p.id).run();
+  return c.json({ ok: true });
 });
 pools.put("/pools/:id", async (c) => {
   const p = await access(c, c.req.param("id"));
@@ -232,7 +275,7 @@ pools.put("/pools/:id", async (c) => {
   await c.env.DB.batch([
     stmt(
       c,
-      "UPDATE pools SET name=?,kind=?,city_code=?,city=?,latitude=?,longitude=?,address=?,access_notes=?,volume=?,treatment=?,filtration=?,equipment=?,routine=?,client_advice=?,thresholds=?,winterized=?,location_precision=?,filter_type=?,has_steps=?,has_skimmers=?,has_prefilter=? WHERE id=?",
+      "UPDATE pools SET maintenance_revision=maintenance_revision+1,name=?,kind=?,city_code=?,city=?,latitude=?,longitude=?,address=?,access_notes=?,volume=?,treatment=?,filtration=?,equipment=?,routine=?,client_advice=?,thresholds=?,winterized=?,location_precision=?,filter_type=?,has_steps=?,has_skimmers=?,has_prefilter=? WHERE id=?",
       str(b.name, 80, true),
       choice(
         b.kind,

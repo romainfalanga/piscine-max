@@ -7,7 +7,7 @@ export type Task = {
   skipped: boolean;
   reason: string;
 };
-export function maintenanceTasks(p: any): Task[] {
+export function defaultMaintenanceTasks(p: any): Task[] {
   const tasks: Task[] = [];
   const add = (id: string, group: string, label: string) =>
     tasks.push({ id, group, label, done: false, skipped: false, reason: "" });
@@ -82,6 +82,12 @@ export function maintenanceTasks(p: any): Task[] {
       "Traitement",
       "Contrôler l’électrolyseur et sa cellule",
     );
+  if (p.treatment === "salt")
+    add(
+      "ph_pump",
+      "Traitement",
+      "Contrôler la pompe doseuse de pH et le niveau du correcteur",
+    );
   if (p.treatment === "chlorine")
     add(
       "tablets",
@@ -118,10 +124,70 @@ export function maintenanceTasks(p: any): Task[] {
     );
   return tasks;
 }
+export const taskGroups = [
+  "À l’arrivée",
+  "Analyse de l’eau",
+  "Nettoyage du bassin",
+  "Filtration et équipements",
+  "Traitement",
+  "Avant de partir",
+  "Consignes de cette piscine",
+];
+export function maintenanceTasks(p: any): Task[] {
+  const config = JSON.parse(p.maintenance_config || "{}");
+  return [
+    ...defaultMaintenanceTasks(p)
+      .filter((t) => config[t.id] !== null)
+      .map((t) => ({ ...t, ...(config[t.id] || {}) })),
+    ...Object.entries(config)
+      .filter(([id, value]) => id.startsWith("extra_") && value)
+      .map(([id, value]) => ({
+        id,
+        ...(value as any),
+        done: false,
+        skipped: false,
+        reason: "",
+      })),
+  ];
+}
+// Store only deviations: changing equipment still updates the standard tasks.
+export function maintenanceConfig(p: any, input: any) {
+  if (!Array.isArray(input) || !input.length || input.length > 40)
+    fail("Conservez entre 1 et 40 tâches.");
+  const defaults = defaultMaintenanceTasks(p);
+  const old = JSON.parse(p.maintenance_config || "{}");
+  const valid = new Set(defaults.map((t) => t.id));
+  const ids = new Set<string>();
+  const config: Record<string, any> = { ...old };
+  for (const id of Object.keys(config))
+    if (id.startsWith("extra_")) delete config[id];
+  for (const t of defaults) config[t.id] = null;
+  for (const t of input) {
+    if (
+      !t ||
+      typeof t.id !== "string" ||
+      (!valid.has(t.id) && !/^extra_[a-zA-Z0-9-]{1,60}$/.test(t.id)) ||
+      ids.has(t.id)
+    )
+      fail("Liste de tâches invalide.");
+    ids.add(t.id);
+    const label = str(t.label, 150, true);
+    if (!taskGroups.includes(t.group)) fail("Catégorie de tâche invalide.");
+    const base = defaults.find((d) => d.id === t.id);
+    if (base && base.label === label && base.group === t.group)
+      delete config[t.id];
+    else config[t.id] = { label, group: t.group };
+  }
+  if (ids.has("backwash") && !ids.has("rinse"))
+    fail(
+      "Conservez le rinçage avec le lavage du filtre, ou retirez les deux tâches.",
+    );
+  return JSON.stringify(config);
+}
 export function taskStates(template: Task[], input: any): Task[] {
   if (input != null && !Array.isArray(input)) fail("Liste de tâches invalide.");
   const items = input || [];
-  if (items.length > 40) fail("Trop de tâches.");
+  if (items.length > 60) fail("Trop de tâches.");
   const ids = new Set(template.map((t) => t.id));
   if (
     items.some((i: any) => !i || !ids.has(i.id)) ||
@@ -136,7 +202,6 @@ export function taskStates(template: Task[], input: any): Task[] {
       fail("Une tâche ne peut pas être réalisée et non réalisée.");
     return {
       ...t,
-      label: t.id === "backwash" ? "Effectuer le lavage du filtre" : t.label,
       done,
       skipped,
       reason: skipped ? str(v?.reason, 250) : "",

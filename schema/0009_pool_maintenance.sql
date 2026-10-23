@@ -1,0 +1,2 @@
+ALTER TABLE pools ADD COLUMN maintenance_config TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE pools ADD COLUMN maintenance_revision INTEGER NOT NULL DEFAULT 1;

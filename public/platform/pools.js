@@ -308,7 +308,7 @@ export async function pool(main, id, tab = "journal", options = {}) {
   state.needs = n.items;
   poolCursor = r.next;
   activeTab = tab;
-  main.innerHTML = `<a class="back-link" href="#${isPro ? "clients" : "home"}">${icon("arrow", 14)} ${isPro ? "Mes clients" : "Mes piscines"}</a><section class="pool-heading" data-pool-id="${id}"><div><h1>${esc(p.name)}</h1><p>${icon("map", 16)} ${esc(p.address || p.city || "Adresse à compléter")}</p></div><div class="pool-heading-actions">${isPro ? button(icon("check", 18) + " Commencer l’entretien", "new-visit", `data-pool="${id}"`) + button("Modifier la piscine", "edit-pool", "", "secondary") : button(icon("plus", 18) + " Ajouter une analyse", "new-analysis", `data-pool="${id}"`)}</div></section>${p.claimable ? `<div class="claim-banner">Client à associer. ${p.invitations.length ? "Invitation en attente d’acceptation." : button("Inviter le client", "invite-member", "", "secondary small")}</div>` : ""}<div class="tabs pool-tabs" data-count="${tabs.length}" role="navigation" aria-label="Sections de la piscine">${tabs.map(([key, label]) => `<button class="${tab === key ? "active" : ""}" ${tab === key ? 'aria-current="page"' : ""} data-action="pool-tab" data-tab="${key}"><span>${label}${key === "needs" && n.items.some((n) => n.status === "needed") ? " (" + n.items.filter((n) => n.status === "needed").length + ")" : ""}</span></button>`).join("")}</div><div id="pool-content"></div>`;
+  main.innerHTML = `<a class="back-link" href="#${isPro ? "clients" : "home"}">${icon("arrow", 14)} ${isPro ? "Mes clients" : "Mes piscines"}</a><section class="pool-heading" data-pool-id="${id}"><div><h1>${esc(p.name)}</h1><p>${icon("map", 16)} ${esc(p.address || p.city || "Adresse à compléter")}</p></div><div class="pool-heading-actions">${isPro ? button(icon("check", 18) + " Commencer l’entretien", "new-visit", `data-pool="${id}"`) + button("Tâches d’entretien", "edit-maintenance-tasks", "", "secondary") : button(icon("plus", 18) + " Ajouter une analyse", "new-analysis", `data-pool="${id}"`)}</div></section>${p.claimable ? `<div class="claim-banner">Client à associer. ${p.invitations.length ? "Invitation en attente d’acceptation." : button("Inviter le client", "invite-member", "", "secondary small")}</div>` : ""}<div class="tabs pool-tabs" data-count="${tabs.length}" role="navigation" aria-label="Sections de la piscine">${tabs.map(([key, label]) => `<button class="${tab === key ? "active" : ""}" ${tab === key ? 'aria-current="page"' : ""} data-action="pool-tab" data-tab="${key}"><span>${label}${key === "needs" && n.items.some((n) => n.status === "needed") ? " (" + n.items.filter((n) => n.status === "needed").length + ")" : ""}</span></button>`).join("")}</div><div id="pool-content"></div>`;
   const view = {
     id,
     refreshedAt: Date.now(),
@@ -475,7 +475,7 @@ async function renderTab(tab, el) {
       )
       .join(
         "",
-      )}</dl>${p.membership === "principal" && p.address ? `<a class="btn secondary" href="${esc(itinerary(p))}" target="_blank" rel="noopener noreferrer">${icon("map", 17)} Ouvrir l’itinéraire</a>` : ""}</section><div class="stack"><section class="card"><h2>Équipements</h2><p class="prose">${esc(p.equipment || "Marques, modèles et références à compléter.")}</p>${p.membership === "principal" ? `<h3>Routine d’entretien</h3><p class="prose">${esc(p.routine || "Les étapes propres à ce bassin apparaîtront ici.")}</p>` : ""}</section>${p.membership !== "owner" ? `<section class="card"><h3>Vos notes internes</h3><p class="small-note">Ces notes restent privées et ne sont pas partagées avec le client.</p>${button("Ouvrir mes notes", "private-notes", "", "secondary")}</section>` : ""}</div></div>`;
+      )}</dl>${p.membership === "principal" && p.address ? `<a class="btn secondary" href="${esc(itinerary(p))}" target="_blank" rel="noopener noreferrer">${icon("map", 17)} Ouvrir l’itinéraire</a>` : ""}</section><div class="stack"><section class="card"><h2>Équipements</h2><p class="prose">${esc(p.equipment || "Marques, modèles et références à compléter.")}</p>${p.membership === "principal" ? `<h3>Tâches d’entretien</h3><p class="small-note">Une liste propre à ce bassin, utilisée pour les prochains passages.</p><ul class="pool-task-summary">${(p.maintenance_tasks || []).map((t) => `<li>${esc(t.label)}</li>`).join("")}</ul>${button("Adapter les tâches", "edit-maintenance-tasks", "", "secondary")}` : ""}</section>${p.membership !== "owner" ? `<section class="card"><h3>Vos notes internes</h3><p class="small-note">Ces notes restent privées et ne sont pas partagées avec le client.</p>${button("Ouvrir mes notes", "private-notes", "", "secondary")}</section>` : ""}</div></div>`;
     if (p.membership === "owner") {
       const details = document.createElement("details");
       details.className = "coowner-controls";
@@ -650,6 +650,58 @@ on("cancel-invite", async (d) => {
   await api("/pools/" + state.pool.id + "/invitations/" + d.id, "DELETE", {});
   refresh();
 });
+on("edit-maintenance-tasks", async () => {
+  const poolId = state.pool.id;
+  const data = await api(`/pools/${poolId}/maintenance-tasks`);
+  let restoreDefaults = false;
+  const rowMarkup = (t) =>
+    `<div class="routine-edit-row" data-task-id="${esc(t.id)}">${field("Tâche", "task_label", t.label, "text", 'required maxlength="150"')}${select("Étape", "task_group", Object.fromEntries(data.groups.map((g) => [g, g])), t.group)}${button("Supprimer", "remove-maintenance-task", "", "ghost small")}</div>`;
+  modal(
+    "Tâches d’entretien",
+    `<p class="small-note">Adaptez la liste aux équipements de ce bassin. Les entretiens déjà enregistrés conservent leurs tâches.</p><div id="routine-editor">${data.tasks.map(rowMarkup).join("")}</div><div class="routine-editor-actions">${button("Ajouter une tâche", "add-maintenance-task", "", "secondary")}${button("Rétablir les tâches par défaut", "reset-maintenance-tasks", "", "ghost")}</div>`,
+    async (_, form) => {
+      const tasks = [...form.querySelectorAll("[data-task-id]")].map((row) => ({
+        id: row.dataset.taskId,
+        label: row.querySelector('[name="task_label"]').value,
+        group: row.querySelector('[name="task_group"]').value,
+      }));
+      await api(`/pools/${poolId}/maintenance-tasks`, "PUT", {
+        tasks,
+        revision: data.revision,
+        restore_defaults: restoreDefaults,
+      });
+      closeModal();
+      toast("Les tâches des prochains passages ont été mises à jour.");
+      refresh();
+    },
+  );
+  $("[data-action=add-maintenance-task]").onclick = () => {
+    if ($$("#routine-editor [data-task-id]").length >= 40)
+      return toast("La liste peut contenir jusqu’à 40 tâches.");
+    $("#routine-editor").insertAdjacentHTML(
+      "beforeend",
+      rowMarkup({
+        id: "extra_" + crypto.randomUUID(),
+        label: "",
+        group: "Consignes de cette piscine",
+      }),
+    );
+    $("#routine-editor").lastElementChild.querySelector("input").focus();
+  };
+  $("[data-action=reset-maintenance-tasks]").onclick = () => {
+    if (
+      window.confirm(
+        "Remplacer cette liste par les tâches adaptées aux équipements actuels ? Les changements seront enregistrés uniquement avec Enregistrer.",
+      )
+    ) {
+      restoreDefaults = true;
+      $("#routine-editor").innerHTML = data.defaults.map(rowMarkup).join("");
+    }
+  };
+});
+on("remove-maintenance-task", (_, button) =>
+  button.closest("[data-task-id]").remove(),
+);
 on("edit-pool", () => {
   const p = state.pool;
   modal(
@@ -665,7 +717,7 @@ on("edit-pool", () => {
       )
       .join(
         "",
-      )}</fieldset>${area("Équipements, marques et références", "equipment", p.equipment, 'maxlength="4000"')}${p.membership === "principal" ? `${area("Tâches supplémentaires (une par ligne)", "routine", p.routine, 'maxlength="2000"')}${area("Conseils au client entre deux passages", "client_advice", p.client_advice, 'maxlength="2000"')}` : ""}<label class="check"><input type="checkbox" name="winterized" ${p.winterized ? "checked" : ""}> Piscine actuellement hivernée</label><details><summary>Repères de suivi personnalisés</summary><p class="small-note">Renseignez uniquement des plages adaptées à ce bassin et à son usage. Aucun seuil générique ne certifie sa conformité.</p>${Object.entries(
+      )}</fieldset>${area("Équipements, marques et références", "equipment", p.equipment, 'maxlength="4000"')}${p.membership === "principal" ? `${area("Conseils au client entre deux passages", "client_advice", p.client_advice, 'maxlength="2000"')}` : ""}<label class="check"><input type="checkbox" name="winterized" ${p.winterized ? "checked" : ""}> Piscine actuellement hivernée</label><details><summary>Repères de suivi personnalisés</summary><p class="small-note">Renseignez uniquement des plages adaptées à ce bassin et à son usage. Aucun seuil générique ne certifie sa conformité.</p>${Object.entries(
       metrics,
     )
       .filter(([k]) => k !== "water_temp")
@@ -781,11 +833,7 @@ export async function openRecordForm(
   const value = localDate(record?.measured_at || Date.now());
   const checklist = visit
     ? record?.checklist?.length
-      ? record.checklist.map((t) =>
-          t.id === "backwash"
-            ? { ...t, label: "Effectuer le lavage du filtre" }
-            : t,
-        )
+      ? record.checklist
       : p.maintenance_tasks
     : [];
   const draftKey =
@@ -866,6 +914,7 @@ export async function openRecordForm(
       const payload = {
         id,
         kind: actualKind,
+        maintenance_revision: p.maintenance_revision,
         measured_at: new Date(b.measured_at).toISOString(),
         readings: values,
         assessments: observations,
